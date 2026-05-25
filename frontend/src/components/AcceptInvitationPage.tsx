@@ -144,13 +144,13 @@ export default function AcceptInvitationPage() {
       <div className="max-w-md w-full">
         {/* Error State */}
         {error && (
-          <div className="bg-surface rounded-lg border border-error p-6 text-center">
+          <div className="card text-center border-error">
             <div className="text-error text-4xl mb-4">⚠️</div>
             <h1 className="text-2xl font-bold text-error mb-4">Invitation Error</h1>
             <p className="text-text-secondary mb-6">{error}</p>
             <Link
               to="/dashboard"
-              className="inline-block px-6 py-3 bg-primary hover:bg-primary-hover text-background font-semibold rounded-lg transition-colors"
+              className="btn-primary inline-block px-6 py-3"
             >
               Back to Dashboard
             </Link>
@@ -159,7 +159,7 @@ export default function AcceptInvitationPage() {
 
         {/* Success State */}
         {success && (
-          <div className="bg-surface rounded-lg border border-success p-6 text-center">
+          <div className="card text-center border-success">
             <div className="text-success text-4xl mb-4">✓</div>
             <h1 className="text-2xl font-bold text-success mb-4">Welcome to the Household!</h1>
             <p className="text-text-secondary mb-6">You have successfully joined the household.</p>
@@ -169,7 +169,7 @@ export default function AcceptInvitationPage() {
 
         {/* Accept Invitation */}
         {!error && !success && invitation && (
-          <div className="bg-surface rounded-lg border border-border p-6 text-center">
+          <div className="card text-center">
             <div className="text-primary text-4xl mb-4">📨</div>
             <h1 className="text-2xl font-bold text-primary mb-6">Join Household</h1>
 
@@ -196,14 +196,14 @@ export default function AcceptInvitationPage() {
                     <button
                       onClick={handleAccept}
                       disabled={accepting}
-                      className="w-full px-6 py-3 bg-primary hover:bg-primary-hover text-background font-semibold rounded-lg transition-colors disabled:opacity-50 mb-3"
+                      className="btn-primary w-full px-6 py-3 mb-3"
                     >
                       {accepting ? 'Joining...' : 'Join Household'}
                     </button>
                     <button
                       onClick={handleDecline}
                       disabled={declining}
-                      className="w-full px-6 py-3 bg-transparent hover:bg-error hover:text-error text-text-secondary font-semibold rounded-lg transition-colors disabled:opacity-50 border border-text-secondary"
+                      className="btn-action-error w-full px-6 py-3"
                     >
                       {declining ? 'Declining...' : 'Decline Invitation'}
                     </button>
@@ -221,7 +221,7 @@ export default function AcceptInvitationPage() {
                 </p>
                 <Link
                   to="/login"
-                  className="inline-block px-6 py-3 bg-primary hover:bg-primary-hover text-text font-semibold rounded-lg transition-colors"
+                  className="btn-primary inline-block px-6 py-3"
                 >
                   Sign In with Google
                 </Link>

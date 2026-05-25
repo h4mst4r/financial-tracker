@@ -1,17 +1,101 @@
 """Authentication routes."""
 
 import secrets
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import auth
-from ..models import CsrfToken
+from .. import config
+from ..models import CsrfToken, Household, HouseholdMember, HouseholdRole, Session as SessionModel, User, UserRole
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+# Dev-login router — mounted conditionally in main.py based on DEV_MODE
+dev_login_router = APIRouter(prefix="/auth", tags=["dev-auth"])
+
+
+class DevLoginRequest(BaseModel):
+    """Simple local login for development testing."""
+    email: str
+    household_name: str = "Dev Household"
+
+
+@dev_login_router.post("/dev-login")
+async def dev_login(body: DevLoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Local dev-only login — creates user + household if they don't exist, then returns a session.
+    
+    WARNING: This endpoint is for local development only. Never expose in production.
+    """
+    # Get or create user
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user:
+        user = User(
+            id=uuid.uuid4(),
+            email=body.email,
+            name=body.email.split("@")[0],
+            role=UserRole.member,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # Get or create household
+    existing_membership = db.query(HouseholdMember).filter(
+        HouseholdMember.user_id == user.id
+    ).first()
+
+    if existing_membership:
+        household = existing_membership.household
+    else:
+        # Check if user created a household before
+        household = db.query(Household).filter(
+            Household.created_by == user.id,
+            Household.name == body.household_name
+        ).first()
+        if not household:
+            household = Household(
+                id=uuid.uuid4(),
+                name=body.household_name,
+                created_by=user.id,
+            )
+            db.add(household)
+            db.commit()
+            db.refresh(household)
+
+        # Create membership
+        membership = HouseholdMember(
+            id=uuid.uuid4(),
+            household_id=household.id,
+            user_id=user.id,
+            role=HouseholdRole.owner,
+        )
+        db.add(membership)
+        db.commit()
+
+    # Create session
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=config.settings.DEV_SESSION_EXPIRE_MINUTES)
+    session = SessionModel(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        expires_at=expires_at,
+        last_activity_at=now,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    return {
+        "session_id": str(session.id),
+        "user": user.to_dict(),
+        "household": household.to_dict(),
+    }
 
 
 @router.get("/login", response_class=HTMLResponse)

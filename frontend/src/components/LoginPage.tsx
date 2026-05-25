@@ -24,7 +24,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      <div className="bg-surface border border-border rounded-xl p-12 text-center max-w-md w-full">
+      <div className="card p-12 text-center max-w-md w-full">
         <h1 className="text-3xl font-bold text-primary mb-2">
           Financial Tracker
         </h1>
@@ -33,14 +33,14 @@ export default function LoginPage() {
         </p>
 
         {errorMessage && (
-          <div className="bg-error/20 border border-error text-error p-4 rounded-lg mb-6 text-sm">
+          <div className="alert-error mb-6 text-sm">
             {errorMessage}
           </div>
         )}
 
         <button
           onClick={login}
-          className="inline-flex items-center justify-center gap-3 bg-primary hover:bg-primary-hover text-background border-none rounded-lg px-8 py-3 text-base font-medium cursor-pointer min-h-[44px] w-full transition-colors"
+          className="btn-primary inline-flex items-center justify-center gap-3 px-8 py-3 text-base min-h-[44px] w-full"
         >
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v3.53h3.53c2.06-1.9 3.28-4.72 3.28-7.86z"/>

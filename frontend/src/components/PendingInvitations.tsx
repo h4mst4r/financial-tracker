@@ -29,6 +29,7 @@ export default function PendingInvitations({ householdId, userRole, onRefresh }:
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,7 +86,9 @@ export default function PendingInvitations({ householdId, userRole, onRefresh }:
         const data = await response.json();
         throw new Error(data.detail || 'Failed to resend invitation');
       }
-      alert('Invitation email resent successfully!');
+      setSuccess('Invitation email resent successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      onRefresh?.();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -142,9 +145,14 @@ export default function PendingInvitations({ householdId, userRole, onRefresh }:
   return (
     <div className="mt-8">
       <h2 className="text-xl font-semibold text-primary mb-6">Invitations</h2>
+      {success && (
+        <div className="alert-success mb-4 text-sm">
+          {success}
+        </div>
+      )}
       <div className="space-y-3">
         {invitations.map((invitation) => (
-          <div key={invitation.id} className="flex items-center justify-between p-4 bg-surface rounded-lg border border-border hover:border-primary/30 transition-colors">
+          <div key={invitation.id} className="invite-card">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1">
@@ -166,14 +174,14 @@ export default function PendingInvitations({ householdId, userRole, onRefresh }:
                 <button
                   onClick={() => handleResend(invitation.id)}
                   disabled={actionLoading === invitation.id}
-                  className="px-3 py-1.5 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-action-primary"
                 >
                   {actionLoading === invitation.id ? 'Sending...' : 'Resend'}
                 </button>
                 <button
                   onClick={() => handleRevoke(invitation.id)}
                   disabled={actionLoading === invitation.id}
-                  className="px-3 py-1.5 text-sm font-medium text-error border border-error rounded-lg hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-action-error"
                 >
                   {actionLoading === invitation.id ? 'Revoking...' : 'Revoke'}
                 </button>

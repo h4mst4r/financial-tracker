@@ -56,7 +56,7 @@ export default function CreateHouseholdModal({ onClose, onSuccess, csrfToken }: 
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface rounded-lg border border-border max-w-md w-full p-6">
+      <div className="modal-content">
         <h2 className="text-2xl font-bold text-primary mb-4">Create Your Household</h2>
         <p className="text-text-secondary mb-6">
           Welcome! Let's create your household to get started. This is where you'll manage finances with your family or roommates.
@@ -64,7 +64,7 @@ export default function CreateHouseholdModal({ onClose, onSuccess, csrfToken }: 
 
         <form onSubmit={handleSubmit}>
           <div className="mb-6">
-            <label htmlFor="householdName" className="block text-sm font-medium text-text mb-2">
+            <label htmlFor="householdName" className="label mb-2">
               Household Name
             </label>
             <input
@@ -73,13 +73,13 @@ export default function CreateHouseholdModal({ onClose, onSuccess, csrfToken }: 
               value={householdName}
               onChange={(e) => setHouseholdName(e.target.value)}
               placeholder="e.g., The Smith Family, Roommates, etc."
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="input py-3"
               autoFocus
             />
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-error/20 border border-error rounded-lg text-error text-sm">
+            <div className="alert-error mb-4 text-sm">
               {error}
             </div>
           )}
@@ -88,7 +88,7 @@ export default function CreateHouseholdModal({ onClose, onSuccess, csrfToken }: 
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-text-secondary hover:text-text transition-colors"
+              className="btn-cancel px-4 py-2"
               disabled={loading}
             >
               Cancel
@@ -96,7 +96,7 @@ export default function CreateHouseholdModal({ onClose, onSuccess, csrfToken }: 
             <button
               type="submit"
               disabled={loading || !householdName.trim()}
-              className="px-6 py-2 bg-primary hover:bg-primary-hover disabled:bg-border disabled:cursor-not-allowed text-background font-semibold rounded-lg transition-colors"
+              className="btn-primary px-6 py-2"
             >
               {loading ? 'Creating...' : 'Create Household'}
             </button>

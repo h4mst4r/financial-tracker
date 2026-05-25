@@ -4,6 +4,9 @@ import LoginPage from './components/LoginPage'
 import DashboardPage from './components/DashboardPage'
 import HouseholdSettingsPage from './components/HouseholdSettingsPage'
 import AcceptInvitationPage from './components/AcceptInvitationPage'
+import CategoryManager from './components/CategoryManager'
+import AccountManager from './components/AccountManager'
+import TestPage from './components/TestPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
@@ -39,6 +42,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/categories"
+        element={
+          <ProtectedRoute>
+            <CategoryManager />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accounts"
+        element={
+          <ProtectedRoute>
+            <AccountManager />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/test" element={<TestPage />} />
       <Route path="*" element={<Navigate to="/login" />} />
     </Routes>
   )

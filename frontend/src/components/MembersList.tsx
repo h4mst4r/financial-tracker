@@ -94,12 +94,12 @@ export default function MembersList({ householdId, members, userRole, onMemberUp
   };
 
   return (
-    <div className="bg-surface rounded-lg border border-border p-6">
+<div className="card">
       <h2 className="text-2xl font-semibold text-primary mb-6">Household Members ({members.length})</h2>
 
       {/* Error Message */}
       {error && (
-        <div className="mb-4 p-3 bg-error/20 border border-error rounded-lg text-error text-sm">
+        <div className="alert-error mb-4 text-sm">
           {error}
         </div>
       )}
@@ -109,32 +109,32 @@ export default function MembersList({ householdId, members, userRole, onMemberUp
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-3 px-4 text-text-secondary font-medium">Name</th>
-              <th className="text-left py-3 px-4 text-text-secondary font-medium">Email</th>
-              <th className="text-left py-3 px-4 text-text-secondary font-medium">Role</th>
-              <th className="text-left py-3 px-4 text-text-secondary font-medium">Joined</th>
+              <th className="table-header-cell">Name</th>
+              <th className="table-header-cell">Email</th>
+              <th className="table-header-cell">Role</th>
+              <th className="table-header-cell">Joined</th>
               {userRole === 'owner' && (
-                <th className="text-left py-3 px-4 text-text-secondary font-medium">Actions</th>
+                <th className="table-header-cell">Actions</th>
               )}
             </tr>
           </thead>
           <tbody>
             {members.map((member) => (
-              <tr key={member.id} className="border-b border-border hover:bg-surface-elevated/50">
-                <td className="py-3 px-4 text-text font-medium">
+              <tr key={member.id} className="table-row">
+                <td className="table-cell text-text font-medium">
                   {member.name || 'Unknown'}
                 </td>
-                <td className="py-3 px-4 text-text-secondary">
+                <td className="table-cell text-text-secondary">
                   {member.email || 'N/A'}
                 </td>
-                <td className="py-3 px-4">
+                <td className="table-cell">
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-semibold border ${getRoleBadgeClass(member.role)}`}
                   >
                     {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-text-secondary text-sm">
+                <td className="table-cell text-text-secondary text-sm">
                   {member.joined_at ? new Date(member.joined_at).toLocaleDateString() : 'N/A'}
                 </td>
                 {userRole === 'owner' && (
@@ -150,7 +150,7 @@ export default function MembersList({ householdId, members, userRole, onMemberUp
                             handleRoleChange(member.id, e.target.value);
                           }}
                           disabled={updating === member.id}
-                          className="px-3 py-1 bg-background border-border rounded text-sm text-text"
+                          className="select-sm"
                         >
                           <option value="admin">Admin</option>
                           <option value="member">Member</option>
@@ -160,7 +160,7 @@ export default function MembersList({ householdId, members, userRole, onMemberUp
                         <button
                           onClick={() => handleRemoveMember(member.id)}
                           disabled={removing === member.id}
-                          className="px-3 py-1 bg-error/20 hover:bg-error/40 border border-error text-error rounded text-sm transition-colors disabled:opacity-50"
+                          className="btn-remove"
                         >
                           {removing === member.id ? 'Removing...' : 'Remove'}
                         </button>

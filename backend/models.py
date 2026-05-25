@@ -3,15 +3,18 @@
 import enum
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Date,
     Enum,
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -57,6 +60,13 @@ class InvitationStatus(enum.Enum):
     accepted = "accepted"
     expired = "expired"
     revoked = "revoked"
+
+
+class AccountType(enum.Enum):
+    cash = "cash"
+    bank = "bank"
+    credit_card = "credit_card"
+    investment = "investment"
 
 
 class OAuthState(Base):
@@ -123,6 +133,7 @@ class Household(Base):
     members = relationship("HouseholdMember", back_populates="household", cascade="all, delete-orphan")
     invitations = relationship("HouseholdInvitation", back_populates="household", cascade="all, delete-orphan")
     categories = relationship("Category", back_populates="household", cascade="all, delete-orphan")
+    accounts = relationship("Account", back_populates="household", cascade="all, delete-orphan")
     transactions = relationship("Transaction", back_populates="household", cascade="all, delete-orphan")
     budgets = relationship("Budget", back_populates="household", cascade="all, delete-orphan")
     recurring_transactions = relationship("RecurringTransaction", back_populates="household", cascade="all, delete-orphan")
@@ -221,6 +232,62 @@ class HouseholdInvitation(Base):
         }
 
 
+class Account(Base):
+    """Financial account for tracking money sources (Cash, Bank, Credit Card, etc.)."""
+    __tablename__ = "accounts"
+
+    id = Column(
+        UUID(),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    household_id = Column(
+        UUID(), ForeignKey("households.id", ondelete="CASCADE"), nullable=False
+    )
+    name = Column(String(255), nullable=False)
+    type = Column(Enum(AccountType), nullable=False, default=AccountType.cash)
+    currency = Column(String(3), nullable=False, default="SGD")
+    initial_balance = Column(Numeric(12, 2), nullable=False, default=0.00)
+    current_balance = Column(Numeric(12, 2), nullable=False, default=0.00)
+    opening_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(UUID(), ForeignKey("users.id"), nullable=True)
+    created_at = Column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    household = relationship("Household", back_populates="accounts")
+    creator = relationship("User", foreign_keys=[created_by])
+    transactions = relationship("Transaction", back_populates="account", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("household_id", "name", name="uq_household_account_name"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "household_id": str(self.household_id),
+            "name": self.name,
+            "type": self.type.value if self.type else None,
+            "currency": self.currency,
+            "initial_balance": float(self.initial_balance) if self.initial_balance else 0.00,
+            "current_balance": float(self.current_balance) if self.current_balance else 0.00,
+            "opening_date": self.opening_date.isoformat() if self.opening_date else None,
+            "is_active": self.is_active,
+            "created_by": str(self.created_by) if self.created_by else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -266,7 +333,10 @@ class Category(Base):
         default=uuid.uuid4,
     )
     household_id = Column(
-        UUID(), ForeignKey("households.id", ondelete="CASCADE"), nullable=False
+        UUID(), ForeignKey("households.id", ondelete="CASCADE"), nullable=True
+    )
+    parent_id = Column(
+        UUID(), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
     )
     name = Column(String(255), nullable=False)
     type = Column(String(50), nullable=False)  # "income" or "expense"
@@ -274,7 +344,7 @@ class Category(Base):
     icon = Column(String(50), nullable=True)
     is_default = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False)
-    created_by = Column(UUID(), ForeignKey("users.id"), nullable=False)
+    created_by = Column(UUID(), ForeignKey("users.id"), nullable=True)
     created_at = Column(
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
@@ -288,18 +358,21 @@ class Category(Base):
     household = relationship("Household", back_populates="categories")
     creator = relationship("User", foreign_keys=[created_by])
     transactions = relationship("Transaction", back_populates="category", cascade="all, delete-orphan")
+    # Self-referential relationships for subcategory hierarchy
+    parent = relationship("Category", remote_side=[id], backref="children")
 
     def to_dict(self) -> dict:
         return {
             "id": str(self.id),
-            "household_id": str(self.household_id),
+            "household_id": str(self.household_id) if self.household_id else None,
+            "parent_id": str(self.parent_id) if self.parent_id else None,
             "name": self.name,
             "type": self.type,
             "color": self.color,
             "icon": self.icon,
             "is_default": self.is_default,
             "is_archived": self.is_archived,
-            "created_by": str(self.created_by),
+            "created_by": str(self.created_by) if self.created_by else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -316,6 +389,9 @@ class Transaction(Base):
     )
     household_id = Column(
         UUID(), ForeignKey("households.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id = Column(
+        UUID(), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
     category_id = Column(
         UUID(), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
@@ -343,6 +419,7 @@ class Transaction(Base):
     )
 
     household = relationship("Household", back_populates="transactions")
+    account = relationship("Account", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
     user = relationship("User")
 
@@ -350,6 +427,7 @@ class Transaction(Base):
         return {
             "id": str(self.id),
             "household_id": str(self.household_id),
+            "account_id": str(self.account_id) if self.account_id else None,
             "category_id": str(self.category_id) if self.category_id else None,
             "user_id": str(self.user_id),
             "amount": self.amount,

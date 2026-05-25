@@ -77,13 +77,13 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-surface rounded-lg border border-border max-w-md w-full max-h-[90vh] flex flex-col">
+      <div className="modal-content">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold text-primary">Invite Member</h2>
           <button
             onClick={handleClose}
-            className="text-text-secondary hover:text-text text-2xl leading-none"
+            className="btn-close"
           >
             ×
           </button>
@@ -91,8 +91,8 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
 
         {/* Success Message */}
         {success && (
-          <div className="mb-6 p-4 bg-success/20 border border-success rounded-lg">
-            <p className="text-success font-medium mb-2">Invitation sent successfully!</p>
+          <div className="alert-success mb-6">
+            <p className="font-medium mb-2">Invitation sent successfully!</p>
             {invitationLink && (
               <div className="mt-3 p-3 bg-background rounded border border-border">
                 <p className="text-xs text-text-secondary mb-1">Invitation link (for testing):</p>
@@ -108,7 +108,7 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
             )}
             <button
               onClick={handleClose}
-              className="mt-4 px-4 py-2 bg-primary hover:bg-primary-hover text-background font-semibold rounded transition-colors"
+              className="btn-primary mt-4 px-4 py-2"
             >
               Close
             </button>
@@ -117,8 +117,8 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-error/20 border border-error rounded-lg">
-            <p className="text-error">{error}</p>
+          <div className="alert-error mb-6">
+            <p>{error}</p>
           </div>
         )}
 
@@ -126,7 +126,7 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
         {!success && (
           <form onSubmit={handleSubmit} className="mt-auto">
             <div className="mb-6">
-              <label htmlFor="email" className="block text-sm font-medium text-text">
+              <label htmlFor="email" className="label">
                 Email Address
               </label>
               <input
@@ -135,7 +135,7 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="family@example.com"
-                className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text placeholder-text-muted focus:outline-none focus:border-primary transition-colors"
+                className="input py-3"
                 disabled={loading}
                 autoFocus
               />
@@ -148,14 +148,14 @@ export default function InviteMemberDialog({ isOpen, onClose, householdId, onSuc
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2 bg-surface-elevated hover:bg-border text-text rounded transition-colors"
+                className="btn-cancel px-4 py-2"
                 disabled={loading}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-primary hover:bg-primary-hover text-background font-semibold rounded transition-colors disabled:opacity-50"
+                className="btn-primary px-4 py-2"
                 disabled={loading}
               >
                 {loading ? 'Sending...' : 'Send Invitation'}

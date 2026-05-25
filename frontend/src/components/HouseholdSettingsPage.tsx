@@ -97,7 +97,10 @@ export default function HouseholdSettingsPage() {
 
   const handleInviteSuccess = () => {
     setInviteOpen(false);
-    // Refresh members if needed
+    // Refresh members and invitations list
+    if (household) {
+      fetchMembers(household.id);
+    }
   };
 
   const handleMemberUpdate = () => {
@@ -157,14 +160,14 @@ export default function HouseholdSettingsPage() {
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-error/20 border border-error rounded-lg text-error">
+          <div className="alert-error mb-6">
             {error}
           </div>
         )}
 
         {/* Household Info */}
         {household && (
-          <div className="mb-8 p-6 bg-surface rounded-lg border border-border">
+          <div className="card mb-8">
             <h2 className="text-2xl font-semibold text-primary mb-4">{household.name}</h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -198,7 +201,7 @@ export default function HouseholdSettingsPage() {
             <p className="text-text-secondary mb-4">You haven't created a household yet.</p>
             <button
               onClick={() => setShowCreateHousehold(true)}
-              className="px-6 py-3 bg-primary hover:bg-primary-hover text-text font-semibold rounded-lg transition-colors"
+              className="btn-primary px-6 py-3"
             >
               Create Your First Household
             </button>
@@ -210,7 +213,7 @@ export default function HouseholdSettingsPage() {
           <div className="mb-8">
             <button
               onClick={() => setInviteOpen(true)}
-              className="px-6 py-3 bg-primary hover:bg-primary-hover text-text font-semibold rounded-lg transition-colors"
+              className="btn-primary px-6 py-3"
             >
               + Invite Member
             </button>
@@ -248,7 +251,7 @@ export default function HouseholdSettingsPage() {
 
         {/* Delete Household Button (Owner only) */}
         {household && memberRole === 'owner' && (
-          <div className="mt-12 pt-6 border-t border-error/50">
+          <div className="danger-zone mt-12 pt-6">
             <h3 className="text-lg font-semibold text-error mb-3">Danger Zone</h3>
             <p className="text-text-secondary text-sm mb-4">
               Deleting this household will remove all members, invitations, and associated data. This action cannot be undone.
@@ -256,7 +259,7 @@ export default function HouseholdSettingsPage() {
             <button
               onClick={() => setShowDeleteDialog(true)}
               disabled={deletingHousehold}
-              className="px-6 py-3 bg-error hover:bg-error-hover text-text font-semibold rounded-lg transition-colors disabled:opacity-50"
+              className="btn-danger px-6 py-3"
             >
               {deletingHousehold ? 'Deleting...' : 'Delete Household'}
             </button>
@@ -266,13 +269,13 @@ export default function HouseholdSettingsPage() {
         {/* Delete Household Confirmation Dialog */}
         {showDeleteDialog && household && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-surface rounded-lg border border-error max-w-md w-full p-6">
+            <div className="modal-content border-error">
               <h2 className="text-xl font-bold text-error mb-2">Delete Household</h2>
               <p className="text-text-secondary mb-4">
                 This will permanently delete <strong className="text-text">{household.name}</strong> and all associated data. All members will be removed.
               </p>
               <div className="mb-4">
-                <label className="block text-sm text-text-secondary mb-2">
+                <label className="label mb-2">
                   Type <strong className="text-error">DELETE</strong> to confirm:
                 </label>
                 <input
@@ -280,7 +283,7 @@ export default function HouseholdSettingsPage() {
                   value={deleteConfirmText}
                   onChange={(e) => setDeleteConfirmText(e.target.value)}
                   placeholder="Type DELETE here"
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-text focus:outline-none focus:border-error"
+                  className="input input-error"
                 />
               </div>
               <div className="flex gap-3">
@@ -289,14 +292,14 @@ export default function HouseholdSettingsPage() {
                     setShowDeleteDialog(false);
                     setDeleteConfirmText('');
                   }}
-                  className="flex-1 px-4 py-2 bg-transparent border border-border text-text-secondary rounded-lg hover:bg-surface transition-colors"
+                  className="btn-cancel flex-1 px-4 py-2"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteHousehold}
                   disabled={deleteConfirmText !== 'DELETE' || deletingHousehold}
-                  className="flex-1 px-4 py-2 bg-error hover:bg-error-hover text-text font-semibold rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="btn-danger flex-1 px-4 py-2"
                 >
                   {deletingHousehold ? 'Deleting...' : 'Delete Household'}
                 </button>

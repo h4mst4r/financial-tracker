@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .database import get_db, init_db
-from .routes import admin, auth, dashboard, households, invitations
+from . import config
+from .routes import admin, auth, categories, dashboard, households, invitations, accounts
 from .models import CsrfToken
 
 
@@ -33,7 +34,12 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Content-Type",
+        "Accept",
+        "x-csrf-token",
+        "x-session-id",
+    ],
 )
 
 
@@ -45,8 +51,9 @@ async def csrf_middleware(request: Request, call_next):
     if request.method in ("GET", "HEAD", "OPTIONS"):
         return await call_next(request)
     
-    # Skip CSRF validation for auth endpoints (login, callback, logout)
-    if "/api/auth/google" in str(request.url.path):
+    # Skip CSRF validation for exempt paths (auth endpoints, health checks)
+    path = str(request.url.path)
+    if any(path.startswith(p) for p in config.settings.CSRF_EXEMPT_PATHS):
         return await call_next(request)
     
     # Get CSRF token from header
@@ -93,9 +100,15 @@ async def csrf_middleware(request: Request, call_next):
 # Mount routes
 app.include_router(admin.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(categories.router)
+app.include_router(accounts.router)
 app.include_router(dashboard.router)
 app.include_router(households.router)
 app.include_router(invitations.router)
+
+# Conditionally include dev-login endpoint in development mode
+if config.settings.DEV_MODE:
+    app.include_router(auth.dev_login_router, prefix="/api")
 
 # Static files for frontend
 import os

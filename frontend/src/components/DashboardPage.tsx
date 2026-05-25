@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import CreateHouseholdModal from './CreateHouseholdModal'
 
@@ -56,17 +57,41 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background text-text">
       {/* Header */}
-      <header className="bg-surface border-b border-border px-6 py-4 flex justify-between items-center">
+      <header className="header-bar flex justify-between items-center">
         <h1 className="text-2xl font-bold text-primary m-0">
           Financial Tracker
         </h1>
-        <div className="flex items-center gap-4">
-          <span className="text-text-secondary">
-            {user?.name} ({user?.email})
-          </span>
+        <div className="flex items-center gap-10">
+          {/* Navigation Link */}
+          <Link
+            to="/categories"
+            className="nav-item"
+          >
+            Categories
+          </Link>
+          
+          {/* Separator */}
+          <div className="h-8 w-px bg-border" />
+          
+          {/* User Info */}
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end">
+              <span className="text-sm font-medium text-text">
+                {user?.name}
+              </span>
+              <span className="text-xs text-text-secondary">
+                {user?.email}
+              </span>
+            </div>
+          </div>
+          
+          {/* Separator */}
+          <div className="h-8 w-px bg-border" />
+          
+          {/* Logout Button */}
           <button
             onClick={logout}
-            className="bg-transparent border border-border text-text rounded-md px-4 py-2 cursor-pointer text-sm"
+            className="nav-item nav-item-danger"
           >
             Logout
           </button>
@@ -74,8 +99,8 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main style={{ padding: '32px 24px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '24px' }}>
+      <main className="p-6">
+        <h2 className="text-xl font-semibold mb-6">
           Dashboard
         </h2>
         <p className="text-text-secondary">
