@@ -57,7 +57,7 @@ frontend/tsconfig.tsbuildinfo
 frontend/node_modules/
 
 # BMad (project management artifacts)
-_bmad-output/
+#_bmad-output/
 _bmad/
 
 # Node
