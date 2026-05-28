@@ -1,1 +1,1 @@
-# Financial Tracker Backend
+"""Financial Tracker backend package."""

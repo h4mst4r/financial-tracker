@@ -1,1002 +1,1528 @@
 ---
-stepsCompleted: [1, 2]
-inputDocuments: [
-  "prd-financial-tracker-2026-05-24",
-  "architecture-financial-tracker-2026-05-24",
-  "ux-design-specification-2026-05-24",
-  "brief-financial-tracker-2026-05-23"
-]
-project_name: "Financial Tracker"
-date: "2026-05-24"
-status: in-progress
-epic1_status: finalized
-epic1_finalized_date: "2026-05-24"
-epic2_status: finalized
-epic2_planning_date: "2026-05-24"
-epic2_finalized_date: "2026-05-25"
-epic2_2_1_status: complete
-epic2_2_1_complete_date: "2026-05-24"
-epic2_2_2_status: complete
-epic2_2_2_complete_date: "2026-05-24"
-epic2_2_3_status: complete
-epic2_2_3_complete_date: "2026-05-25"
-epic2_2_4_status: complete
-epic2_2_4_complete_date: "2026-05-25"
-epic2_2_5_status: complete
-epic2_2_5_complete_date: "2026-05-25"
+title: Financial Tracker — Epics & Stories
+version: 3.0
+status: living
+created: 2026-05-28
+authority: Implementation plan. Derives from entity-design-philosophy.md [EDP],
+           architecture.md [ARCH], prd.md [PRD], ux-design-specification.md [UX].
+           Stories 1-1 through 2-5 from the previous attempt inform lessons learned
+           but are NOT carried forward — this is a clean-repo start.
 ---
 
-# Financial Tracker — Epic Breakdown
-
-## Overview
-
-This document provides the complete epic and story breakdown for Financial Tracker, decomposing the requirements from the PRD, UX Design Specification, and Architecture requirements into implementable stories.
-
-## Requirements Inventory
-
-### Functional Requirements (47)
-
-| ID | Title | Epic |
-|----|-------|------|
-| FR1 | Google OAuth Login | Epic 1 |
-| FR2 | Household Member Management | Epic 1 |
-| FR3 | Role-Based Access Control | Epic 1 |
-| FR4 | Create Transaction | Epic 3 |
-| FR5 | Read/List Transactions | Epic 3 |
-| FR6 | Update Transaction | Epic 3 |
-| FR7 | Delete Transaction | Epic 8 |
-| FR8 | Duplicate Transaction | Epic 8 |
-| FR9 | Archive Transaction | Epic 8 |
-| FR10 | Dashboard Spending by Category Chart | Epic 7 |
-| FR11 | Dashboard Income vs Expenses Chart | Epic 7 |
-| FR12 | Dashboard Net Worth Summary | Epic 7 |
-| FR13 | Create Recurring Payment | Epic 4 |
-| FR14 | Read/List Recurring Payments | Epic 4 |
-| FR15 | Update Recurring Payment | Epic 4 |
-| FR16 | Delete Recurring Payment | Epic 8 |
-| FR17 | Process Recurring Payments (Scheduler) | Epic 4 |
-| FR18 | Verify Recurring Payments | Epic 4 |
-| FR19 | Create Account | Epic 3 |
-| FR20 | Update Account Balance | Epic 3 |
-| FR21 | Create Budget | Epic 5 |
-| FR22 | Read/List Budgets | Epic 5 |
-| FR23 | Update Budget | Epic 5 |
-| FR24 | Delete Budget | Epic 8 |
-| FR25 | Create Capital/Investment | Epic 5 |
-| FR26 | Read/List Capital/Investments | Epic 5 |
-| FR27 | Update Capital/Investment | Epic 5 |
-| FR28 | Create Transfer | Epic 3 |
-| FR29 | Read/List Transfers | Epic 3 |
-| FR30 | Create Category ✅ COMPLETE | Epic 2 |
-| FR31 | Read/List Categories ✅ COMPLETE | Epic 2 |
-| FR32 | Update Category ✅ COMPLETE | Epic 2 |
-| FR33 | Archive Category ✅ COMPLETE | Epic 2 |
-| FR34 | Merge Duplicate Categories | Epic 2 |
-| FR35 | On-Demand Default Category Creation ✅ COMPLETE | Epic 2 |
-| FR36 | Category-based Filtering and Reporting ✅ COMPLETE | Epic 2 |
-| FR37 | Create Internal Household Debt | Epic 6 |
-| FR38 | Read/List Internal Debts | Epic 6 |
-| FR39 | Update Internal Debt | Epic 6 |
-| FR40 | Create Credit Card Debt | Epic 6 |
-| FR41 | Read/List Credit Card Debts | Epic 6 |
-| FR42 | Create CPF Mortgage | Epic 6 |
-| FR43 | Create, Duplicate, Delete, Archive (Universal) | Epic 8 |
-| FR44 | Export Transactions (CSV) | Epic 9 |
-| FR45 | Import Transactions (CSV) | Epic 9 |
-| FR46 | Category Mapping During Import | Epic 9 |
-| FR47 | Auto-create Categories from Import | Epic 9 |
-
-### Non-Functional Requirements (12)
-
-| ID | Title | Epic |
-|----|-------|------|
-| NFR1 | Dashboard charts render within 2 seconds | Epic 7 |
-| NFR2 | Transaction search returns results within 1 second | Epic 3 |
-| NFR3 | CSV import/export handles files up to 10,000 rows | Epic 9 |
-| NFR4 | All data encrypted at rest | Epic 11 |
-| NFR5 | All API communications over HTTPS/TLS | Epic 11 |
-| NFR6 | Session timeout after 30 minutes of inactivity | Epic 1 |
-| NFR7 | Audit trail for all data modifications | Epic 11 |
-| NFR8 | Recurring payments process daily with retry logic (up to 3 attempts) | Epic 4 |
-| NFR9 | 99.9% uptime target | Epic 11 |
-| NFR10 | Support 2-4 concurrent household users | Epic 11 |
-| NFR11 | $0/month hosting cost for MVP | Epic 11 |
-| NFR12 | Responsive design for mobile, tablet, and desktop browsers | Epic 7 |
-
-### Additional Requirements (6)
-
-| ID | Title | Epic |
-|----|-------|------|
-| AR1 | Input Validation — amounts, dates, currencies, strings, file uploads | Epic 11 |
-| AR2 | SQL Injection Prevention via parameterized statements | Epic 11 |
-| AR3 | XSS Prevention — React auto-escape, no dangerouslySetInnerHTML | Epic 7 |
-| AR4 | CSRF Protection — SameSite cookies + CSRF tokens | Epic 1 |
-| AR5 | Consistent error format: `{"error": "description", "code": "ERROR_CODE"}` | Epic 11 |
-| AR6 | Graceful degradation when external services unavailable | Epic 11 |
-
-### UX Design Requirements (14)
-
-| ID | Title | Epic |
-|----|-------|------|
-| UX-DR1 | Dark futuristic aesthetic with Tailwind CSS + shadcn/ui | Epic 7 |
-| UX-DR2 | Responsive navigation — hamburger menu on mobile | Epic 7 |
-| UX-DR3 | Transaction entry in under 5 seconds | Epic 3 |
-| UX-DR4 | Multi-currency UX — toggle between foreign/SGD entry | Epic 3 |
-| UX-DR5 | Recurring payment verification view | Epic 4 |
-| UX-DR6 | Monthly reconciliation workflow | Epic 3 |
-| UX-DR7 | Category management with color coding and tree view | Epic 2 |
-| UX-DR8 | Dashboard with real-time financial health visualization | Epic 7 |
-| UX-DR9 | Smart category suggestions based on merchant | Epic 3 |
-| UX-DR10 | Forex delta visualization with color coding | Epic 3 |
-| UX-DR11 | Budget progress bars with visual thresholds | Epic 5 |
-| UX-DR12 | Debt tracker with spreadsheet-style monthly view | Epic 6 |
-| UX-DR13 | CSV import with category mapping interface | Epic 9 |
-| UX-DR14 | Alert system with in-app notification area | Epic 10 |
-
-### FR Coverage Map
-
-All 47 Functional Requirements are mapped to epics with no gaps:
-
-- **Epic 1 (Auth):** FR1, FR2, FR3
-- **Epic 2 (Categories):** FR30, FR31, FR32, FR33, FR34, FR35, FR36
-- **Epic 3 (Transactions & Transfers):** FR4, FR5, FR6, FR7, FR8, FR9, FR19, FR20, FR28, FR29
-- **Epic 4 (Recurring Payments):** FR13, FR14, FR15, FR16, FR17, FR18
-- **Epic 5 (Financial Modules):** FR21, FR22, FR23, FR24, FR25, FR26, FR27
-- **Epic 6 (Debt Tracking):** FR37, FR38, FR39, FR40, FR41, FR42
-- **Epic 7 (Dashboard):** FR10, FR11, FR12
-- **Epic 8 (Universal Operations):** FR7, FR8, FR9, FR16, FR24, FR43
-- **Epic 9 (Import/Export):** FR44, FR45, FR46, FR47
-- **Epic 10 (Alerts):** (NFR14-NFR16 coverage via alert types)
-- **Epic 11 (Deployment):** NFR4, NFR5, NFR7, NFR9, NFR10, NFR11, AR1-AR6
-- **Epic 12 (Testing):** (Testing infrastructure)
-
-## Epic List
-
-| Epic | Title | Goal | Stories |
-|------|-------|------|---------|
-| 1 | Authentication & User Management | Secure Google OAuth login with household support and RBAC | 3 |
-| 2 | Core Infrastructure & Categories | Complete category system with CRUD, subcategories, merge, and import mapping | 5 |
-| 3 | Transactions & Transfers | Full transaction lifecycle with multi-currency and account transfers | 5 |
-| 4 | Recurring Payments | Recurring payment scheduling with automated processing and verification | 4 |
-| 5 | Financial Modules | Budgets, capital/investments, and credit card tracking | 3 |
-| 6 | Debt Tracking | Internal household debt, credit card debt, and CPF mortgage tracking | 3 |
-| 7 | Dashboard & Visualization | Financial overview with charts, metrics, and responsive layout | 4 |
-| 8 | Universal Operations | Duplicate, archive/restore, and delete across all modules | 3 |
-| 9 | Import/Export | CSV import/export with category mapping and auto-create | 4 |
-| 10 | Alerts & Notifications | Reliability alerts for recurring failures, budgets, and credit cards | 4 |
-| 11 | Deployment & Infrastructure | Security, validation, error handling, rate limiting, audit trail | 5 |
-| 12 | Testing | Unit, integration, E2E, and security testing infrastructure | 4 |
-
-## Epic 1: Authentication & User Management
-
-**Goal:** Implement secure Google OAuth login with household management, role-based access control, session timeout, and CSRF protection.
-
-### Story 1.1: Google OAuth Login
-
-As a returning or new visitor,
-I want to log in with my Google account,
-So that I can securely access my financial data without remembering another password.
-
-**Acceptance Criteria:**
-
-**Given** I am on the landing page
-**When** I click the "Sign in with Google" button
-**Then** I am redirected to the Google OAuth consent screen
-**And** after consent, I am redirected back to the app with a server-side session stored in the database
-**And** if I am a new user, I am prompted to create a new household or join an existing one
-
-**Given** I am an existing user with a valid server-side session
-**When** I navigate to any protected route
-**Then** I am granted access to the dashboard
-**And** my user profile is loaded from the database
-
-**Given** my session has expired (30 minutes of inactivity)
-**When** I attempt to access a protected API endpoint
-**Then** I receive a 401 Unauthorized response
-**And** I am redirected to the login page
-
-### Story 1.2: Household Member Management
-
-As a household creator,
-I want to invite other family members to join my household,
-So that we can all track our shared and individual finances together.
-
-**Given** I am logged in as a household member
-**When** I navigate to the household settings page
-**Then** I see an "Invite Member" button (only visible to Admin or Owner role)
-**And** I can enter an email address to create an in-app invitation
-
-**Given** I have been invited to join a household via an in-app invitation link
-**When** I click the invitation link
-**Then** I am prompted to sign in with my Google account if not already signed in
-**And** my email is matched against the invitation (email-matching, not token-based) for security
-**And** I am added to the household with a default "Member" role
-
-**Given** I am a household Admin or Owner
-**When** I view the household members list
-**Then** I see all members with their roles (Owner, Admin, Member)
-**And** I can change a member's role or remove them from the household
-
-### Story 1.3: Session Timeout and CSRF Protection
-
-As a security-conscious user,
-I want my session to timeout after inactivity and all forms to have CSRF protection,
-So that my financial data remains secure even if I forget to log out.
-
-**Given** I have been inactive for 30 minutes
-**When** I attempt to perform any action
-**Then** I am shown a "Session expired" message
-**And** I am redirected to the login page
-
-**Given** I am logged in and viewing any form (e.g., create transaction, update budget)
-**When** I submit the form
-**Then** the request includes a CSRF token
-**And** if the CSRF token is missing or invalid, the request is rejected with a 403 Forbidden response
-
-## Epic 2: Core Infrastructure & Categories
-
-**Goal:** Implement the complete category system with on-demand default creation, CRUD operations, subcategory support, merge duplicates, and import mapping.
-
-**Progress:** 5 of 5 stories complete ✅ **COMPLETE** (2-1 ✅, 2-2 ✅, 2-3 ✅, 2-4 ✅, 2-5 ✅)
-
-> **Implementation Progress:** See `../implementation-artifacts/sprint-status.yaml` for canonical implementation progress.
-
-### Story 2.1: Default Category Templates (On-Demand Creation) ✅ COMPLETE
-
-**Implementation Date:** 2026-05-24  
-**Files:** `backend/database.py`, `backend/routes/categories.py`, `backend/services/category_service.py`, `frontend/src/api/categories.ts`, `frontend/src/components/CategoryManager.tsx`  
-**Acceptance Criteria:** All criteria verified ✅
-
-As a new household member,
-I want to create default categories on demand via a "Create Default Categories" button,
-So that I have a starting point for categorizing transactions without the system pre-populating my account.
-
-**Architectural Change:** Categories are NO LONGER auto-seeded on startup or household creation. All categories are household-specific (`household_id` set, `is_default=False`). Template data lives in `backend/database.py` as Python lists.
-
-**Acceptance Criteria:**
-
-**Given** a new household has been created
-**When** the user navigates to Category Manager
-**Then** no categories exist yet (empty state)
-**And** a "Create Default Categories" button is visible in the header
-
-**Given** I click "Create Default Categories"
-**When** the API call completes successfully
-**Then** 17 categories are created as regular household-specific categories:
-- 12 expense categories: Groceries, Transport, Utilities, Entertainment, Healthcare, Education, Shopping, Dining, Travel, Bills, Savings, Other
-- 5 income categories: Salary, Freelance, Investments, Gifts, Other Income
-**And** each category has its designated color, icon, and type
-**And** all categories have `household_id` set to my household and `is_default=False`
-**And** all categories have null parent_category_id (top-level)
-
-**Given** default categories already exist for my household
-**When** I click "Create Default Categories" again
-**Then** the API returns an error or skips existing categories (no duplicates created)
-
-### Story 2.2: Category CRUD Operations ✅ COMPLETE
-
-**Implementation Date:** 2026-05-24  
-**Files:** `backend/routes/categories.py`, `backend/services/category_service.py`, `frontend/src/api/categories.ts`, `frontend/src/components/CategoryManager.tsx`  
-**Acceptance Criteria:** All 6 criteria verified ✅
-
-As a user,
-I want to create, edit, and delete categories,
-So that I can customize them to match my spending patterns.
-
-**Given** I am on the Categories page
-**When** I click "Add Category"
-**Then** a form appears with fields for name, color picker, and optional parent category dropdown
-**And** after saving, the new category appears in the list
-
-**Given** I see a category in the list
-**When** I click the edit icon
-**Then** I can modify its name and color
-**And** changes are saved immediately
-
-**Given** I have created a custom category (not one of the 12 defaults)
-**When** I click the delete icon
-**Then** I am asked for confirmation
-**And** the category is removed (defaults cannot be deleted, only hidden)
-
-### Story 2.3: Subcategory Support
-
-As a power user,
-I want to create subcategories under existing categories,
-So that I can track spending with more granularity.
-
-**Given** I am on the Categories page
-**When** I expand a parent category (e.g., "Dining")
-**Then** I see an option to "Add Subcategory" beneath it
-**And** I can create a subcategory (e.g., "Fast Food", "Fine Dining") with its own name and color
-
-**Given** I have created subcategories
-**When** I create a transaction and select a subcategory
-**Then** the transaction is associated with both the subcategory and its parent category
-**And** spending reports roll up subcategory spending to the parent
-
-### Story 2.4: Merge Duplicate Categories
-
-As a user who imported data with duplicate categories,
-I want to merge duplicate categories,
-So that my transactions are consolidated under a single category.
-
-**Given** I have two categories with similar names (e.g., "Groceries" and "Grocery")
-**When** I select both categories and click "Merge"
-**Then** I am prompted to choose which category to keep as the parent
-**And** all transactions from the merged category are reassigned to the kept category
-**And** the merged category is deleted after the transfer
-
-### Story 2.5: Import Category Mapping
-
-As a user importing a CSV file,
-I want to map CSV columns to app categories during import,
-So that my imported transactions get the correct categories.
-
-**Given** I am on the CSV import page
-**When** I upload a CSV file
-**Then** I see a column mapping interface where I can select which CSV column maps to the category field
-**And** for each unique value in the CSV category column, I can map it to an existing category or create a new one
-**And** unmapped values are assigned to the "Other" category by default
-
-## Epic 3: Transactions & Transfers
-
-**Goal:** Implement the complete transaction lifecycle with quick entry (under 5 seconds), multi-currency support, account management, and inter-account transfers.
-
-### Story 3.1: Quick Transaction Entry
-
-As a user,
-I want to enter a new transaction in under 5 seconds,
-So that tracking expenses feels effortless and doesn't become a chore.
-
-**Given** I am on any page in the app
-**When** I click the "+" FAB or press the keyboard shortcut (N)
-**Then** a quick-entry dialog appears with focused input on the amount field
-**And** I can type the amount, press Tab, type the description, press Tab, select a category, and press Enter to save
-**And** the dialog closes and the transaction is saved
-
-**Given** the quick-entry dialog is open
-**When** I press Escape
-**Then** the dialog closes without saving
-
-### Story 3.2: Multi-Currency Transactions with SGD Override
-
-As a user traveling or making international purchases,
-I want to record transactions in foreign currencies with automatic SGD conversion,
-So that my financial overview always shows values in my home currency (SGD).
-
-**Given** I am creating a transaction
-**When** I select a currency other than SGD (e.g., USD, EUR)
-**Then** I can enter both the foreign amount and the exchange rate (pre-filled with the latest rate)
-**And** the transaction displays both amounts: original currency and SGD equivalent
-**And** the SGD equivalent is used in all reports and the dashboard
-
-**Given** I have transactions in multiple currencies
-**When** I view my net worth or spending reports
-**Then** all values are converted to SGD using the exchange rate at the time of entry
-**And** a note indicates that forex delta may affect accuracy
-
-### Story 3.3: Account Management
-
-As a user,
-I want to create and manage multiple accounts (Cash, Bank, Credit Card),
-So that I can track all my finances in one place.
-
-**Given** I am on the Accounts page
-**When** I click "Add Account"
-**Then** a form appears with fields for name, type (Cash, Bank, Credit Card), currency, and initial balance
-**And** after saving, the account appears in the accounts list with its current balance
-
-**Given** I have multiple accounts
-**When** I view the dashboard
-**Then** I see the combined balance across all accounts
-**And** I can filter transactions by account
+# Financial Tracker — Epics & Stories
 
-### Story 3.4: Inter-Account Transfers
+---
 
-As a user,
-I want to transfer money between my own accounts,
-So that I can accurately reflect movements like moving money from Savings to Bank.
+## 0. How to Use This Document
 
-**Given** I am creating a transfer
-**When** I select a source account and a destination account (different accounts only)
-**Then** I enter the amount and date
-**And** the system creates two linked entries: a negative entry in the source account and a positive entry in the destination account
-**And** the transfer appears as a single item in the transactions list with a transfer icon
+Each story is a **single, bounded implementation task**. Work through stories in
+dependency order. Never start a story unless all `Depends on` stories are complete.
 
-**Given** I have an existing transfer
-**When** I edit or delete it
-**Then** both linked entries are updated or removed together
+**Story format:**
+- **ID**: Unique identifier — reference in commits and PRs
+- **Size**: XS (<80 lines) · S (<200 lines) · M (<400 lines) · L (<600 lines)
+- **Depends on**: Story IDs that must be complete first
+- **FRs**: Requirements being satisfied (references to `prd.md`)
+- **Files**: Exact files to create (`+`) or modify (`~`). Read these before writing.
+- **AC**: Acceptance criteria — all must pass before story is done
+- **Notes**: Implementation guidance; reference to spec sections
+
+**Before starting any story:**
+1. Read the referenced spec sections in EDP, ARCH, PRD, or UX
+2. Confirm all `Depends on` stories are merged and tests are green
+3. Run the existing test suite — it must be green before you start
 
-### Story 3.5: Transaction CRUD and Duplicate Detection
-
-As a user,
-I want to create, edit, archive, and delete transactions, with automatic duplicate detection,
-So that my transaction history is accurate and clean.
-
-**Given** I am creating or editing a transaction
-**When** I save it
-**Then** the system checks for potential duplicates (same amount, same date ±2 days, same category)
-**And** if a potential duplicate is found, I am shown a warning message
+**Definition of Done:**
+- [ ] All AC checked off
+- [ ] Unit and/or integration tests written and passing
+- [ ] No new linting errors
+- [ ] PR description references this story ID
 
-**Given** I have a transaction in the list
-**When** I click the options menu
-**Then** I can Edit, Archive, or Delete it
-**And** archived transactions are hidden from the default view but accessible via a filter
-**And** deleting a transaction permanently removes it (with confirmation dialog)
-
-## Epic 4: Recurring Payments
-
-**Goal:** Implement recurring payment scheduling with APScheduler processing, verification view, and manual trigger with retry logic.
-
-### Story 4.1: Create Recurring Payment
+**Lessons from previous attempt (stories 1-1 → 2-5):**
+- Use `func.lower()` for all case-insensitive name uniqueness checks in SQLite
+- Session sliding window uses `last_activity_at`; CSRF token uses `used: bool` (not datetime)
+- CSRF middleware does not single-use tokens — one token is valid for its lifetime
+- Archiving a category auto-promotes its children to top-level (`parent_id = NULL`) — do not return 409
+- `CategorySelect.tsx` belongs in the transactions epic, not the categories epic
+- Default categories are seeded as household-owned records at household creation, not at app startup
+- The `depth` column (0/1) on `Category` is simpler than walking the parent chain for depth checks
+
+---
+
+## Epic 1 — Backend Foundation ✅ COMPLETE
+
+**Purpose:** Establish the complete backend scaffold: all SQLAlchemy models, Alembic
+migration, FastAPI app factory, middleware stack, and dependency injection. Every
+subsequent epic builds on this foundation without modifying its shared infrastructure.
 
-As a user,
-I want to set up recurring payments (subscriptions, bills, salary),
-So that I never miss a payment and can track automatic charges.
+**Pre-conditions:** Clean repo. Python 3.12+, Docker installed.
 
-**Given** I am on the Recurring Payments page
-**When** I click "Add Recurring Payment"
-**Then** a form appears with fields for description, amount, frequency (daily/weekly/monthly/quarterly/yearly), start date, end date (optional), source account, and category
-**And** after saving, the recurring payment appears in the list with its next occurrence date
-
-**Given** I have created a recurring payment
-**When** I view its details
-**Then** I see the payment history (past occurrences) and upcoming occurrences
-**And** I can edit or delete it at any time
+**Post-conditions:** `alembic upgrade head` creates all tables. `uvicorn backend.main:app`
+starts without errors. All models importable. Middleware stack wired. No feature routes yet.
+
+**Completed:** 2026-05-28 · All 8 stories done · Retrospective complete
 
-### Story 4.2: APScheduler Processing
+---
+
+### BE-001 — Python project scaffold and config ✅ DONE
+
+**Size:** XS · **Depends on:** — · **FRs:** — · **Ref:** ARCH §1.1, §3.1
+
+**Files:**
+```
++ backend/main.py
++ backend/config.py
++ backend/database.py
++ requirements.txt
++ .env.example
++ Dockerfile
++ docker-compose.yml
+```
+
+**AC:**
+- [ ] `requirements.txt` pins all versions from ARCH §1.1 (FastAPI, SQLAlchemy 2.0, Pydantic 2, Alembic, Authlib, httpx, APScheduler, pytest)
+- [ ] `config.py` uses `pydantic-settings`; reads `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `EXCHANGERATE_API_KEY`, `GCS_BUCKET`; all required in prod, have defaults for dev
+- [ ] `database.py` creates async SQLAlchemy engine; sets `PRAGMA journal_mode=WAL` and `PRAGMA foreign_keys=ON` via `connect_args`; exports `async_session_factory` and `get_db` async generator
+- [ ] `main.py` is a FastAPI app factory (`create_app()`); returns app without starting it; `uvicorn backend.main:app --reload` starts without error
+- [ ] `Dockerfile` builds a single container serving both API and (future) static frontend; `docker-compose.yml` provides a working local dev environment
+
+---
+
+### BE-002 — BaseEntity, MonetaryValueMixin, and shared enums ✅ DONE
+
+**Size:** S · **Depends on:** BE-001 · **FRs:** — · **Ref:** ARCH §4.2, §4.3, EDP §3.1, §3.2, §3.4
+
+**Files:**
+```
++ backend/models/__init__.py
++ backend/models/base.py
+```
+
+**AC:**
+- [ ] `BaseEntity` abstract SQLAlchemy 2.0 class with all 10 fields from EDP §3.1: `id` (UUID PK), `household_id` (FK households, indexed), `created_at`, `updated_at`, `created_by` (FK persons), `updated_by` (FK persons, nullable), `archived` (bool, indexed), `archived_at` (nullable), `archived_by` (FK persons, nullable), `status` (str, indexed, default `"active"`)
+- [ ] `MonetaryValueMixin` adds all 7 fields from EDP §3.2 as inline columns; `@validates("amount_base")` auto-recomputes `fx_delta = amount_base_calculated - amount_base`
+- [ ] `StatusEnum` string values: `"active"`, `"inactive"`, `"archived"`
+- [ ] `Household` uses `Base` (not `BaseEntity`) — it is a bootstrap entity with no `household_id` FK
+- [ ] `pytest` imports `backend.models.base` without error; `MonetaryValueMixin` unit test: setting `amount_base` triggers correct `fx_delta` recomputation
+
+---
+
+### BE-003 — Household, Person, Session, and Invitation models ✅ DONE
+
+**Size:** S · **Depends on:** BE-002 · **FRs:** FR-HH-001, FR-P-001 · **Ref:** ARCH §4.4
+**Completed:** 2026-05-28 · **Tests:** 5/5 passing
+
+**Files:**
+```
++ backend/models/household.py
++ backend/models/person.py
+~ backend/models/__init__.py
+```
+
+**AC:**
+- [x] `Household` model with fields: `id`, `name`, `base_currency` (default `"SGD"`), `timezone` (default `"Asia/Singapore"`), `created_at`, `created_by` (UUID, no FK — bootstrap)
+- [x] `Person` extends `BaseEntity`; fields: `email` (unique, indexed), `display_name`, `picture_url` (nullable), `role` (str, default `"member"`; values: `"owner"` / `"admin"` / `"member"`), `display_currency` (default `"SGD"`), `default_view` (default `"household"`; values: `"household"` / `"personal"`), `google_sub` (unique, indexed), `last_active_at` (nullable); compound index `(household_id, email)`
+- [x] `Session` model (not `BaseEntity`): `id` (UUID PK), `person_id` (FK persons), `created_at`, `expires_at`, `last_activity_at`, `csrf_token` (str, unique), `ip_address` (nullable), `user_agent` (nullable)
+- [x] `HouseholdInvitation` model (not `BaseEntity`): `id`, `household_id` (FK), `invited_email`, `invited_by` (FK persons), `created_at`, `expires_at`, `accepted_at` (nullable), `status` (default `"pending"`; values: `"pending"` / `"accepted"` / `"expired"` / `"cancelled"`)
+- [x] All models importable from `backend.models`
+
+---
+
+### BE-004 — Account and related models ✅ DONE
+
+**Size:** M · **Depends on:** BE-003 · **FRs:** FR-A-001 · **Ref:** ARCH §4.4, EDP §6
+**Completed:** 2026-05-28 · **Tests:** 26/26 passing
+
+**Files:**
+```
++ backend/models/account.py
+~ backend/models/__init__.py
+```
+
+**AC:**
+- [x] `Account` combines `MonetaryValueMixin` + `BaseEntity`; STI with `account_type` discriminator (indexed); `account_type` values: `"bank"`, `"credit_card"`, `"capital"`, `"asset"`, `"insurance"`
+- [x] All base account fields present: `name`, `institution` (nullable), `month_year` (nullable, `"YYYY-MM"`), `notes` (nullable), `account_number` (nullable, masked)
+- [x] All subtype-specific nullable fields present per ARCH §4.4: BankAccount (`interest_rate`, `interest_frequency`), CreditCard (`credit_limit`, `billing_day`, `due_day`, `reward_points`, `annual_fee`), Capital (`investment_type`, `cost_basis`, `current_value`), Asset (`asset_type`, `purchase_date`, `purchase_value`, `depreciation_formula_id`), Insurance (`policy_type`, `coverage_types`, `premium_frequency`, `coverage_amount`, `insurer`)
+- [x] `AccountOwner` junction table: `account_id` (FK), `person_id` (FK), `is_primary` (bool), `added_at`; unique `(account_id, person_id)`
+- [x] `ValuationRecord` extends `BaseEntity`: `account_id` (FK), `valuation_date` (Date, indexed), `value` (Decimal), `notes` (nullable); compound index `(account_id, valuation_date)`
+- [x] `RecurringConfig` extends `BaseEntity`: `account_id` (FK, unique), `frequency_text` (str), `frequency_rule` (JSON text), `next_due_date` (Date, nullable), `is_active` (bool, default True)
+- [x] Compound index `(household_id, account_type)` on `accounts`
+
+---
+
+### BE-005 — FinancialEvent and OccurrenceRecord models ✅ DONE
+
+**Size:** M · **Depends on:** BE-004 · **FRs:** FR-E-001 · **Ref:** ARCH §4.4, EDP §7
+
+**Files:**
+```
++ backend/models/event.py
+~ backend/models/__init__.py
+```
+
+**AC:**
+- [ ] `FinancialEvent` combines `MonetaryValueMixin` + `BaseEntity`; STI with `event_type` discriminator; `event_type` values: `"transaction"`, `"recurring_payment"`, `"transfer"`
+- [ ] Base event fields: `name`, `event_date` (Date), `payee` (str, nullable), `payee_person_id` (FK persons, nullable), `category_id` (FK categories, nullable), `account_id` (FK accounts), `notes` (nullable), `transaction_type` (str; `"inflow"` / `"outflow"` / `"transfer"`), `transaction_status` (str; `"pending"` / `"completed"` / `"cancelled"` / `"reconciled"`), `reconciled_at` (datetime, nullable)
+- [ ] Transaction-specific fields: `is_shared_expense` (bool, default False)
+- [ ] RecurringPayment-specific fields: `frequency_text` (str, nullable), `frequency_rule` (JSON text, nullable), `source_account_id` (FK accounts, nullable — for capital/asset/insurance sourced payments)
+- [ ] Transfer-specific fields: `destination_account_id` (FK accounts, nullable), `dest_currency` (nullable), `dest_amount` (Decimal, nullable), `dest_amount_base` (Decimal, nullable), `is_debt_repayment` (bool, default False), `debt_cleared_amount` (Decimal, nullable)
+- [ ] `CheckConstraint("(is_shared_expense = 0) OR (transaction_type = 'outflow')")` present
+- [ ] All 4 compound indexes from ARCH §4.5 present
+- [ ] `OccurrenceRecord`: `recurring_event_id` (FK, indexed), `expected_date` (Date), `occurrence_status` (`"upcoming"` / `"processed"` / `"skipped"` / `"missed"` / `"failed"`), `generated_event_id` (FK events, nullable), `processed_at` (datetime, nullable); compound index `(recurring_event_id, expected_date)`
+
+---
+
+### BE-006 — Remaining models (Budget, Category, Currency, Formula, Audit, Alert) ✅ DONE
+
+**Size:** M · **Depends on:** BE-005 · **FRs:** FR-B-001, FR-C-001, FR-CU-001, FR-F-001 · **Ref:** ARCH §4.4, EDP §8–12
+
+**Files:**
+```
++ backend/models/budget.py
++ backend/models/category.py
++ backend/models/currency.py
++ backend/models/formula.py
++ backend/models/audit.py
++ backend/models/alert.py
+~ backend/models/__init__.py
+```
+
+**AC:**
+- [ ] `Budget` extends `BaseEntity`: `name`, `category_id` (FK), `owner_person_id` (FK persons, nullable — null = household-wide), `period_type` (`"monthly"` / `"yearly"`), `limit_currency`, `limit_amount`, `limit_amount_base`, `period_start` (Date), `period_end` (Date), `alert_threshold_pct` (int, default 80), `rollover` (bool, default False); no `actual_spent` column (computed at query time); indexes on `(household_id, period_start, period_end)` and `(category_id, period_start)`
+- [ ] `Category` extends `BaseEntity`: `name`, `color` (str, nullable, hex), `icon` (str, nullable), `category_type` (`"income"` / `"expense"` / `"both"`, default `"expense"`), `parent_id` (FK self, nullable, indexed), `depth` (int, default 0); `CheckConstraint("depth <= 1")`; index `(household_id, parent_id)`
+- [ ] `Currency`: `id`, `household_id` (FK, indexed), `code` (str 3), `name`, `symbol`, `is_base` (bool), `is_display_active` (bool), `rate_to_base` (Decimal, default 1.0), `fee_pct` (Decimal, default 0), `last_rate_at` (datetime, nullable), `rate_source` (nullable); unique `(household_id, code)`; `FxRateHistory` child table with unique `(currency_id, rate_date)`
+- [ ] `Formula` extends `BaseEntity`: `name`, `expression` (Text), `applies_to` (str — entity type), `is_system` (bool, default False), `description` (nullable)
+- [ ] `AuditLog` has **no FK constraints** on `entity_id` or `actor_id`; stores UUIDs as plain columns; fields: `id`, `household_id` (UUID, indexed), `actor_id` (UUID, indexed), `action` (`"create"` / `"update"` / `"archive"` / `"restore"` / `"delete"`), `entity_type`, `entity_id` (UUID, indexed), `before_state` (Text JSON, nullable), `after_state` (Text JSON, nullable), `occurred_at` (indexed), `ip_address` (nullable), `user_agent` (nullable)
+- [ ] `Alert` extends `BaseEntity`: `alert_type` (str; `"missed_payment"` / `"budget_threshold"` / `"budget_exceeded"` / `"fx_fetch_failed"` / `"duplicate_detected"` / `"system_error"`), `title`, `body` (Text), `entity_type` (nullable), `entity_id` (UUID, nullable), `is_read` (bool, default False), `read_at` (datetime, nullable)
+
+---
+
+### BE-007 — Alembic initial migration ✅ DONE
+
+**Size:** S · **Depends on:** BE-006 · **FRs:** — · **Ref:** ARCH §3.1
+
+**Files:**
+```
++ backend/migrations/env.py
++ backend/migrations/script.py.mako
++ backend/alembic.ini
++ backend/migrations/versions/0001_initial_schema.py
+```
+
+**AC:**
+- [ ] `alembic upgrade head` on a fresh SQLite file creates all tables, all indexes, and all constraints with zero errors
+- [ ] `alembic downgrade base` removes all tables cleanly
+- [ ] WAL pragma is applied in `env.py` via `connect_args={"check_same_thread": False}` and event listener
+- [ ] All compound indexes from ARCH §4.5 are present in the migration (not just the models)
+- [ ] The `CheckConstraint` on `financial_events.is_shared_expense` and `categories.depth` are both present in the migration
+
+---
+
+### BE-008 — FastAPI app, middleware stack, DI, and audit service ✅ DONE
+
+**Size:** M · **Depends on:** BE-007 · **FRs:** FR-SYS-002 · **Ref:** ARCH §5.1, §5.2, §5.3, EDP §16.3, §16.4
+
+**Files:**
+```
+~ backend/main.py
++ backend/middleware/auth_middleware.py
++ backend/middleware/household_middleware.py
++ backend/middleware/csrf_middleware.py
++ backend/dependencies.py
++ backend/services/__init__.py
++ backend/services/audit_service.py
+```
+
+**AC:**
+- [ ] Middleware registered in order: `AuthMiddleware` → `HouseholdMiddleware` → `CSRFMiddleware`; auth/static paths skipped by all three
+- [ ] `AuthMiddleware` validates session cookie against `Session` table; rejects with 401 if absent, expired (`expires_at` < now), or `last_activity_at` > 30 min ago; updates `last_activity_at` on every valid request
+- [ ] `HouseholdMiddleware` sets `request.state.household_id` from `request.state.person.household_id`
+- [ ] `CSRFMiddleware` validates `X-CSRF-Token` header on all non-GET requests that are not under `/auth/`; returns 403 if missing or not found in `Session.csrf_token`; does NOT single-use invalidate (token valid for session lifetime)
+- [ ] Security headers applied globally: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
+- [ ] All API errors return structured JSON: `{"error": "Human-readable", "code": "SNAKE_CASE_CODE", "detail": {}}`; `RequestValidationError` caught and reformatted
+- [ ] `dependencies.py`: `get_db()` async generator (commit on success, rollback on exception); `get_current_person()` (raises 401 if no session or person archived); `get_household_id()`; `require_role(minimum_role: str)` decorator factory; `_get_or_404(db, household_id, entity_id, Model)` helper
+- [ ] `audit_service.log(db, household_id, actor_id, action, entity_type, entity_id, before, after)` writes `AuditLog` record; `before`/`after` serialised to JSON; called before `flush()` in every service mutator
+- [ ] `pytest` smoke test: app starts, middleware loads, `/health` returns 200
+
+---
+
+## Epic 2 — Frontend Foundation ✅ COMPLETE
+
+**Purpose:** Build the complete frontend scaffold, design system, generic entity components,
+and app shell before any feature-specific UI is written.
+
+**Pre-conditions:** Epic 1 complete. Node 20+ installed.
+
+**Post-conditions:** `npm run dev` starts. Design system components render. App shell
+renders with placeholder routes. All generic entity components available for feature epics.
+
+**Completed:** 2026-05-29 · All 7 stories done · Retrospective complete
+
+**Delivered:**
+- Tailwind v4 `@theme` + `@utility` design tokens in `index.css`
+- Full UI component library: Button, Input, Checkbox, Toggle, Dropdown (single/multi/searchable), DatePicker, ColourPicker, EmojiIconPicker, TagInput, MonetaryValueInput, RecurringDateInput, Card, Modal, Drawer, ConfirmationDialog, Accordion, Table, ContextMenu, AlertBanner, ProgressBar, Skeleton, EmptyState, Toast/ToastContainer
+- Generic entity layer: `useEntityManager`, `EntityCard`, `EntityModal`, `EntityPage`
+- Zustand stores: `authStore` (with mock Dev User for pre-OAuth development), `alertStore`, `visualizationStore`
+- AppShell with responsive sidebar, topbar, and React Router v6 routing
+- Auth guard implemented; all module routes wired with `EmptyState` placeholders
+- `/design-system` route: live component catalogue for the full UI library
+
+---
+
+### FE-001 — Vite + React + TypeScript scaffold and design tokens ✅ DONE
+
+**Size:** S · **Depends on:** — · **FRs:** — · **Ref:** ARCH §1.2, §3.2, UX §1
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/index.html
++ frontend/vite.config.ts
++ frontend/tsconfig.json
++ frontend/tailwind.config.ts
++ frontend/src/main.tsx
++ frontend/src/App.tsx
++ frontend/src/index.css
++ frontend/src/types/entities.ts
+```
+
+**AC:**
+- [x] `npm run dev` starts dev server; `npm run build` produces a dist bundle; no TypeScript errors
+- [x] `index.css` has Tailwind v4 `@theme {}` block with **all** colour, typography, spacing, shadow, z-index, and motion tokens from UX §1 (including all `--color-entity-*` tokens); `@utility` blocks for shared component utilities
+- [x] `types/entities.ts` exports TypeScript interfaces: `BaseEntity`, `MonetaryValue`, `PersonRef`, `StatusEnum`; field names in `camelCase` per EDP §15.2
+- [x] React Router v6 configured; `/login` renders a placeholder; `/` redirects to `/login` (auth guard placeholder); `/design-system` route exposes live component catalogue
+- [x] All monetary values formatted via a shared `formatMoney(value, currency, displayCurrency)` utility in `utils/currency.ts`; dates formatted via `utils/date.ts` (stored ISO → displayed `DD-MM-YYYY`)
+
+---
+
+### FE-002 — Design system: atomic components (Layer 2) ✅ DONE
+
+**Size:** L · **Depends on:** FE-001 · **FRs:** — · **Ref:** UX §2
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/src/components/ui/Button.tsx
++ frontend/src/components/ui/Input.tsx
++ frontend/src/components/ui/Label.tsx
++ frontend/src/components/ui/Badge.tsx
++ frontend/src/components/ui/Avatar.tsx
++ frontend/src/components/ui/Icon.tsx
++ frontend/src/components/ui/Tooltip.tsx
++ frontend/src/components/ui/Divider.tsx
++ frontend/src/components/ui/Spinner.tsx
++ frontend/src/components/ui/index.ts
+```
+
+**AC:**
+- [x] `Button`: 5 variants (`primary`, `secondary`, `ghost`, `danger`, `link`); 3 sizes; all states (hover, active, focus-visible, disabled, loading spinner); loading state disables and shows `Spinner`
+- [x] `Input`: 4 variants; leading/trailing slot; all states (default, focus, error, disabled); error message slot; `aria-invalid` on error
+- [x] `Badge`: 6 variants including `entity` which uses CSS var `--entity-accent` passed as prop
+- [x] `Avatar`: 4 sizes; `picture_url` with initials fallback; greyscale when `archived=true`
+- [x] `Tooltip`: 200 ms hover delay; max-width 280px; keyboard accessible; dismisses on Escape
+- [x] All components: `focus-visible` ring uses `--color-border-focus`; Vitest: each component renders without throwing
+
+---
+
+### FE-003 — Design system: form and selection components (Layer 3) ✅ DONE
+
+**Size:** L · **Depends on:** FE-002 · **FRs:** — · **Ref:** UX §3
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/src/components/ui/Dropdown.tsx
++ frontend/src/components/ui/Checkbox.tsx
++ frontend/src/components/ui/Toggle.tsx
++ frontend/src/components/ui/DatePicker.tsx
++ frontend/src/components/ui/ColourPicker.tsx
++ frontend/src/components/ui/EmojiIconPicker.tsx
++ frontend/src/components/ui/MonetaryValueInput.tsx
++ frontend/src/components/ui/RecurringDateInput.tsx
++ frontend/src/components/ui/TagInput.tsx
+~ frontend/src/components/ui/index.ts
+```
+
+**AC:**
+- [x] `Dropdown`: single, searchable, multi, and grouped variants; keyboard nav (arrows, Enter, Escape); `aria-expanded` and `aria-activedescendant`
+- [x] `DatePicker`: calendar popover; **accepts and displays** `DD-MM-YYYY`; **stores as ISO**; keyboard nav; clears on Backspace
+- [x] `ColourPicker`: 32-swatch palette tab + hex input tab; selected colour shown in trigger button
+- [x] `EmojiIconPicker`: emoji groups; search; Lucide icon tab; recently used row (persists in component state)
+- [x] `MonetaryValueInput`: currency `Dropdown` + amount `Input`; auto-fills `amount_base_calculated` from parent-provided rates; shows `amount_base` override field and `fx_delta` chip when `currency ≠ base_currency`
+- [x] `RecurringDateInput`: free-text input with 500 ms debounce; calls parent-provided `parseRule(text)` and shows next computed date; **Confirm button required** before parent form can save; resets to unconfirmed if text changes after confirmation
+- [x] `TagInput`: Enter or comma to add tag; Backspace removes last tag; duplicate tags rejected
+
+---
+
+### FE-004 — Design system: containers, layout, and feedback (Layers 4 and 6) ✅ DONE
+
+**Size:** M · **Depends on:** FE-002 · **FRs:** — · **Ref:** UX §4, §6
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/src/components/ui/Card.tsx
++ frontend/src/components/ui/Modal.tsx
++ frontend/src/components/ui/Drawer.tsx
++ frontend/src/components/ui/Accordion.tsx
++ frontend/src/components/ui/Table.tsx
++ frontend/src/components/ui/ContextMenu.tsx
++ frontend/src/components/ui/Toast.tsx
++ frontend/src/components/ui/AlertBanner.tsx
++ frontend/src/components/ui/Skeleton.tsx
++ frontend/src/components/ui/EmptyState.tsx
++ frontend/src/components/ui/ConfirmationDialog.tsx
++ frontend/src/components/ui/ProgressBar.tsx
++ frontend/src/store/alertStore.ts
+~ frontend/src/components/ui/index.ts
+```
+
+**AC:**
+- [x] `Modal`: `sm`/`md`/`lg`/`fullscreen` variants; focus trap; Escape closes (with unsaved-changes guard if `isDirty` prop); on `<768px` renders as bottom sheet
+- [x] `Drawer`: slides from right; full-width on mobile; focus trap
+- [x] `Table`: sticky `thead`; sortable columns (sort icon state); row hover; responsive card-collapse at `<768px`
+- [x] `ContextMenu`: `⋯` trigger; standard items: Edit, Duplicate, separator, Archive, Delete; item-level `disabled` and `destructive` props
+- [x] `Card`: hover lift animation per UX §4.1; left accent bar uses CSS var `--entity-accent` passed as prop
+- [x] `Toast` / `ToastContainer`: 4 variants; auto-dismiss 4 s (success/info) / 8 s (error/warning); max 3 stacked; slide-in animation; `alertStore` Zustand store with `enqueue` and `dismiss` actions
+- [x] `Skeleton`: 4 shapes — `card`, `table-row`, `chart`, `stat`; `ConfirmationDialog` wraps `Modal` with warning/danger variant and Cancel + Confirm; `ProgressBar` implemented
+
+---
+
+### FE-005 — Generic entity components (Layer 9) ✅ DONE
+
+**Size:** M · **Depends on:** FE-003, FE-004 · **FRs:** — · **Ref:** EDP §14, UX §9.1–9.3
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/src/hooks/useEntityManager.ts
++ frontend/src/components/entity/EntityCard.tsx
++ frontend/src/components/entity/EntityModal.tsx
++ frontend/src/components/entity/EntityPage.tsx
++ frontend/src/components/entity/index.ts
+```
+
+**AC:**
+- [x] `useEntityManager<T>`: exposes `{ items, isLoading, error, create, update, archive, restore, deletePermanently, duplicate, detectDuplicate }`; all mutations call the provided `api` adapter; `detectDuplicate` is optional config
+- [x] `EntityCard<T>`: left accent bar using `entityAccent` prop (CSS var); header with name + `Badge`; body slot; footer with `updated_at`; `ContextMenu` with standard actions; greyed-out appearance when `archived=true`; `onClick` to open detail/edit
+- [x] `EntityModal<T>`: two-column form grid on `≥768px`; section dividers with `Divider` (labelled); footer: Cancel + Save; Save button shows `Spinner` while submitting; `isDirty` guard on Escape
+- [x] `EntityPage<T>`: action bar with primary Create button + Show Archived toggle; `VisualizationFilterBar` slot (renders if `showFilterBar` prop); extension slot for entity-specific controls; renders children (list or table)
+- [x] Multi-select: Ctrl+click adds to selection; Shift+click range selects; Ctrl+A selects all; `BulkActionBar` appears at bottom when ≥1 selected with count and Archive/Delete bulk actions
+
+---
+
+### FE-006 — Zustand stores and TanStack Query client ✅ DONE
+
+**Size:** S · **Depends on:** FE-001 · **FRs:** FR-P-006, FR-V-001 · **Ref:** ARCH §3.2, EDP §13.5
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/src/api/client.ts
++ frontend/src/store/authStore.ts
++ frontend/src/store/visualizationStore.ts
++ frontend/src/types/visualization.ts
+```
+
+**AC:**
+- [x] `client.ts`: base fetch wrapper; automatically includes `X-CSRF-Token` from `authStore`; on 401 response calls `authStore.clearAuth()` and redirects to `/login`; all errors throw a typed `ApiError`
+- [x] `authStore`: `{ currentPerson, householdId, csrfToken, setAuth, clearAuth }`; populated from `/auth/me` on app mount; mock Dev User injected in development mode so app shell is navigable without backend OAuth
+- [x] `visualizationStore`: `VisualizationFilter` shape per EDP §13.5: `{ dateRange, categoryIds, personIds, accountIds, currency, comparisonMode, comparisonIds }`; actions: `setFilter`, `drillDown`, `drillUp`, `resetFilter`, `navigateTo(module, filterPatch)`
+- [x] `useVisualizationFilter` hook: reads/writes `visualizationStore`; `navigateTo` persists filter across route changes via React Router state
+- [x] `types/visualization.ts` exports `VisualizationFilter`, aggregation response types
+
+---
+
+### FE-007 — App shell, routing, and auth guard ✅ DONE
+
+**Size:** M · **Depends on:** FE-005, FE-006 · **FRs:** FR-P-006 · **Ref:** ARCH §8.1, §8.2, UX §5
+**Completed:** 2026-05-29
+
+**Files:**
+```
++ frontend/src/components/layout/AppShell.tsx
++ frontend/src/components/layout/Sidebar.tsx
++ frontend/src/components/layout/Topbar.tsx
+~ frontend/src/App.tsx
+```
+
+**AC:**
+- [x] `AppShell`: full sidebar layout at `≥1024px`; icon-only collapsed sidebar at `768–1024px`; bottom nav bar at `<768px`
+- [x] `Sidebar`: all navigation sections per UX §5.2; Household ⇌ My Finances view toggle at bottom (reads `authStore.currentPerson.default_view`); active route highlighted
+- [x] `Topbar`: page title; `VisualizationFilterBar` slot with horizontal scroll on overflow; collapses to `Filters` button at `<480px`; alert bell (reads `alertStore` count); `Avatar` linking to profile/settings
+- [x] `App.tsx`: all routes defined; protected routes wrapped in `AuthGuard` component that checks `authStore.currentPerson` and redirects to `/login` if absent; each module route renders its page within `AppShell`; `/design-system` route exposes the full UI component catalogue
+- [x] Placeholder pages created for all modules: `Dashboard`, `Accounts`, `Capital`, `Assets`, `Insurance`, `Transactions`, `RecurringPayments`, `Transfers`, `Budgets`, `Categories`, `Settings` — each renders an `EmptyState` until its epic is complete
+
+---
+
+## Epic 3 — Authentication & Household
+
+**Purpose:** Google OAuth login, server-side sessions, CSRF, household creation, and
+member management. After this epic both Ben and Kim can log in and are in the same household.
+
+**Pre-conditions:** Epics 1 and 2 complete. Google OAuth credentials configured.
+
+**Post-conditions:** Full auth flow working end-to-end. Household created on first login.
+Second user can be invited and accept. All auth tests passing.
+
+---
+
+### AUTH-001 — Google OAuth backend: flow, callback, session
+
+**Size:** M · **Depends on:** BE-008 · **FRs:** FR-P-001, FR-HH-001 · **Ref:** ARCH §7.1, §7.2, EDP §16.3
+
+**Files:**
+```
++ backend/services/auth_service.py
++ backend/routes/auth.py
+~ backend/main.py
+```
+
+**AC:**
+- [ ] `GET /auth/login`: generates OAuth state (UUID stored in short-lived DB table or signed cookie), redirects to Google authorization endpoint with `scope=openid email profile`, `prompt=select_account`
+- [ ] `GET /auth/callback`: exchanges code for tokens via `httpx`; validates ID token (signature, expiry, audience) using `google-auth`; extracts `email`, `name`, `picture`, `sub` from claims; creates or fetches `Person` by `google_sub` with fallback email match
+- [ ] On first login (no `household_id`): creates `Household` with default name, SGD base currency, seeds 12 default categories (per CAT seeding list), adds SGD currency record, assigns person as `owner`
+- [ ] `Session` created with `expires_at = now + 30min`, `last_activity_at = now`, `csrf_token = secrets.token_urlsafe(32)`; response sets `HttpOnly`, `Secure`, `SameSite=Lax` session cookie; also returns `X-Session-Id` header for dev cross-port use
+- [ ] `GET /auth/me`: returns `{ person: PersonResponse, household: HouseholdResponse }` or 401; used by frontend to rehydrate `authStore`
+- [ ] `POST /auth/logout`: deletes `Session` record; clears session cookie; returns 200
+- [ ] Integration test: full mock OAuth flow — state → callback → session created → `/auth/me` returns person
+
+---
+
+### AUTH-002 — Household member management backend
+
+**Size:** S · **Depends on:** AUTH-001 · **FRs:** FR-HH-003, FR-HH-004, FR-P-002, FR-P-005 · **Ref:** ARCH §6.2, PRD §2
+
+**Files:**
+```
++ backend/services/household_service.py
++ backend/routes/household.py
+~ backend/main.py
+```
+
+**AC:**
+- [ ] `GET /api/household`: returns household details; `PATCH /api/household`: owner-only; updates `name`, `timezone`; audit log entry
+- [ ] `GET /api/persons`: lists all household members with roles; `PATCH /api/persons/{id}`: self or admin+ only; updates `display_name`, `display_currency`, `default_view`; `DELETE /api/persons/{id}`: admin+ only; hard-delete if no events, archive otherwise
+- [ ] `POST /api/persons/invite`: admin+ only; validates email not already in household; creates `HouseholdInvitation` with 7-day expiry; returns invitation record; no email sent
+- [ ] `GET /api/persons/invitations`: admin+ only; returns pending invitations; `DELETE /api/persons/invitations/{id}`: admin+ cancels invitation (sets `status = "cancelled"`)
+- [ ] `POST /api/invitations/{id}/accept`: validates session person's email matches `invited_email` via `func.lower()`; creates `Person` with `member` role; sets invitation `status = "accepted"`, `accepted_at = now`; integration test: mismatched email returns 403
+- [ ] `PATCH /api/persons/{id}/role`: owner-only; values: `"admin"` / `"member"`; owner cannot demote themselves; audit log
+
+---
+
+### AUTH-003 — Auth frontend: login page, useAuth hook, route hydration
+
+**Size:** M · **Depends on:** FE-007, AUTH-001 · **FRs:** FR-P-001 · **Ref:** UX §9.5
+
+**Files:**
+```
++ frontend/src/pages/Login.tsx
++ frontend/src/hooks/useAuth.ts
++ frontend/src/api/usePersons.ts
+```
+
+**AC:**
+- [ ] `Login.tsx`: centred card on dark background using design tokens; single "Sign in with Google" button; displays `?error` query param as `AlertBanner`; no other inputs
+- [ ] `useAuth` hook: calls `GET /auth/me` on mount; populates `authStore`; exposes `{ currentPerson, isLoading, logout }`; `logout()` calls `POST /auth/logout` then clears store and navigates to `/login`
+- [ ] `App.tsx` `AuthGuard` calls `useAuth` on mount; shows `Skeleton` while loading; redirects to `/login` if unauthenticated; redirects to `/dashboard` if authenticated and on `/login`
+- [ ] On successful callback, app shell loads in the person's `default_view` (household or personal)
+- [ ] Vitest: `Login.tsx` renders button; renders error banner when `?error` present
+
+---
+
+### AUTH-004 — Household settings and member management frontend
+
+**Size:** M · **Depends on:** FE-007, AUTH-002 · **FRs:** FR-HH-002 through FR-HH-004, FR-P-003, FR-P-005 · **Ref:** UX §9.5
+
+**Files:**
+```
++ frontend/src/pages/Settings.tsx (partial — household and members tabs only)
++ frontend/src/api/usePersons.ts (expand)
+```
+
+**AC:**
+- [ ] Settings page has tabbed layout: `Household` / `Members` / `Currencies` (currencies tab is placeholder until SETTINGS epic)
+- [ ] Household tab: name + timezone fields; Save button; owner-only fields locked for non-owners with `Tooltip`
+- [ ] Members tab: `Table` of persons with name, email, role `Badge`, joined date, actions; Invite button (admin+) opens `Modal` with email input
+- [ ] Role change dropdown in table row (owner-only); owner cannot change their own role
+- [ ] Remove member action (owner-only): `ConfirmationDialog` before delete
+- [ ] Pending invitations section: list with cancel action; shows invite link for manual sharing
+
+---
+
+## Epic 4 — Categories
+
+**Purpose:** Full category management — seeding, CRUD, hierarchy, merge/duplicate detection,
+and import-time category mapping. After this epic categories are fully operational.
+
+**Pre-conditions:** Epics 1, 2, 3 complete.
+
+**Post-conditions:** 12 default categories exist in every new household. Full CRUD working.
+Tree view, spending rollup, merge, and import mapping all operational.
+
+---
+
+### CAT-001 — Category schemas and service (CRUD + seeding)
+
+**Size:** M · **Depends on:** BE-008, AUTH-001 · **FRs:** FR-C-001 through FR-C-004 · **Ref:** EDP §9, ARCH §4.4
+
+**Files:**
+```
++ backend/schemas/category.py
++ backend/services/category_service.py
+```
+
+**AC:**
+- [ ] Pydantic schemas: `CategoryCreate` (`name` max 100; `color` hex pattern; `icon` nullable; `parent_id` nullable), `CategoryUpdate` (all optional), `CategoryResponse` (includes `depth`, `children_count`, `parent_name`)
+- [ ] `seed_default_categories(db, household_id, actor_id)`: creates 12 categories per EDP §9 seeding list with their colours/icons as `BaseEntity` records owned by the household; idempotent (no-ops if count matches)
+- [ ] `create_category`: validates `name` uniqueness with `func.lower()`; if `parent_id` provided, validates parent exists in household and has `depth == 0` (enforces max 2 levels); sets `depth = parent.depth + 1`; audit log
+- [ ] `update_category`: partial update; re-validates name uniqueness excluding self; cannot change `depth` directly; audit log
+- [ ] `archive_category`: if category has children, sets `parent_id = NULL` and `depth = 0` on all children before archiving parent; returns `{ archived: Category, promoted_children: int }`; if no data (no events, no children), hard-delete instead; audit log
+- [ ] `restore_category`: unarchives; sets `status = "active"`; audit log
+
+---
+
+### CAT-002 — Category routes and hierarchy endpoints
+
+**Size:** S · **Depends on:** CAT-001 · **FRs:** FR-C-001 through FR-C-007 · **Ref:** ARCH §6.2
+
+**Files:**
+```
++ backend/routes/categories.py
+~ backend/main.py
+```
+
+**AC:**
+- [ ] `GET /api/categories`: returns flat list; supports `?include_archived`, `?top_level`, `?parent_id`; sorted alphabetically case-insensitive; each item includes `children_count`
+- [ ] `GET /api/categories/tree`: single DB query, client-side O(n) tree assembly; returns `[{ ...category, children: [...] }]`; supports `?include_archived`; sorted at each level; used by frontend for all hierarchy rendering
+- [ ] `POST /api/categories`, `PUT /api/categories/{id}`, `DELETE /api/categories/{id}`, `POST /api/categories/{id}/restore`: CRUD per CAT-001 service
+- [ ] `GET /api/categories/{id}/spending-summary`: returns spending totals for a category and period (`?from=YYYY-MM-DD&to=YYYY-MM-DD`); for top-level: includes direct + all subcategory spending; response shape matches EDP §9 spending rollup contract
+- [ ] `PATCH /api/categories/{id}/reassign-children`: bulk reassign subcategories; `{ "new_parent_id": UUID | null }`; `null` promotes to top-level; validates target is top-level if provided
+- [ ] Integration test: create parent → create subcategory → archive parent → verify subcategory promoted
+
+---
+
+### CAT-003 — Category merge and duplicate detection
+
+**Size:** S · **Depends on:** CAT-001 · **FRs:** FR-C-005, FR-C-006 · **Ref:** EDP §9.4
+
+**Files:**
+```
+~ backend/services/category_service.py
+~ backend/routes/categories.py
+```
+
+**AC:**
+- [ ] `GET /api/categories/duplicates`: returns groups of potential duplicates; detection criteria: exact case-insensitive match, whitespace-trimmed match, Levenshtein distance ≤ 2 (use `difflib.SequenceMatcher` with ratio ≥ 0.85); each group includes `transaction_count` per category
+- [ ] `POST /api/categories/merge`: `{ "target_id": UUID, "source_ids": [UUID] }`; validates all IDs belong to household; no source == target; no archived sources or targets; default categories cannot be merged into non-default (403); non-default can be merged into default
+- [ ] Merge execution (transactional): 1) update all `FinancialEvent.category_id` from source → target; 2) reassign subcategories of source to target (name-clash → append `" (2)"`); 3) archive source; all in one DB transaction
+- [ ] Returns `{ success, source_categories: [{id, name, transactions_reassigned}], subcategories_reassigned, message }`
+- [ ] Integration test: merge two categories → all events re-pointed → source archived → duplicate detection no longer returns that pair
+
+---
+
+### CAT-004 — Import category mapping service
+
+**Size:** S · **Depends on:** CAT-001 · **FRs:** FR-IE-003 · **Ref:** story 2-5 learnings
+
+**Files:**
+```
+~ backend/services/category_service.py
+~ backend/routes/categories.py
+```
+
+**AC:**
+- [ ] `POST /api/categories/import/preview`: accepts `{ "category_values": string[] }`; returns per-unique-name: `{ original_name, mapped_to_id, mapped_to_name, match_type, transaction_count, suggested_action }`; match types: `"exact"`, `"trimmed"`, `"fuzzy"`, `"unmapped"`; fuzzy uses `SequenceMatcher` ratio ≥ 0.85
+- [ ] Unmapped names default to `suggested_action: "create_new"`; matched names default to `"map"`
+- [ ] `auto_create_category(db, name, household_id, actor_id)`: creates category with auto-assigned colour from pool of non-default colours; idempotent per `(name, household_id)`
+- [ ] Category matching is case-insensitive and whitespace-trimmed before comparison
+- [ ] Unit test: 5 input names covering exact, trimmed, fuzzy, unmapped cases → correct match_type returned for each
+
+---
+
+### CAT-005 — Category management frontend
+
+**Size:** L · **Depends on:** FE-005, CAT-002, CAT-003 · **FRs:** FR-C-001 through FR-C-007 · **Ref:** UX §9.1–9.3
+
+**Files:**
+```
++ frontend/src/api/useCategories.ts
++ frontend/src/pages/Categories.tsx
++ frontend/src/components/categories/CategoryTree.tsx
++ frontend/src/components/categories/CategoryManager.tsx
+```
+
+**AC:**
+- [ ] `useCategories`: TanStack Query hooks wrapping all category API endpoints; `useCategoryTree()` fetches from `/api/categories/tree`
+- [ ] `CategoryManager` uses `EntityPage<Category>` with tree-view body instead of card grid
+- [ ] `CategoryTree`: collapsible tree; expand/collapse chevron (rotates 90°); subcategories indented with connector line (`border-l`); parent rows: folder icon + children count `Badge`; "Add Subcategory" button under expanded parents (top-level only)
+- [ ] Create/edit form in `EntityModal`: name input, `ColourPicker`, `EmojiIconPicker`, parent `Dropdown` (top-level only; shows `" — None (top-level)"` option)
+- [ ] Duplicate detection: "Find Duplicates" button triggers `GET /api/categories/duplicates`; results shown in grouped list with "Merge" action per group; merge opens `ConfirmationDialog` with transaction count warning
+- [ ] Default categories show lock icon; Delete action disabled with `Tooltip` "Default categories cannot be deleted"
+
+---
+
+## Epic 5 — Accounts
+
+**Purpose:** All account subtypes (bank, credit card, capital, asset, insurance),
+account ownership, and asset valuation history.
+
+**Pre-conditions:** Epics 1, 2, 3 complete.
+
+**Post-conditions:** All account types can be created, edited, archived. Owners managed.
+Asset valuations tracked. Account pages render with real data.
+
+---
+
+### ACCT-001 — Account Pydantic schemas
+
+**Size:** S · **Depends on:** BE-008 · **FRs:** FR-A-001 · **Ref:** ARCH §3.1, EDP §6
+
+**Files:**
+```
++ backend/schemas/common.py
++ backend/schemas/account.py
+```
+
+**AC:**
+- [ ] `common.py`: `MonetaryValueSchema` (7 fields), `PersonRefSchema`, `PaginationParams`
+- [ ] `AccountBase`, `AccountCreate`, `AccountUpdate`, `AccountResponse` schemas; `AccountCreate.account_type` required and validated against enum
+- [ ] Subtype field groups as `Optional` on base schema (e.g. `BankAccountFields`, `CreditCardFields`) — all nullable; subtype validation enforced in service, not schema
+- [ ] `ValuationRecordCreate` / `ValuationRecordResponse` schemas
+- [ ] `RecurringConfigCreate` / `RecurringConfigResponse` schemas
+- [ ] Round-trip test: `AccountCreate → Account model → AccountResponse` serialises without error for each of the 5 account types
+
+---
+
+### ACCT-002 — Account service
+
+**Size:** M · **Depends on:** ACCT-001, BE-008 · **FRs:** FR-A-001 through FR-A-018 · **Ref:** ARCH §5.3
+
+**Files:**
+```
++ backend/services/account_service.py
+```
+
+**AC:**
+- [ ] `create_account`: creates account + default `AccountOwner` record for `actor_id` as primary; audit log
+- [ ] `update_account`: partial update; `MonetaryValue` fields accept user override for `amount_base`; `fx_delta` recomputed; audit log
+- [ ] `archive_account`: hard-delete if no events and no valuation records; soft-archive otherwise; audit log
+- [ ] `restore_account`: unarchives; audit log
+- [ ] `duplicate_account`: clones with new UUID; resets monetary values to 0; audit log
+- [ ] `add_owner(account_id, person_id, is_primary)` / `remove_owner`: enforces minimum 1 primary owner
+- [ ] Unit tests: create, archive blocked when events exist, hard-delete succeeds when empty, duplicate clears balances
+
+---
+
+### ACCT-003 — Account API routes + valuation routes
+
+**Size:** S · **Depends on:** ACCT-002 · **FRs:** FR-A-001 through FR-A-018 · **Ref:** ARCH §6.2
+
+**Files:**
+```
++ backend/routes/accounts.py
+~ backend/main.py
+```
+
+**AC:**
+- [ ] All CRUD endpoints per ARCH §6.2 `ACCOUNTS` and `VALUATION RECORDS` sections
+- [ ] `GET /api/accounts?type=bank` filter works; pagination via `?page` and `?per_page`
+- [ ] `DELETE /api/accounts/{id}` returns 204 if empty; 409 with `"has-dependencies"` code if events exist
+- [ ] Owner endpoints: list, add, remove; minimum-1-owner enforced with 409
+- [ ] `GET/POST/DELETE /api/accounts/{id}/valuations`: latest valuation returned on `AccountResponse` as `current_value`
+- [ ] Integration test: full CRUD cycle for each account type; add/remove owner; valuation record lifecycle
+
+---
+
+### ACCT-004 — Account frontend pages
+
+**Size:** L · **Depends on:** FE-005, ACCT-003 · **FRs:** FR-A-001 through FR-A-018 · **Ref:** UX §9.1–9.3
+
+**Files:**
+```
++ frontend/src/api/useAccounts.ts
++ frontend/src/pages/Accounts.tsx
++ frontend/src/pages/Capital.tsx
++ frontend/src/pages/Assets.tsx
++ frontend/src/pages/Insurance.tsx
+```
+
+**AC:**
+- [ ] Each page uses `EntityPage<Account>` filtered by `account_type`
+- [ ] `AccountCard` shows: name, type `Badge` (entity accent colour), balance (`MonetaryValue`), owner `Avatar` stack, status; context menu: Edit, Duplicate, Archive
+- [ ] Create/edit `EntityModal` dynamically shows subtype-specific field sections based on selected `account_type`; `MonetaryValueInput` used for balance; `RecurringConfig` toggle section in Asset/Capital/Insurance modal
+- [ ] Assets page: shows current value from latest `ValuationRecord`; "Add Valuation" button opens small modal with date + value; valuation history renders as a simple line chart (placeholder for VIZ epic)
+- [ ] `useAccounts` TanStack Query hooks cover all CRUD + owner + valuation operations
+
+---
+
+## Epic 6 — Transactions & Events
+
+**Purpose:** Full transaction entry, the Transactions ledger, duplicate detection, and
+reconciliation. `CategorySelect` (deferred from Epic 4) is built here.
+
+**Pre-conditions:** Epics 1–5 complete.
+
+**Post-conditions:** Transactions can be entered, edited, reconciled. Duplicate detection fires.
+CSV imports can map categories using CAT-004 service.
+
+---
+
+### EVENT-001 — Event Pydantic schemas
+
+**Size:** S · **Depends on:** BE-008, ACCT-001 · **FRs:** FR-E-001 · **Ref:** EDP §7, ARCH §3.1
+
+**Files:**
+```
++ backend/schemas/event.py
+```
+
+**AC:**
+- [ ] `TransactionCreate`, `TransactionUpdate`, `TransactionResponse` schemas; `MonetaryValueSchema` embedded
+- [ ] `is_shared_expense` validator: `ValidationError` if `True` and `transaction_type != "outflow"`
+- [ ] `amount_base` is optional on create (server fills from current FX rate if absent)
+- [ ] `TransferCreate`: includes `destination_account_id`; optional `dest_currency` and `dest_amount`
+- [ ] `RecurringPaymentCreate`: includes `frequency_text`; `frequency_rule` is server-computed (not accepted on input)
+- [ ] `EventListParams`: `date_from`, `date_to`, `category_id`, `account_id`, `payee_person_id`, `transaction_type`, `transaction_status`, `is_shared_expense`, `page`, `per_page`, `sort`, `order`
+
+---
+
+### EVENT-002 — Transaction service (FX, duplicate detection, reconciliation)
+
+**Size:** M · **Depends on:** EVENT-001, BE-008 · **FRs:** FR-E-001 through FR-E-009 · **Ref:** ARCH §5.3, EDP §13.3
+
+**Files:**
+```
++ backend/services/event_service.py
++ backend/services/currency_service.py
+```
+
+**AC:**
+- [ ] `create_transaction`: if `amount_base` absent, calls `currency_service.get_current_rate(household_id, currency)` and fills `amount_base_calculated` and `amount_base`; if `amount_base` provided, sets `fx_delta`; audit log
+- [ ] `currency_service.get_current_rate`: returns `rate_to_base` from `Currency` table for household; raises `ValueError` if currency not configured for household
+- [ ] `detect_duplicate(db, household_id, event)`: checks for existing events with same `account_id`, `amount`, `event_date ± 1 day`, `payee`; returns candidate `FinancialEvent` or `None`
+- [ ] `reconcile(event_id)`: sets `transaction_status = "reconciled"`, `reconciled_at = now()`; audit log
+- [ ] `archive_event` / `restore_event` / `duplicate_event`: standard patterns; hard-delete if no downstream references
+- [ ] Unit tests: duplicate detection returns correct candidate; `is_shared_expense` on non-outflow raises; FX fill correctly computes `amount_base_calculated`
+
+---
+
+### EVENT-003 — Event API routes
+
+**Size:** S · **Depends on:** EVENT-002 · **FRs:** FR-E-001 through FR-E-009 · **Ref:** ARCH §6.2
+
+**Files:**
+```
++ backend/routes/events.py
+~ backend/main.py
+```
+
+**AC:**
+- [ ] All CRUD endpoints per ARCH §6.2 `EVENTS` section for `event_type=transaction`
+- [ ] `GET /api/events` supports all `EventListParams` filters; paginated; sorted `event_date desc` by default
+- [ ] `POST /api/events/{id}/reconcile` returns 200 with updated event
+- [ ] 409 `"duplicate-detected"` returned when `detect_duplicate` finds a candidate; response includes `candidate_id` and `candidate_date`
+- [ ] Integration test: create transaction → create near-identical second → 409 returned with candidate; force-create (skip duplicate check with `?force=true`) succeeds
+
+---
+
+### EVENT-004 — Transaction ledger frontend + CategorySelect
+
+**Size:** L · **Depends on:** FE-005, EVENT-003, CAT-002 · **FRs:** FR-E-001 through FR-E-009 · **Ref:** UX §4.7, §9.2
+
+**Files:**
+```
++ frontend/src/api/useEvents.ts
++ frontend/src/pages/Transactions.tsx
++ frontend/src/components/categories/CategorySelect.tsx
+```
+
+**AC:**
+- [ ] `CategorySelect`: hierarchical `<optgroup>` view (parent as non-selectable group label; subcategories as options); flat-list toggle; "No category" option; fetches from `/api/categories/tree`
+- [ ] `Transactions` page uses `EntityPage<Event>` in Table layout (not card grid)
+- [ ] Table columns: Date (`DD-MM-YYYY`), Name, Category, Payee, Amount (`MonetaryValue`), Status `Badge`, Actions
+- [ ] Create/edit `EntityModal`: all transaction fields; `MonetaryValueInput` for amount; `CategorySelect`; `is_shared_expense` checkbox shown only when `transaction_type == "outflow"`
+- [ ] Duplicate detection: modal shows 409 warning with candidate transaction details; user chooses Proceed / Cancel
+- [ ] Reconcile action in context menu and keyboard shortcut `R`; reconciled rows show muted styling
+- [ ] Filter bar: date range `DatePicker`, `CategorySelect` (multi), account `Dropdown`, status, type, shared expense toggle
+
+---
+
+## Epic 7 — Recurring Payments
+
+**Purpose:** Free-text recurrence rule parsing, scheduled occurrence generation,
+missed-occurrence detection, and the Recurring Payments page.
+
+**Pre-conditions:** Epics 1–6 complete.
+
+**Post-conditions:** Recurring payments generate transaction events automatically.
+Missed occurrences surfaced as alerts.
+
+---
+
+### RECUR-001 — RecurringDateParser service
+
+**Size:** S · **Depends on:** BE-001 · **FRs:** FR-E-011 · **Ref:** EDP §7.3
+
+**Files:**
+```
++ backend/services/recurring_date_parser.py
+```
+
+**AC:**
+- [ ] `parse(frequency_text: str, start_date: date) → tuple[RecurrenceRule | None, date | None]`: parses all 9 patterns from EDP §7.3 into a `RecurrenceRule` dataclass; returns `(None, None)` if unparseable
+- [ ] `get_next_occurrence(rule: RecurrenceRule, from_date: date) → date`
+- [ ] `get_occurrences_in_range(rule: RecurrenceRule, start: date, end: date) → list[date]`
+- [ ] Unit tests: each of the 9 patterns tested with ≥ 3 cases (27 minimum); edge cases: month-end days (28/29/30/31), leap years, weekly on specific day names
+
+---
+
+### RECUR-002 — Recurring payment service and routes
+
+**Size:** M · **Depends on:** RECUR-001, EVENT-002 · **FRs:** FR-E-010 through FR-E-014 · **Ref:** EDP §7.2, §7.3
+
+**Files:**
+```
+~ backend/services/event_service.py
++ backend/schemas/event.py (extend with recurring schemas)
+~ backend/routes/events.py
+```
+
+**AC:**
+- [ ] `create_recurring_payment`: calls `recurring_date_parser.parse(frequency_text, start_date)`; on successful parse, stores `frequency_rule` JSON; on parse failure, returns 422 with hint; creates initial `OccurrenceRecord` entries for next 3 months; audit log
+- [ ] `GET /api/events?event_type=recurring_payment`: filtered list with `next_due_date` included on each item
+- [ ] `GET /api/events/recurring/upcoming?days=30`: returns all occurrences due within N days across all recurring events
+- [ ] `POST /api/events/{id}/skip-occurrence`: marks one `OccurrenceRecord` as `"skipped"`; creates next occurrence record
+- [ ] `POST /api/events/recurring/{id}/parse-preview`: accepts `{ "frequency_text": str }` and returns `{ "rule": RecurrenceRule, "next_dates": list[date] }` or `{ "error": str }`; used by frontend Confirm step in `RecurringDateInput`
+
+---
+
+### RECUR-003 — Scheduler: recurring payment processor and missed-occurrence detection
+
+**Size:** S · **Depends on:** RECUR-002, BE-008 · **FRs:** FR-E-012, FR-E-013, FR-SYS-004 · **Ref:** ARCH §9.3
+
+**Files:**
+```
++ backend/scheduler/registry.py
++ backend/scheduler/jobs/recurring_payment_job.py
+```
+
+**AC:**
+- [ ] APScheduler initialised in `registry.py`; started on app startup; shut down cleanly on app shutdown
+- [ ] `recurring_payment_job` runs daily at 06:00 UTC; for each active `RecurringPayment` across all households, generates a `FinancialEvent` (transaction) for each `OccurrenceRecord` with `expected_date ≤ today` and `occurrence_status = "upcoming"`
+- [ ] After generating, marks `OccurrenceRecord.occurrence_status = "processed"` and creates the next occurrence record
+- [ ] Missed-occurrence detection: any `OccurrenceRecord` with `expected_date < today - 2 days` and `occurrence_status = "upcoming"` is marked `"missed"` and generates an `Alert` of type `"missed_payment"`
+- [ ] Unit test: mock DB with 2 upcoming occurrences (one today, one missed); verify correct statuses and alert generated after job run
+
+---
+
+### RECUR-004 — Recurring payments frontend
+
+**Size:** M · **Depends on:** FE-005, RECUR-002 · **FRs:** FR-E-010 through FR-E-014 · **Ref:** UX §9.2
+
+**Files:**
+```
++ frontend/src/pages/RecurringPayments.tsx
+```
+
+**AC:**
+- [ ] `RecurringPayments` page uses `EntityPage<Event>` with card layout (not table)
+- [ ] Card shows: name, amount, next due date (`DD-MM-YYYY`), recurrence description (human-readable from `frequency_text`), source account, `Badge` for occurrence status
+- [ ] Create/edit modal: `RecurringDateInput` component used for `frequency_text`; Confirm button required before Save is enabled; source account dropdown
+- [ ] "Upcoming" panel shows occurrences from `/api/events/recurring/upcoming?days=30`; allows skip per occurrence
+- [ ] Missed occurrences shown with `AlertBanner` in amber; link to mark as resolved
 
-As the system,
-I want to automatically process recurring payments at their scheduled times using APScheduler,
-So that transactions are created automatically without manual intervention.
+---
 
-**Given** there are recurring payments due today
-**When** the daily cron job runs (start of day)
-**Then** transactions are created for all due recurring payments
-**And** each created transaction is linked to its source recurring payment
-**And** a log entry is recorded for each processed recurring payment
+## Epic 8 — Budgets
 
-**Given** a recurring payment transaction creation fails
-**When** the processing encounters an error (e.g., account not found)
-**Then** the error is logged
-**And** the system retries up to 3 attempts with exponential backoff
-**And** after all retries fail, an alert is generated (linked to Epic 10)
+**Purpose:** Monthly and yearly budgets with category-linked actuals, rolling-period
+management, threshold alerts, and the Budgets page with drill-down.
 
-### Story 4.3: Recurring Payment Verification View
+**Pre-conditions:** Epics 1–6 complete.
 
-As a user,
-I want to review recurring payments before they are processed,
-So that I can catch any errors or adjust upcoming occurrences.
+**Post-conditions:** Budgets created, actuals computed from transactions, alerts fire at threshold.
 
-**Given** I am on the Recurring Payments page
-**When** I view the "Upcoming" tab
-**Then** I see all recurring payments due in the next 7 days with their transaction preview
-**And** I can pause, skip, or modify any upcoming occurrence
-**And** skipped occurrences are marked and not processed by the scheduler
+---
 
-### Story 4.4: Manual Trigger for Recurring Payment
+### BUDG-001 — Budget schemas and service
 
-As a user,
-I want to manually trigger a recurring payment outside its scheduled time,
-So that I can record a payment that just happened but wasn't yet scheduled.
+**Size:** M · **Depends on:** BE-008, CAT-001 · **FRs:** FR-B-001 through FR-B-007 · **Ref:** EDP §8
 
-**Given** I am viewing a recurring payment in the list
-**When** I click "Trigger Now"
-**Then** a transaction is immediately created for the current date
-**And** the transaction is linked to the recurring payment
-**And** the payment history is updated to reflect this manual entry
+**Files:**
+```
++ backend/schemas/budget.py
++ backend/services/budget_service.py
+```
 
-## Epic 5: Financial Modules
+**AC:**
+- [ ] `BudgetCreate`: `name`, `category_id`, `owner_person_id` (nullable), `period_type`, `limit_currency`, `limit_amount`, `period_start`, `period_end`, `alert_threshold_pct` (default 80), `rollover` (default False)
+- [ ] `BudgetResponse` includes computed `actual_spent`, `actual_spent_base`, `variance`, `variance_pct`; these are **not stored** — computed via `computation_service.compute_budget_actuals()`
+- [ ] `create_budget` / `update_budget` / `archive_budget` / `restore_budget`: standard patterns with audit logs
+- [ ] `compute_budget_actuals(db, budget)`: sums `FinancialEvent.amount_base` where `category_id IN (budget.category_id + subcategories)`, `event_date BETWEEN period_start AND period_end`, `transaction_type = "outflow"`, `event_type = "transaction"`, `archived = False`; result in base currency
+- [ ] Both monthly and yearly budgets can coexist for the same category; service does not prevent this
 
-**Goal:** Implement budget CRUD with progress bars, capital/investment tracking, and credit card debt management.
+---
 
-### Story 5.1: Budget CRUD with Progress Bars
+### BUDG-002 — Budget API routes
 
-As a user,
-I want to create and manage monthly budgets per category,
-So that I can monitor my spending against planned limits.
+**Size:** S · **Depends on:** BUDG-001 · **FRs:** FR-B-001 through FR-B-007 · **Ref:** ARCH §6.2
 
-**Given** I am on the Budgets page
-**When** I click "Add Budget"
-**Then** a form appears with fields for category, monthly amount, and optional custom period
-**And** after saving, the budget appears with a visual progress bar showing spent vs. limit
+**Files:**
+```
++ backend/routes/budgets.py
+~ backend/main.py
+```
 
-**Given** I have an existing budget
-**When** I view it on the dashboard
-**Then** the progress bar changes color: green (<50%), yellow (50-80%), orange (80-100%), red (>100%)
-**And** I can edit the budget amount at any time
+**AC:**
+- [ ] All CRUD endpoints per ARCH §6.2 `BUDGETS` section; `GET /api/budgets` supports `?period_type`, `?category_id`, `?owner_person_id`, `?active_on=YYYY-MM-DD`
+- [ ] Every `BudgetResponse` includes live `actual_spent` and `variance` computed at request time
+- [ ] `GET /api/budgets/summary?month=YYYY-MM`: aggregated view — all active budgets for a month with their actuals; used by dashboard
+- [ ] Integration test: create budget → add matching transaction → `actual_spent` reflects transaction amount
 
-**Given** I am over budget on a category
-**When** I view the budget details
-**Then** I see the overspent amount highlighted in red
-**And** I can see a breakdown of transactions in that category
+---
 
-### Story 5.2: Capital and Investment Tracking
+### BUDG-003 — Budget scheduler: rolling periods and threshold alerts
 
-As a user with investments,
-I want to track capital assets and investments (stocks, bonds, CPF OA),
-So that my net worth calculation includes all my financial holdings.
+**Size:** S · **Depends on:** BUDG-001, RECUR-003 · **FRs:** FR-B-005, FR-B-007, FR-SYS-004 · **Ref:** ARCH §9.3
 
-**Given** I am on the Capital/Investments page
-**When** I click "Add Investment"
-**Then** a form appears with fields for name, type (Stock, Bond, CPF OA, Other), current value, and purchase date
-**And** after saving, the investment appears in the list with its current value
+**Files:**
+```
++ backend/scheduler/jobs/budget_rollover_job.py
++ backend/scheduler/jobs/alert_generation_job.py
+~ backend/scheduler/registry.py
+```
 
-**Given** I have multiple investments
-**When** I view the dashboard
-**Then** the total investment value is included in my net worth summary
-**And** I can update the current value of any investment at any time
+**AC:**
+- [ ] `budget_rollover_job` runs on the 1st of each month at 00:05 UTC; for each `Budget` with `period_type = "monthly"` and `rollover = True`, creates a new `Budget` for the next month (same category, same limit, new `period_start`/`period_end`)
+- [ ] `alert_generation_job` runs daily at 07:00 UTC; for each active budget, computes `variance_pct`; creates `Alert("budget_threshold")` when `variance_pct ≥ alert_threshold_pct` and no unread alert already exists for this budget + period
+- [ ] Unit test: rollover job with 3 rollover budgets → 3 new budget records created for next month
 
-### Story 5.3: Credit Card Payment Tracking
+---
 
-As a credit card user,
-I want to track my credit card balances and upcoming due dates,
-So that I can pay the right amount on time and avoid interest.
+### BUDG-004 — Budget frontend with drill-down
 
-**Given** I have linked a credit card account
-**When** I view the credit card page
-**Then** I see the current balance, minimum payment, and due date
-**And** I can record a payment against the credit card
-**And** the payment reduces the outstanding balance
+**Size:** L · **Depends on:** FE-005, BUDG-002 · **FRs:** FR-B-001 through FR-B-007, FR-V-008 · **Ref:** UX §9.2, EDP §8.5
 
-## Epic 6: Debt Tracking
+**Files:**
+```
++ frontend/src/api/useBudgets.ts
++ frontend/src/pages/Budgets.tsx
+```
 
-**Goal:** Implement internal household debt, credit card debt tracking, and CPF mortgage payment management with spreadsheet-style views.
+**AC:**
+- [ ] `Budgets` page uses `EntityPage<Budget>` in card layout; cards show: category icon/name, limit vs actual as `ProgressBar`, variance, period label
+- [ ] `ProgressBar` colour transitions: green → amber at `alert_threshold_pct`, amber → red at 100%
+- [ ] Create/edit modal: category `CategorySelect`, period type toggle (monthly/yearly), limit `MonetaryValueInput`, threshold slider, rollover checkbox
+- [ ] Drill-down: clicking a budget card expands or navigates to transaction list filtered to that category + period; subcategory breakdown shown as nested `ProgressBar` list
+- [ ] Period navigation: prev/next month arrows in page header; selected period filters all budget cards
 
-### Story 6.1: Internal Household Debt
+---
 
-As a user sharing a household,
-I want to track money I owe to or that is owed to other household members,
-So that we can settle up fairly at the end of the month.
+## Epic 9 — Transfers & Debt
 
-**Given** I am on the Debts page
-**When** I click "Add Internal Debt"
-**Then** a form appears with fields for description, amount, type (I owe / They owe me), other household member (dropdown), and due date (optional)
-**And** after saving, the debt appears in the list with its status (active, partially paid, settled)
+**Purpose:** Inter-account transfers, automatic debt derivation from shared-expense
+transactions and credit card balances, and the Transfers page with debt summary widget.
 
-**Given** I have an internal debt
-**When** I record a partial payment
-**Then** the remaining balance is updated
-**And** the payment history is recorded
+**Pre-conditions:** Epics 1–6 complete.
 
-### Story 6.2: Credit Card Debt Tracking
+**Post-conditions:** Transfers work. Household debt computed automatically. Dashboard debt widget live.
 
-As a credit card holder,
-I want to track my credit card debt with interest and minimum payments,
-So that I can plan my payoff strategy.
+---
 
-**Given** I am on the Debts page
-**When** I click "Add Credit Card Debt"
-**Then** a form appears with fields for card name, outstanding balance, interest rate (annual %), and minimum payment percentage
-**And** after saving, the debt appears with a projected payoff timeline based on minimum payments
+### DEBT-001 — Transfer service and debt computation
 
-**Given** I have a credit card debt
-**When** I make a payment
-**Then** the outstanding balance is reduced
-**And** the projected payoff date is recalculated
+**Size:** M · **Depends on:** EVENT-002 · **FRs:** FR-D-001 through FR-D-006, FR-E-015 through FR-E-017 · **Ref:** EDP §12, ARCH §5.3
 
-### Story 6.3: CPF Mortgage Payment Tracking
+**Files:**
+```
++ backend/services/computation_service.py
+~ backend/services/event_service.py
+```
 
-As a HDB home buyer,
-I want to track my CPF mortgage payments,
-So that I know how much I still owe and can plan my finances.
+**AC:**
+- [ ] `create_transfer`: creates `FinancialEvent(event_type="transfer")`; validates both accounts belong to household; auto-detects if transfer clears shared-expense debt (checks if `destination_account_id` belongs to person owed); sets `is_debt_repayment = True` and `debt_cleared_amount` if detected; audit log
+- [ ] `computation_service.compute_household_debt(db, household_id)`: returns `{ internal_debt: Decimal, card_debt: Decimal, detail: [...] }`; **never stored**; internal debt = sum of `amount_base` for `is_shared_expense=True, transaction_type="outflow"` events not yet cleared by a matching transfer; card debt = sum of outstanding credit card balances
+- [ ] `compute_net_worth(db, household_id)`: sums all account balances (bank + capital + asset − credit card) in base currency
+- [ ] Unit tests: two shared-expense transactions then a clearing transfer → `compute_household_debt` returns zero for that person
 
-**Given** I am on the Debts page
-**When** I click "Add CPF Mortgage"
-**Then** a form appears with fields for property address, loan amount, interest rate (2.5% default), remaining term, and monthly payment amount
-**And** after saving, the mortgage appears with a visual amortization schedule
+---
 
-**Given** I have a CPF mortgage
-**When** I view its details
-**Then** I see a spreadsheet-style monthly view showing principal vs. interest breakdown for each payment
-**And** I can record extra payments to reduce the term
+### DEBT-002 — Transfer API routes
 
-## Epic 7: Dashboard & Visualization
+**Size:** S · **Depends on:** DEBT-001 · **FRs:** FR-E-015 through FR-E-017, FR-D-001 through FR-D-006 · **Ref:** ARCH §6.2
 
-**Goal:** Implement the financial dashboard with spending by category chart, income vs expenses chart, net worth summary, and responsive layout with dark theme.
+**Files:**
+```
+~ backend/routes/events.py
+```
 
-### Story 7.1: Spending by Category Chart
+**AC:**
+- [ ] `POST /api/events` with `event_type = "transfer"`: full transfer creation; validates destination account
+- [ ] `GET /api/events?event_type=transfer`: filtered list; shows `is_debt_repayment` flag
+- [ ] `GET /api/household/debt`: returns `compute_household_debt()` result; used by dashboard; cached for 5 min per household (simple in-memory dict, invalidated on any new transfer or transaction)
+- [ ] `GET /api/household/net-worth`: returns `compute_net_worth()` result
+- [ ] Integration test: create two shared-expense transactions → verify debt > 0 → create clearing transfer → verify debt = 0
 
-As a user,
-I want to see a donut chart of my spending by category for the selected period,
-So that I can quickly understand where my money goes.
+---
 
-**Given** I am on the dashboard
-**When** the page loads
-**Then** I see a donut chart showing spending by category for the current month (default period)
-**And** each slice is colored according to its category color
-**And** hovering over a slice shows the category name, amount, and percentage
+### DEBT-003 — Transfers frontend and debt widget
 
-**Given** I change the period selector (month/quarter/year)
-**When** I select a different period
-**Then** the chart updates to reflect the selected period
+**Size:** M · **Depends on:** FE-005, DEBT-002 · **FRs:** FR-E-015 through FR-E-017, FR-D-001 through FR-D-006 · **Ref:** UX §9.2
 
-### Story 7.2: Income vs Expenses Chart
+**Files:**
+```
++ frontend/src/pages/Transfers.tsx
++ frontend/src/components/dashboard/DebtSummaryWidget.tsx
+```
 
-As a user,
-I want to see a bar chart comparing my monthly income vs. expenses,
-So that I can track my savings trend over time.
+**AC:**
+- [ ] `Transfers` page uses `EntityPage<Event>` in table layout; columns: Date, From Account, To Account, Amount, Debt Repayment flag, Status
+- [ ] Create transfer modal: source account `Dropdown`, destination account `Dropdown` (excludes source), `MonetaryValueInput`; optional destination amount for cross-currency transfers
+- [ ] `DebtSummaryWidget`: shows internal debt (by person) and credit card debt (by card); clicking person row navigates to Transactions filtered to their shared expenses
+- [ ] Auto-detect badge on transfer card when `is_debt_repayment = True`
 
-**Given** I am on the dashboard
-**When** I view the income vs. expenses section
-**Then** I see a grouped bar chart with income bars (green) and expense bars (red) for each month
-**And** I can toggle between monthly and yearly views
-**And** the net savings (income - expenses) is displayed as a line overlay
+---
 
-### Story 7.3: Net Worth Summary
+## Epic 10 — Formulas
 
-As a user,
-I want to see my net worth (assets minus liabilities) prominently displayed,
-So that I can track my overall financial health at a glance.
+**Purpose:** System formula defaults (depreciation, FX fee calculation) plus
+a user-configurable formula registry for asset and capital computations.
 
-**Given** I am on the dashboard
-**When** the page loads
-**Then** I see my net worth displayed as a large number at the top
-**And** below it, a breakdown showing total assets (bank accounts, cash, investments, assets) and total liabilities (credit cards, debts, mortgages)
-**And** the net worth value changes color: green if positive, red if negative
+**Pre-conditions:** Epics 1–5 complete.
 
-**Given** I have data from previous months
-**When** I view the net worth
-**Then** a small sparkline chart shows the net worth trend over the last 6 months
+**Post-conditions:** Depreciation formula assignable to asset accounts. Formula registry browsable.
 
-### Story 7.4: Responsive Layout and Performance
+---
 
-As a user on any device,
-I want the dashboard to load quickly and display correctly on mobile, tablet, and desktop,
-So that I can access my finances anywhere.
+### FORM-001 — Formula service and routes
 
-**Given** I am viewing the dashboard on a mobile device
-**When** the page loads
-**Then** the navigation collapses to a hamburger menu
-**And** charts are stacked vertically and remain readable
-**And** all charts render within 2 seconds (NFR1)
+**Size:** S · **Depends on:** BE-008 · **FRs:** FR-F-001 through FR-F-004 · **Ref:** EDP §11
 
-**Given** I am viewing the dashboard on any screen size
-**When** I interact with the page
-**Then** the layout adapts responsively (Tailwind CSS breakpoints)
-**And** all text remains readable and interactive elements are touch-friendly (UX-DR2, NFR12)
+**Files:**
+```
++ backend/services/formula_service.py
++ backend/routes/formulas.py
+~ backend/main.py
+```
 
-## Epic 8: Universal Operations
+**AC:**
+- [ ] System formulas seeded at startup: `straight_line_depreciation`, `declining_balance_depreciation`, `fx_fee_calculation`; `is_system = True`; cannot be deleted
+- [ ] `evaluate_formula(formula_id, variables: dict) → Decimal`: safely evaluates `formula.expression` using `simpleeval` (no `eval`); raises `FormulaEvaluationError` on invalid expression or missing variables
+- [ ] `GET /api/formulas`: lists all formulas (system + household); `POST /api/formulas`: creates user formula; `DELETE /api/formulas/{id}`: hard-delete if user formula; 403 if system
+- [ ] Unit test: straight-line depreciation formula evaluates to expected value for known inputs
 
-**Goal:** Implement duplicate, archive/restore, and delete functionality across all modules with consistent UX.
+---
 
-### Story 8.1: Duplicate Functionality
+### FORM-002 — Formula management frontend
 
-As a user,
-I want to duplicate any entity (transaction, recurring payment, budget, investment, debt),
-So that I can quickly create similar entries without re-typing.
+**Size:** S · **Depends on:** FE-002, FORM-001 · **FRs:** FR-F-001 through FR-F-004 · **Ref:** UX §9.2
 
-**Given** I am viewing any entity in its list (e.g., a transaction)
-**When** I click the "Duplicate" option from the options menu
-**Then** a pre-filled form opens with all fields copied from the original
-**And** the date and ID are set to current/empty so the user must save it as a new entry
-**And** the duplicated entity appears in the list after saving
+**Files:**
+```
++ frontend/src/pages/Settings.tsx (extend — Formulas tab)
+```
 
-### Story 8.2: Archive and Restore
+**AC:**
+- [ ] Formulas tab in Settings: table listing all formulas with name, expression preview, applies_to, system badge
+- [ ] System formulas: read-only; no edit/delete actions
+- [ ] User formulas: edit name/expression in inline form; delete with `ConfirmationDialog`
+- [ ] "Test Formula" button opens modal with variable inputs and evaluates live via `POST /api/formulas/evaluate` (pass `{ expression, variables }`)
 
-As a user,
-I want to archive entities I no longer need to see in my main views,
-So that my lists stay clean without permanently losing data.
+---
 
-**Given** I am viewing an entity in its list
-**When** I select "Archive" from the options menu
-**Then** the entity is hidden from the default list view
-**And** I can access archived entities via an "Archived" filter or dedicated archived view
-**And** I can restore an archived entity back to the active view
+## Epic 11 — Visualisations
 
-**Given** I have archived entities
-**When** I view the archived list
-**Then** I can permanently delete them from there
-**And** archiving does not affect associated reports (archived entities are excluded by default)
+**Purpose:** All charts, the Dashboard, VisualizationFilter integration, per-entity
+visualisations, PersonDashboard filtering, and comparison mode.
 
-### Story 8.3: Delete with Confirmation
+**Pre-conditions:** Epics 1–9 complete.
 
-As a user,
-I want to permanently delete entities I no longer need, with a safety confirmation,
-So that I can clean up my data without accidental losses.
+**Post-conditions:** Dashboard shows real data. All charts render. Filter bar drives all charts.
+Raw-currency and converted-aggregate toggle works.
 
-**Given** I am viewing an entity or an archived entity
-**When** I select "Delete" from the options menu
-**Then** a confirmation dialog appears showing the entity name and a warning that this action is irreversible
-**And** I must type the entity name or click "Confirm" to proceed
-**And** upon confirmation, the entity is permanently removed from the database
-**And** all related data (e.g., linked transactions from a deleted recurring payment) is handled gracefully with appropriate user notification
+---
 
-## Epic 9: Import/Export
+### VIZ-001 — Visualisation aggregation API
 
-**Goal:** Implement CSV export with filters, CSV import with validation, category mapping interface, and auto-create categories from import data.
+**Size:** M · **Depends on:** BE-008, EVENT-002, BUDG-001, DEBT-001 · **FRs:** FR-V-001 through FR-V-010 · **Ref:** ARCH §6.2, EDP §13.5
 
-### Story 9.1: CSV Export with Filters
+**Files:**
+```
++ backend/services/visualization_service.py
++ backend/schemas/visualization.py
++ backend/routes/visualizations.py
+~ backend/main.py
+```
 
-As a user,
-I want to export my transactions to a CSV file with optional filters,
-So that I can analyze my data in spreadsheet software or back it up.
+**AC:**
+- [ ] `GET /api/visualizations/spending-by-category`: accepts `VisualizationFilter` params; returns category totals + subcategory breakdown; supports `?currency=NZD` for display-currency conversion at response time using current `rate_to_base`
+- [ ] `GET /api/visualizations/income-vs-expenses?month=YYYY-MM`: grouped bar data by month
+- [ ] `GET /api/visualizations/net-worth-history?months=12`: monthly snapshots
+- [ ] `GET /api/visualizations/account-balance-history/{account_id}`: monthly balance points
+- [ ] `GET /api/visualizations/budget-vs-actual`: all active budgets for period with computed actuals
+- [ ] All endpoints accept `?person_id=uuid` to filter to PersonDashboard view
+- [ ] All endpoints accept `?raw_currency=true` for stacked raw-currency breakdown vs base-currency aggregate
+- [ ] Integration test: create 3 transactions across 2 categories → `spending-by-category` returns correct totals
 
-**Given** I am on the Export page
-**When** I click "Export to CSV"
-**Then** I am presented with filter options: date range, account, category, amount range
-**And** after applying filters and clicking export, a CSV file downloads with columns: Date, Description, Amount, Category, Account, Currency
-**And** the exported data includes all transactions matching the selected filters
+---
 
-**Given** I have transactions in multiple currencies
-**When** I export to CSV
-**Then** the CSV includes both the original currency amount and the SGD equivalent
-**And** a note in the file indicates the exchange rate used for conversion
+### VIZ-002 — Dashboard page
 
-### Story 9.2: CSV Import with Validation
+**Size:** L · **Depends on:** FE-005, VIZ-001, DEBT-002 · **FRs:** FR-V-001 through FR-V-005, FR-P-006 · **Ref:** UX §9.2
 
-As a user,
-I want to import transactions from a CSV file with automatic validation,
-So that I can migrate data from other apps or bank statements quickly.
+**Files:**
+```
++ frontend/src/api/useVisualizations.ts
++ frontend/src/pages/Dashboard.tsx
++ frontend/src/components/dashboard/StatCard.tsx
++ frontend/src/components/dashboard/UpcomingPaymentsWidget.tsx
+```
 
-**Given** I am on the Import page
-**When** I upload a CSV file
-**Then** the system validates the file format and shows a preview of the first 10 rows
-**And** if the CSV has invalid rows (e.g., missing required fields, invalid dates), those rows are highlighted with error messages
-**And** I can proceed with importing only the valid rows after reviewing
+**AC:**
+- [ ] Dashboard layout: stat cards row (Net Worth, Monthly Spend, Monthly Income, Household Debt), then charts row, then upcoming payments
+- [ ] `StatCard`: value (large, `MonetaryValue`), label, trend indicator (up/down arrow with % vs last month); `Skeleton` while loading
+- [ ] Spending by category doughnut chart (Recharts `PieChart`); clicking a segment calls `vizStore.drillDown({ categoryIds: [id] })` and navigates to Transactions with filter
+- [ ] Income vs Expenses bar chart (Recharts `BarChart`); 6-month rolling default
+- [ ] `UpcomingPaymentsWidget`: next 7 days of recurring occurrences + credit card due dates
+- [ ] Household ⇌ My Finances toggle reads `authStore.currentPerson.default_view`; switching calls `PATCH /api/persons/{id}` to persist; all charts and widgets re-fetch with `?person_id` when in personal mode
+- [ ] `CurrencyModeToggle` in topbar switches all charts between raw-currency stacked and converted aggregate simultaneously
 
-**Given** my CSV file has more than 10,000 rows
-**When** I attempt to import it
-**Then** I am shown an error message explaining the 10,000 row limit (NFR3)
-**And** I am offered to split the file or import in batches
+---
 
-### Story 9.3: Category Mapping Interface
+### VIZ-003 — Per-entity chart components
 
-As a user importing a CSV,
-I want to map CSV category values to my app's categories during import,
-So that my imported transactions get the correct categories.
+**Size:** M · **Depends on:** FE-002, VIZ-001 · **FRs:** FR-V-006 through FR-V-010 · **Ref:** EDP §13.6, UX §7
 
-**Given** I am on the Import page with a valid CSV uploaded
-**When** the system detects a category column in the CSV
-**Then** it displays a mapping interface showing each unique CSV category value
-**And** for each value, I can select an existing category from my app or create a new one
-**And** the system suggests matches based on similarity (e.g., "Grocery" → "Groceries")
-**And** unmapped values default to the "Other" category
+**Files:**
+```
++ frontend/src/components/visualization/SpendingByCategoryChart.tsx
++ frontend/src/components/visualization/NetWorthChart.tsx
++ frontend/src/components/visualization/BudgetVsActualChart.tsx
++ frontend/src/components/visualization/AccountBalanceChart.tsx
++ frontend/src/components/visualization/ForexLossTrendChart.tsx
+```
 
-### Story 9.4: Auto-create Categories from Import
+**AC:**
+- [ ] All charts use Recharts; all use entity accent CSS vars for colour; all show `SkeletonChart` while loading
+- [ ] Every chart segment/bar/point is clickable and calls `vizStore.navigateTo` with the corresponding filter; no dead chart interactions
+- [ ] `BudgetVsActualChart`: grouped bar per category; threshold line; colour bands at 80% and 100%
+- [ ] `ForexLossTrendChart`: line chart of cumulative `fx_delta` over time; renders on accounts page for each FX account
+- [ ] `CurrencyModeToggle` state from `vizStore` drives all charts simultaneously — switching raw/converted does not cause a page reload, only a data re-query
 
-As a user importing data with new categories,
-I want the system to automatically create categories that don't exist in my app,
-So that I don't have to manually create each one before importing.
+---
 
-**Acceptance Criteria:**
+### VIZ-004 — Comparison mode
 
-**Given** I am on the Import page with a CSV containing categories not in my app
-**When** I review the category mapping interface
-**Then** I see a "Create new categories" option for unmapped CSV categories
-**And** after confirming, the new categories are created with default colors (randomly assigned from the palette)
-**And** the import proceeds with the new categories in place
-**And** I am shown a summary of newly created categories after import completes
+**Size:** M · **Depends on:** VIZ-002, VIZ-003 · **FRs:** FR-V-011, FR-V-012 · **Ref:** EDP §13.5
 
-## Epic 10: Alerts & Notifications
+**Files:**
+```
+~ backend/routes/visualizations.py
+~ frontend/src/pages/Dashboard.tsx
++ frontend/src/components/visualization/ComparisonChart.tsx
+```
 
-**Goal:** Implement the alert system infrastructure with in-app notification area, recurring payment alerts, budget threshold alerts, and credit card/mortgage alerts.
+**AC:**
+- [ ] `GET /api/visualizations/comparison`: accepts `comparison_mode` (`"period"` / `"person"` / `"account"`), `comparison_ids` (list of IDs or date ranges), `group_by` (`"category"` / `"month"`); returns side-by-side aggregation data per comparison ID
+- [ ] `ComparisonChart`: grouped bar chart with one colour per comparison entity; legend per entity
+- [ ] Dashboard "Compare" button opens comparison panel; mode and IDs selectable; closes and resets filter
+- [ ] Period-over-period: current month vs same month last year vs previous month
 
-### Story 10.1: Alert System Infrastructure
+---
 
-As the system,
-I want to provide an in-app notification area for all alert types,
-So that users receive timely reminders about important financial events.
+## Epic 12 — Import / Export
 
-**Acceptance Criteria:**
+**Purpose:** CSV import wizard with column detection, duplicate detection, and the
+CAT-004 category mapping service. CSV export of filtered transaction data.
 
-**Given** an alert condition is triggered (e.g., budget threshold reached)
-**When** the condition occurs
-**Then** a notification appears in the user's in-app notification area (bell icon in header)
-**And** the notification includes a clear message, severity level, and action link
-**And** unread notifications are indicated by a red badge on the bell icon
+**Pre-conditions:** Epics 1–6 complete. CAT-004 complete.
 
-**Given** I am viewing the notification area
-**When** I click a notification
-**Then** I am navigated to the relevant page (e.g., budget page for budget alert)
-**And** the notification is marked as read
-**And** I can clear individual notifications or clear all at once
+**Post-conditions:** Full CSV import and export flow working. Import wizard handles all error cases.
 
-### Story 10.2: Recurring Payment Alerts
+---
 
-As a user,
-I want to be alerted when a recurring payment fails or is about to process,
-So that I can take action if needed.
+### IMPORT-001 — CSV parser and column detection backend
 
-**Acceptance Criteria:**
+**Size:** S · **Depends on:** BE-008 · **FRs:** FR-IE-001 through FR-IE-006 · **Ref:** EDP §13.4
 
-**Given** I have active recurring payments
-**When** a recurring payment is about to process (24 hours before)
-**Then** I receive a notification: "Your [description] payment of [amount] is scheduled for tomorrow"
+**Files:**
+```
++ backend/services/import_export_service.py
++ backend/schemas/import_export.py
+```
 
-**Given** a recurring payment fails to process
-**When** all 3 retry attempts are exhausted
-**Then** I receive a notification: "Your [description] payment failed. Please check your account settings."
-**And** the recurring payment is marked as failed in the list
+**AC:**
+- [ ] `parse_csv(file_bytes) → ParsedCsv`: detects encoding (UTF-8 with BOM fallback); returns `{ headers, rows, row_count }`; max 10,000 rows (returns 400 if exceeded)
+- [ ] `detect_columns(headers, sample_rows) → ColumnMapping`: heuristic matching for `date`, `amount`, `description`, `category`, `account`; returns confidence score per column; user can override
+- [ ] `validate_rows(rows, column_mapping) → ValidationResult`: checks date format (multiple formats → ISO), amount parseable (handles currency symbols, commas), required fields present; returns `{ valid_rows, invalid_rows: [{row, error}] }`
+- [ ] Unit tests: CSV with BOM, currency symbols in amounts, mismatched date formats all handled
 
-### Story 10.3: Budget Threshold Alerts
+---
 
-As a budget-conscious user,
-I want to be notified when I approach or exceed my budget limits,
-So that I can adjust my spending before going overboard.
+### IMPORT-002 — Import execution service
 
-**Acceptance Criteria:**
+**Size:** M · **Depends on:** IMPORT-001, EVENT-002, CAT-004 · **FRs:** FR-IE-001 through FR-IE-006 · **Ref:** ARCH §5.3
 
-**Given** I have active budgets
-**When** spending in a category reaches 80% of the budget limit
-**Then** I receive a warning notification: "You've used 80% of your [category] budget"
+**Files:**
+```
+~ backend/services/import_export_service.py
++ backend/routes/import_export.py
+~ backend/main.py
+```
 
-**Given** I continue spending in that category
-**When** I exceed the budget limit (100%)
-**Then** I receive an urgent notification: "You've exceeded your [category] budget by [amount]"
-**And** the budget progress bar turns red on the dashboard
+**AC:**
+- [ ] `POST /api/import/preview`: accepts CSV file + column mapping; calls `validate_rows`; calls `preview_category_mappings`; calls `detect_duplicate` for each row; returns `{ valid, invalid, category_mappings, duplicate_candidates }`
+- [ ] `POST /api/import/execute`: accepts `{ rows, column_mapping, category_mappings, skip_duplicates }`; creates transactions in bulk; auto-creates unmapped categories via `auto_create_category`; returns `{ imported, skipped_duplicates, failed, created_categories }`
+- [ ] All import rows created in a single DB transaction; if any row fails with unrecoverable error, entire import rolls back
+- [ ] `GET /api/export/transactions?format=csv`: streams CSV of current filtered transactions; column order: Date, Name, Category, Payee, Amount, Currency, Status
+- [ ] Integration test: upload 50-row CSV → preview returns correct mapping → execute → 50 transactions in DB
 
-### Story 10.4: Credit Card and Mortgage Alerts
+---
 
-As a homeowner with a mortgage and credit cards,
-I want to be reminded of upcoming due dates and missed payments,
-So that I never miss a payment and avoid penalties.
+### IMPORT-003 — Import / export frontend wizard
 
-**Acceptance Criteria:**
+**Size:** M · **Depends on:** FE-005, IMPORT-002 · **FRs:** FR-IE-001 through FR-IE-006 · **Ref:** UX §6.9
 
-**Given** I have credit cards with upcoming due dates
-**When** a due date is 7 days away
-**Then** I receive a notification: "Your [card name] payment of [amount] is due in 7 days"
+**Files:**
+```
++ frontend/src/components/entity/ImportWizard.tsx
+```
 
-**Given** I have a CPF mortgage with upcoming payments
-**When** a mortgage payment date is 3 days away
-**Then** I receive a notification: "Your mortgage payment of [amount] is due in 3 days"
+**AC:**
+- [ ] 3-step wizard rendered in a `Modal` (`lg` size)
+- [ ] Step 1: file upload dropzone; validates CSV MIME type; shows file name + row count on success
+- [ ] Step 2: column mapping dropdowns (one per detected column); category mapping table showing match type `Badge` (exact/fuzzy/unmapped) + target dropdown; duplicate warning rows in amber with "Skip" checkbox
+- [ ] Step 3: confirm summary → loading overlay → `ImportResult` card (imported / skipped / failed counts; created categories list)
+- [ ] Export button in Transactions page action bar; applies current `VisualizationFilter` before download
 
-**Given** a credit card or mortgage payment date has passed
-**When** no payment has been recorded
-**Then** I receive an urgent alert: "Your [card/mortgage] payment was due yesterday. Please pay immediately."
+---
 
-## Epic 11: Deployment & Infrastructure
+## Epic 13 — Settings, Currencies & Backup
 
-**Goal:** Implement security measures, input validation, error handling, audit trail, and rate limiting to meet deployment requirements.
+**Purpose:** Person profile management, full currency CRUD, FX rate scheduler,
+base currency change with recalculation, and GCS backup.
 
-### Story 11.1: Security Measures
+**Pre-conditions:** Epics 1–3 complete (Settings tab shells exist from AUTH-004).
 
-As a security-conscious user,
-I want all my data encrypted at rest and all communications over HTTPS,
-So that my financial information is protected from unauthorized access.
+**Post-conditions:** Full settings page operational. FX rates fetched daily. Backups running.
 
-**Acceptance Criteria:**
+---
 
-**Given** data is stored in the database
-**When** sensitive fields (passwords, tokens) are written
-**Then** they are encrypted using industry-standard encryption at rest (NFR4)
+### SETTINGS-001 — Person and currency API routes
 
-**Given** any API request is made
-**When** the request is sent
-**Then** it is transmitted over HTTPS/TLS (NFR5)
-**And** the application enforces HTTPS-only redirects
+**Size:** S · **Depends on:** BE-008, AUTH-002 · **FRs:** FR-P-003, FR-P-004, FR-CU-001 through FR-CU-008 · **Ref:** ARCH §6.2
 
-### Story 11.2: Input Validation
+**Files:**
+```
++ backend/routes/currencies.py
+~ backend/routes/persons.py
+~ backend/main.py
+```
 
-As a user,
-I want all inputs to be validated before processing,
-So that invalid data never corrupts the database.
+**AC:**
+- [ ] `PATCH /api/persons/{id}`: self or admin; updates `display_name`, `display_currency` (must be a configured household currency), `default_view`; audit log
+- [ ] Currency CRUD: `GET/POST/PATCH /api/currencies`; add currency (name, code, symbol, fee_pct); update (fee_pct, is_display_active); `GET /api/currencies/rates` with freshness indicator; `POST /api/currencies/rates/refresh` forces immediate FX fetch for all active currencies
+- [ ] `POST /api/currencies/set-base`: owner-only; validates new base currency exists; triggers background `recalculate_all_amount_base` job; returns `{ job_id }`
+- [ ] `recalculate_all_amount_base(db, household_id, new_base_code)`: updates `amount_base` on every `FinancialEvent`, `Account`, `Budget` using stored `fx_rate`; writes single `AuditLog` entry with `entity_type="household"`, `action="base_currency_change"`
 
-**Acceptance Criteria:**
+---
 
-**Given** I am submitting any form or API request
-**When** the data is received by the backend
-**Then** all amounts are validated as positive numbers
-**And** all dates are validated as valid date formats
-**And** all currency codes are validated against ISO 4217
-**And** all strings are sanitized to prevent injection attacks (AR2)
-**And** all file uploads are validated for type and size (AR1)
+### SETTINGS-002 — FX rate scheduler job
 
-**Given** invalid input is detected
-**When** the validation fails
-**Then** a consistent error response is returned: `{"error": "description", "code": "ERROR_CODE"}` (AR5)
-**And** the invalid data is never persisted to the database
+**Size:** S · **Depends on:** SETTINGS-001, RECUR-003 · **FRs:** FR-CU-006 · **Ref:** ARCH §9.3
 
-### Story 11.3: Error Handling
+**Files:**
+```
++ backend/scheduler/jobs/fx_rate_job.py
+~ backend/scheduler/registry.py
+```
 
-As a user,
-I want to receive clear, helpful error messages when something goes wrong,
-So that I can understand and resolve issues without frustration.
+**AC:**
+- [ ] Job runs daily at 01:00 UTC; fetches rates for all non-base currencies via ExchangeRate-API free tier (one request per household per day)
+- [ ] On success: updates `Currency.rate_to_base` and `last_rate_at`; creates `FxRateHistory` record
+- [ ] Circuit breaker: on API failure, preserves last known rate; logs WARNING; after 3 consecutive failures creates `Alert("fx_fetch_failed")`; no retry storm
+- [ ] Unit test: mock API success → rate updated; mock API failure × 3 → alert created, rate preserved
 
-**Acceptance Criteria:**
+---
 
-**Given** an unexpected error occurs in the application
-**When** it happens
-**Then** the error is logged server-side with a unique error ID
-**And** the user sees a friendly error message with the error ID for support reference
-**And** the application does not crash or show technical stack traces (AR5)
+### SETTINGS-003 — Settings page frontend (currencies and profile)
 
-**Given** an external service (e.g., Google OAuth, forex API) is unavailable
-**When** the application attempts to use it
-**Then** the application degrades gracefully with a fallback message (AR6)
-**And** the user is informed that the feature is temporarily unavailable
+**Size:** M · **Depends on:** FE-007, AUTH-004, SETTINGS-001 · **FRs:** FR-CU-001 through FR-CU-008, FR-P-003, FR-P-004 · **Ref:** UX §9.5
 
-### Story 11.4: Audit Trail
+**Files:**
+```
++ frontend/src/api/useCurrencies.ts
+~ frontend/src/pages/Settings.tsx
+```
 
-As an administrator,
-I want a complete audit trail of all data modifications,
-So that I can track changes and investigate issues.
+**AC:**
+- [ ] Currencies tab: table with code, name, symbol, rate, freshness indicator, fee %, display-active toggle; "Add Currency" opens modal with code/name/symbol/fee fields
+- [ ] Set Base Currency button (owner-only): `ConfirmationDialog` warning about recalculation; calls `POST /api/currencies/set-base`; shows progress banner while job runs
+- [ ] "Refresh Rates" button: calls `POST /api/currencies/rates/refresh`; shows spinner; updates table on completion
+- [ ] Profile section accessible from Topbar Avatar menu: display name input, display currency `Dropdown` (household currencies only), default view toggle (Household / Personal); saves via `PATCH /api/persons/{id}`
 
-**Acceptance Criteria:**
+---
 
-**Given** any user modifies data (create, update, delete)
-**When** the modification is saved
-**Then** an audit log entry is created with: user ID, action type, entity type, entity ID, old values, new values, and timestamp (NFR7)
-**And** audit logs are stored in a separate table with append-only writes (cannot be modified or deleted)
+### SETTINGS-004 — Backup scheduler job
 
-**Given** I am a household Admin
-**When** I view the audit log
-**Then** I can filter by date range, user, and action type
-**And** I can export the audit log to CSV
+**Size:** S · **Depends on:** RECUR-003 · **FRs:** FR-SYS-006 · **Ref:** ARCH §13
 
-### Story 11.5: Rate Limiting
+**Files:**
+```
++ backend/scheduler/jobs/backup_job.py
++ backend/services/backup_service.py
+~ backend/scheduler/registry.py
+```
 
-As a system administrator,
-I want to limit API request rates per user,
-So that the application remains responsive and resistant to abuse.
+**AC:**
+- [ ] `backup_service.run_backup()`: WAL checkpoint (`PRAGMA wal_checkpoint(TRUNCATE)`); gzip the SQLite file; uploads to GCS at `gs://{GCS_BUCKET}/db/{YYYY-MM}/{YYYY-MM-DD}.db.gz`
+- [ ] Backup job runs daily at 03:00 UTC
+- [ ] On cold start (`/data/tracker.db` absent): `backup_service.restore_latest()` downloads latest GCS backup, decompresses, runs `alembic upgrade head`, then starts app
+- [ ] Unit test: mock GCS client → upload called with correct path; mock download → file restored correctly
 
-**Acceptance Criteria:**
+---
 
-**Given** a user makes API requests
-**When** the user exceeds 100 requests per minute
-**Then** subsequent requests are rejected with a 429 Too Many Responses status
-**And** the response includes a `Retry-After` header indicating when to retry
-**And** rate limit violations are logged in the audit trail
+## Implementation Order (Recommended Sequence)
 
-## Epic 12: Testing
+```
+Phase A — Backend foundation (sequential)
+  BE-001 → BE-002 → BE-003 → BE-004 → BE-005 → BE-006 → BE-007 → BE-008
 
-**Goal:** Implement comprehensive testing infrastructure including unit tests, integration tests, E2E tests, and security tests.
+Phase B — Frontend foundation (parallel with Phase A after BE-001)
+  FE-001 → FE-002 → FE-003
+             FE-002 → FE-004
+  FE-003 + FE-004 → FE-005 → FE-006 → FE-007
 
-### Story 12.1: Unit Testing
+Phase C — Auth & Household (after Phase A; FE-007 for AUTH-003+)
+  AUTH-001 → AUTH-002
+  AUTH-001 + FE-007 → AUTH-003 → AUTH-004
 
-As a developer,
-I want to write unit tests for all business logic,
-So that individual components work correctly in isolation.
+Phase D — Categories (after Phase C)
+  CAT-001 → CAT-002 → CAT-003
+  CAT-001 → CAT-004
+  CAT-002 + FE-005 → CAT-005
 
-**Acceptance Criteria:**
+Phase E — Accounts (after Phase C)
+  ACCT-001 → ACCT-002 → ACCT-003
+  ACCT-003 + FE-005 → ACCT-004
 
-**Given** a service or utility function exists (e.g., currency conversion, budget calculation)
-**When** I write a unit test for it
-**Then** the test runs independently using mocked dependencies
-**And** the test suite covers all edge cases and error paths
-**And** the test suite runs in under 2 minutes
-
-### Story 12.2: Integration Testing
-
-As a developer,
-I want to write integration tests for API endpoints and database interactions,
-So that the system components work correctly together.
-
-**Given** an API endpoint exists (e.g., POST /transactions)
-**When** I write an integration test for it
-**Then** the test uses a test database (SQLite in-memory or separate instance)
-**And** the test verifies the full request-response cycle including database persistence
-**And** the test covers both success and failure scenarios (valid input, invalid input, unauthorized access)
-
-### Story 12.3: End-to-End Testing
-
-As a QA engineer,
-I want to write E2E tests for critical user flows,
-So that the application works correctly from a user's perspective.
-
-**Given** a critical user flow exists (e.g., login → create transaction → view dashboard)
-**When** I write an E2E test for it
-**Then** the test uses Playwright to simulate real user interactions in a browser
-**And** the test verifies the complete user journey from start to finish
-**And** the test runs against a fully deployed staging environment
-
-**Given** critical flows include: Google OAuth login, quick transaction entry, budget creation, CSV import
-**When** the E2E test suite runs
-**Then** all critical flows pass successfully
-**And** test results are reported in a readable format
-
-### Story 12.4: Security Testing
-
-As a developer,
-I want to run security tests to identify vulnerabilities,
-So that the application is resistant to common attacks.
-
-**Acceptance Criteria:**
-
-**Given** the application is deployed in a staging environment
-**When** I run security tests
-**Then** the tests verify: SQL injection prevention (AR2), XSS prevention (AR3), CSRF protection (AR4), authentication bypass attempts
-**And** the tests use tools like OWASP ZAP or manual penetration testing scripts
-**And** any vulnerabilities found are logged as issues and must be fixed before production deployment
-
+Phase F — Transactions (after Phases D and E)
+  EVENT-001 → EVENT-002 → EVENT-003
+  EVENT-003 + FE-005 + CAT-002 → EVENT-004
+
+Phase G — Recurring (after Phase F)
+  RECUR-001 → RECUR-002 → RECUR-003 → RECUR-004
+
+Phase H — Budgets (after Phase F)
+  BUDG-001 → BUDG-002 → BUDG-003
+  BUDG-002 + FE-005 → BUDG-004
+
+Phase I — Transfers & Debt (after Phase F)
+  DEBT-001 → DEBT-002
+  DEBT-002 + FE-005 → DEBT-003
+
+Phase J — Formulas (after Phase E)
+  FORM-001 → FORM-002
+
+Phase K — Visualisations (after Phases G, H, I)
+  VIZ-001 → VIZ-002 → VIZ-003 → VIZ-004
+
+Phase L — Import/Export (after Phase F, CAT-004)
+  IMPORT-001 → IMPORT-002 → IMPORT-003
+
+Phase M — Settings & Currencies (after Phase C; can run parallel with K)
+  SETTINGS-001 → SETTINGS-002 → SETTINGS-003
+  SETTINGS-004 (parallel with SETTINGS-001 — no dependencies beyond RECUR-003)
+```
+
+---
+
+## FR Coverage Map
+
+| FR Group | Stories |
+|---|---|
+| FR-HH | AUTH-001, AUTH-002, AUTH-004 |
+| FR-P | AUTH-001 through AUTH-004, SETTINGS-001, SETTINGS-003 |
+| FR-A | ACCT-001 through ACCT-004 |
+| FR-E | EVENT-001 through EVENT-004, RECUR-001 through RECUR-004, DEBT-001 through DEBT-003 |
+| FR-B | BUDG-001 through BUDG-004 |
+| FR-C | CAT-001 through CAT-005 |
+| FR-CU | SETTINGS-001 through SETTINGS-003 |
+| FR-F | FORM-001, FORM-002 |
+| FR-D | DEBT-001 through DEBT-003 |
+| FR-V | VIZ-001 through VIZ-004, EVENT-004, BUDG-004 |
+| FR-IE | IMPORT-001 through IMPORT-003, CAT-004 |
+| FR-SYS | BE-008, RECUR-003, BUDG-003, VIZ-001, SETTINGS-002, SETTINGS-004 |
+
+---
+
+## Story Status Tracking
+
+| Story | Title | Status |
+|---|---|---|
+| BE-001 | Python project scaffold and config | done |
+| BE-002 | BaseEntity, MonetaryValueMixin, enums | done |
+| BE-003 | Household, Person, Session, Invitation models | done |
+| BE-004 | Account and related models | done |
+| BE-005 | FinancialEvent and OccurrenceRecord models | done |
+| BE-006 | Budget, Category, Currency, Formula, Audit, Alert | done |
+| BE-007 | Alembic initial migration | done |
+| BE-008 | FastAPI app, middleware, DI, audit service | done |
+| FE-001 | Vite + React scaffold and design tokens | done |
+| FE-002 | Design system: atomic components | done |
+| FE-003 | Design system: form and selection components | done |
+| FE-004 | Design system: containers, layout, feedback | done |
+| FE-005 | Generic entity components | done |
+| FE-006 | Zustand stores and TanStack Query client | done |
+| FE-007 | App shell, routing, auth guard | done |
+| AUTH-001 | Google OAuth backend | pending |
+| AUTH-002 | Household member management backend | pending |
+| AUTH-003 | Auth frontend | pending |
+| AUTH-004 | Household settings and members frontend | pending |
+| CAT-001 | Category schemas and service | pending |
+| CAT-002 | Category routes and hierarchy endpoints | pending |
+| CAT-003 | Category merge and duplicate detection | pending |
+| CAT-004 | Import category mapping service | pending |
+| CAT-005 | Category management frontend | pending |
+| ACCT-001 | Account Pydantic schemas | pending |
+| ACCT-002 | Account service | pending |
+| ACCT-003 | Account API routes and valuations | pending |
+| ACCT-004 | Account frontend pages | pending |
+| EVENT-001 | Event Pydantic schemas | pending |
+| EVENT-002 | Transaction service | pending |
+| EVENT-003 | Event API routes | pending |
+| EVENT-004 | Transaction ledger frontend + CategorySelect | pending |
+| RECUR-001 | RecurringDateParser | pending |
+| RECUR-002 | Recurring payment service and routes | pending |
+| RECUR-003 | Scheduler: recurring processor + missed detection | pending |
+| RECUR-004 | Recurring payments frontend | pending |
+| BUDG-001 | Budget schemas and service | pending |
+| BUDG-002 | Budget API routes | pending |
+| BUDG-003 | Budget scheduler | pending |
+| BUDG-004 | Budget frontend with drill-down | pending |
+| DEBT-001 | Transfer service and debt computation | pending |
+| DEBT-002 | Transfer API routes | pending |
+| DEBT-003 | Transfers frontend and debt widget | pending |
+| FORM-001 | Formula service and routes | pending |
+| FORM-002 | Formula management frontend | pending |
+| VIZ-001 | Visualisation aggregation API | pending |
+| VIZ-002 | Dashboard page | pending |
+| VIZ-003 | Per-entity chart components | pending |
+| VIZ-004 | Comparison mode | pending |
+| IMPORT-001 | CSV parser and column detection | pending |
+| IMPORT-002 | Import execution service | pending |
+| IMPORT-003 | Import/export frontend wizard | pending |
+| SETTINGS-001 | Person and currency API routes | pending |
+| SETTINGS-002 | FX rate scheduler job | pending |
+| SETTINGS-003 | Settings frontend: currencies and profile | pending |
+| SETTINGS-004 | Backup scheduler job | pending |
+
+---
+
+## Revision History
+
+| Version | Date | Author | Change |
+|---|---|---|---|
+| 3.0 | 2026-05-28 | Ben + Claude | Full rewrite. Clean-repo start — no refactor epic. 55 stories across 13 epics. Compact coding-agent format. Builds entity hierarchy (BaseEntity, MonetaryValue, STI) correctly from day 1. Frontend design system fully specified before feature pages. Lessons from stories 1-1 → 2-5 incorporated into AC and notes. |
+| 3.1 | 2026-05-29 | Ben + Claude | Marked Epic 1 (BE-001–BE-008) and Epic 2 (FE-001–FE-007) as complete. Updated all AC checkboxes to checked. Added Epic 2 delivered deliverables block (design system component inventory, authStore mock Dev User, /design-system route). BE-008 status corrected from ready-for-dev to done in story table. |

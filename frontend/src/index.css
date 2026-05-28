@@ -1,651 +1,212 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0a0a0f;
-  --color-surface: #12121a;
-  --color-surface-elevated: #1e1e2e;
-  --color-border: #2a2a3a;
-  --color-primary: #4fc3f7;
-  --color-primary-hover: #80deea;
-  --color-accent: #00e5ff;
-  --color-success: #69f0ae;
-  --color-warning: #ffd740;
-  --color-error: #ff5252;
-  --color-error-hover: #ff8a80;
-  --color-accent-purple: #8b5cf6;
-  --color-accent-purple-dark: #6d28d9;
-  --color-accent-purple-light: #a78bfa;
-  --color-text: #e0e0e0;
-  --color-text-secondary: #888888;
-  --color-text-muted: #555555;
-  --color-member: #aaaaaa;
+  /* === BACKGROUNDS === */
+  --color-bg:               #09090f;
+  --color-bg-secondary:     #12121a;
+  --color-bg-tertiary:      #1a1a2e;
+  --color-bg-elevated:      #24243a;
+  --color-bg-hover:         #2a2a45;
+
+  /* === SURFACE === */
+  --color-surface:          #16162a;
+  --color-surface-hover:    #1e1e38;
+  --color-surface-active:   #26264a;
+
+  /* === BORDER === */
+  --color-border:           #2a2a45;
+  --color-border-light:     #3a3a5c;
+  --color-border-focus:     #6366f1;
+
+  /* === TEXT === */
+  --color-text-primary:     #e8e8f0;
+  --color-text-secondary:   #9898b0;
+  --color-text-tertiary:    #6868808a;
+  --color-text-muted:       #484860;
+  --color-text-inverse:     #ffffff;
+
+  /* === ACCENT === */
+  --color-accent:           #6366f1;
+  --color-accent-hover:     #818cf8;
+  --color-accent-active:    #4f46e5;
+  --color-accent-subtle:    rgba(99, 102, 241, 0.1);
+
+  /* === STATUS === */
+  --color-success:          #10b981;
+  --color-success-bg:       rgba(16, 185, 129, 0.1);
+  --color-warning:          #f59e0b;
+  --color-warning-bg:       rgba(245, 158, 11, 0.1);
+  --color-error:            #ef4444;
+  --color-error-bg:         rgba(239, 68, 68, 0.1);
+  --color-info:             #3b82f6;
+  --color-info-bg:          rgba(59, 130, 246, 0.1);
+
+  /* === FINANCIAL === */
+  --color-income:           #10b981;
+  --color-income-bg:        rgba(16, 185, 129, 0.1);
+  --color-expense:          #ef4444;
+  --color-expense-bg:       rgba(239, 68, 68, 0.1);
+  --color-transfer:         #8b5cf6;
+  --color-transfer-bg:      rgba(139, 92, 246, 0.1);
+
+  /* === VISUALIZATION === */
+  --color-viz-1:            #6366f1;
+  --color-viz-2:            #8b5cf6;
+  --color-viz-3:            #ec4899;
+  --color-viz-4:            #f59e0b;
+  --color-viz-5:            #10b981;
+  --color-viz-6:            #3b82f6;
+  --color-viz-7:            #14b8a6;
+  --color-viz-8:            #f97316;
+
+  /* === SHADOWS === */
+  --shadow-card:            0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-elevated:        0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow-accent:     0 0 20px rgba(99, 102, 241, 0.3);
+
+  /* === BORDER RADIUS === */
+  --radius-sm:              4px;
+  --radius-md:              8px;
+  --radius-lg:              12px;
+  --radius-xl:              16px;
+  --radius-full:            9999px;
+
+  /* === SPACING (for custom use) === */
+  --spacing-xs:             4px;
+  --spacing-sm:             8px;
+  --spacing-md:             16px;
+  --spacing-lg:             24px;
+  --spacing-xl:             32px;
+  --spacing-2xl:            48px;
+
+  /* === FONT === */
+  --font-sans:              'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:              'JetBrains Mono', 'Fira Code', monospace;
+
+  /* === SURFACE (extended) === */
+  --color-surface-raised:   #1c1c34;
+  --color-surface-overlay:  #222244;
+
+  /* === TEXT (alias) === */
+  --color-text:             #e8e8f0;
+
+  /* === PRIMARY (alias for accent) === */
+  --color-primary:          #6366f1;
+
+  /* === STATUS HOVER === */
+  --color-error-hover:      #dc2626;
+  --color-warning-hover:    #d97706;
+
+  /* === ENTITY COLORS === */
+  --color-entity-account:   #3b82f6;
+  --color-entity-event:     #8b5cf6;
+  --color-entity-budget:    #10b981;
+  --color-entity-person:    #f59e0b;
+  --color-entity-debt:      #ef4444;
+
+  /* === Z-INDEX === */
+  --z-sticky:               1000;
+  --z-dropdown:             1020;
+  --z-fixed:                1030;
+  --z-modal-backdrop:       1040;
+  --z-modal:                1050;
+  --z-popover:              1060;
+  --z-tooltip:              1070;
+  --z-toast:                1080;
+
+  /* === TRANSITION DURATIONS === */
+  --duration-fast:          100ms;
+  --duration-normal:        200ms;
+  --duration-slow:          350ms;
+
+  /* === ANIMATIONS === */
+  --animate-shimmer:        shimmer 1.5s infinite;
+  --animate-slide-in:       slide-in 0.2s ease-out;
 }
 
-@keyframes wiggle {
-  0%, 100% { transform: translateX(0); }
-  15% { transform: translateX(-4px) rotate(-1deg); }
-  30% { transform: translateX(4px) rotate(1deg); }
-  45% { transform: translateX(-3px) rotate(-0.5deg); }
-  60% { transform: translateX(3px) rotate(0.5deg); }
-  75% { transform: translateX(-1px) rotate(-0.25deg); }
-  90% { transform: translateX(1px) rotate(0.25deg); }
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 
-@layer base {
-  :root {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    line-height: 1.5;
-    font-weight: 400;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  body {
-    margin: 0;
-    min-height: 100vh;
-    background: linear-gradient(180deg, #0e0e16 0%, #07070b 100%);
-    color: theme(--color-text);
-  }
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
-@layer components {
-  /* ============================================
-     BUTTONS
-     All interactive button component classes.
-     Extend with utility classes (e.g., px-4 py-2) for layout-specific sizing.
-     ============================================ */
+/* ─── Typography utilities ────────────────────────────────────────────────── */
 
-  /* --- Primary Actions (3D solid buttons) --- */
+@utility text-2xs { font-size: 0.6875rem; line-height: 1rem; }   /* 11px labels */
+@utility text-3xs { font-size: 0.625rem;  line-height: 0.875rem; } /* 10px micro */
 
-  .btn-primary {
-    background-color: theme(--color-primary);
-    color: theme(--color-background);
-    font-weight: 600;
-    border-radius: 0.5rem;
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 0 theme(--color-primary-hover), 0 4px 8px rgba(0, 0, 0, 0.3);
-  }
-  .btn-primary:hover {
-    background-color: theme(--color-primary-hover);
-    box-shadow: 0 3px 0 theme(--color-primary), 0 6px 12px rgba(0, 0, 0, 0.4);
-    transform: translateY(-1px);
-  }
-  .btn-primary:active {
-    box-shadow: 0 1px 0 theme(--color-primary-hover), 0 2px 4px rgba(0, 0, 0, 0.3);
-    transform: translateY(1px);
-  }
-  .btn-primary:disabled {
-    background-color: theme(--color-border);
-    box-shadow: none;
-    cursor: not-allowed;
-    transform: none;
-  }
+/* ─── Transform utilities ──────────────────────────────────────────────────── */
 
-  .btn-danger {
-    background-color: theme(--color-error);
-    color: theme(--color-background);
-    font-weight: 600;
-    border-radius: 0.5rem;
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 0 theme(--color-error-hover), 0 4px 8px rgba(0, 0, 0, 0.3);
-  }
-  .btn-danger:hover {
-    background-color: theme(--color-error-hover);
-    box-shadow: 0 3px 0 theme(--color-error), 0 6px 12px rgba(0, 0, 0, 0.4);
-    transform: translateY(-1px);
-  }
-  .btn-danger:active {
-    box-shadow: 0 1px 0 theme(--color-error-hover), 0 2px 4px rgba(0, 0, 0, 0.3);
-    transform: translateY(1px);
-  }
-  .btn-danger:disabled {
-    background-color: theme(--color-border);
-    box-shadow: none;
-    cursor: not-allowed;
-    transform: none;
-  }
+@utility scale-press  { scale: 0.97; }         /* button active press */
+@utility lift         { translate: 0 -2px; }   /* card hover lift */
 
-  /* --- Merge Button (purple accent for merge operations) --- */
+/* ─── Skeleton shimmer ─────────────────────────────────────────────────────── */
 
-  .btn-merge {
-    background: linear-gradient(135deg, theme(--color-accent-purple), theme(--color-accent-purple-dark));
-    color: white;
-    font-weight: 600;
-    border-radius: 0.5rem;
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
-  }
-  .btn-merge:hover {
-    background: linear-gradient(135deg, theme(--color-accent-purple-light), theme(--color-accent-purple));
-    box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
-    transform: translateY(-1px);
-  }
-  .btn-merge:active {
-    box-shadow: 0 1px 0 theme(--color-accent-purple-dark), 0 2px 4px rgba(139, 92, 246, 0.3);
-    transform: translateY(1px);
-  }
-  .btn-merge:disabled {
-    background-color: theme(--color-border);
-    box-shadow: none;
-    cursor: not-allowed;
-    transform: none;
-  }
+@utility shimmer-gradient {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-surface-raised),
+    var(--color-surface-hover),
+    var(--color-surface-raised)
+  );
+  background-size: 200% 100%;
+}
 
-  /* --- Secondary Actions (bordered, less prominent) --- */
+/* Flex proportion utilities (skeleton table-row columns) */
+@utility flex-col-half  { flex: 0.5; }
+@utility flex-col-4-5   { flex: 0.8; }
+@utility flex-col-7-10  { flex: 0.7; }
 
-  .btn-secondary {
-    background-color: theme(--color-surface-elevated);
-    color: theme(--color-text);
-    font-weight: 500;
-    border-radius: 0.5rem;
-    border: 1px solid theme(--color-border);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .btn-secondary:hover {
-    background-color: theme(--color-surface);
-    color: theme(--color-primary);
-    border-color: theme(--color-primary);
-    box-shadow: 0 0 8px rgba(theme(--color-primary) / 0.15);
-  }
-  .btn-secondary:active {
-    transform: translateY(1px);
-  }
-  .btn-secondary:disabled {
-    background-color: theme(--color-surface-elevated);
-    border-color: theme(--color-border);
-    color: theme(--color-text-muted);
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
+/* ─── Component size utilities ─────────────────────────────────────────────── */
 
-  /* --- Cancel / Dismiss (transparent, minimal emphasis) --- */
+/* Overlay max heights */
+@utility max-h-modal    { max-height: 90vh; }
 
-  .btn-cancel {
-    background-color: transparent;
-    color: theme(--color-text-secondary);
-    font-weight: 500;
-    border-radius: 0.5rem;
-    border: 1px solid theme(--color-border);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .btn-cancel:hover {
-    background-color: theme(--color-surface-elevated);
-    color: theme(--color-text);
-    border-color: theme(--color-text-muted);
-  }
-  .btn-cancel:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+/* Picker / panel widths */
+@utility w-colour-picker { width: 280px; }
+@utility w-emoji-picker  { width: 400px; }
+@utility w-drawer-sm    { width: 480px; }
+@utility w-drawer-md    { width: 600px; }
 
-  /* --- Small Outlined Action Buttons (inline, compact) --- */
+/* Modal dialog panel widths */
+@utility max-w-dialog-sm  { max-width: 560px; }
+@utility max-w-dialog-md  { max-width: 720px; }
+@utility max-w-dialog-lg  { max-width: 960px; }
 
-  .btn-action-primary {
-    background-color: transparent;
-    color: theme(--color-primary);
-    font-weight: 500;
-    border-radius: 0.5rem;
-    border: 1px solid theme(--color-primary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 0.875rem;
-    padding: 0.375rem 0.75rem;
-  }
-  .btn-action-primary:hover {
-    background-color: rgba(theme(--color-primary) / 0.1);
-  }
-  .btn-action-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+/* EmptyState / prose content */
+@utility max-w-content    { max-width: 28rem; }
 
-  .btn-action-error {
-    background-color: transparent;
-    color: theme(--color-error);
-    font-weight: 500;
-    border-radius: 0.5rem;
-    border: 1px solid theme(--color-error);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 0.875rem;
-    padding: 0.375rem 0.75rem;
-  }
-  .btn-action-error:hover {
-    background-color: rgba(theme(--color-error) / 0.1);
-  }
-  .btn-action-error:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+/* Tooltip */
+@utility max-w-tooltip    { max-width: 280px; }
 
-  .btn-action-success {
-    background-color: transparent;
-    color: theme(--color-success);
-    font-weight: 500;
-    border-radius: 0.5rem;
-    border: 1px solid theme(--color-success);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 0.875rem;
-    padding: 0.375rem 0.75rem;
-  }
-  .btn-action-success:hover {
-    background-color: rgba(theme(--color-success) / 0.1);
-  }
-  .btn-action-success:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+/* Toast */
+@utility min-w-toast      { min-width: 320px; }
+@utility max-w-toast      { max-width: 400px; }
 
-  /* --- Ghost Button (minimal tertiary actions) --- */
+/* ContextMenu panel */
+@utility min-w-context-menu { min-width: 180px; }
 
-  .btn-ghost {
-    background-color: transparent;
-    color: theme(--color-text-secondary);
-    font-weight: 500;
-    border-radius: 0.5rem;
-    border: 1px solid theme(--color-border);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 0.875rem;
-    padding: 0.375rem 0.75rem;
-  }
-  .btn-ghost:hover {
-    background-color: rgba(theme(--color-primary) / 0.1);
-    color: theme(--color-primary);
-    border-color: rgba(theme(--color-primary) / 0.3);
-  }
-  .btn-ghost:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+/* MonetaryValueInput currency selector */
+@utility min-w-currency-select { min-width: 120px; }
 
-  /* --- Remove Button (inline list deletion) --- */
+/* EmojiIconPicker row buttons */
+@utility min-w-emoji-btn  { min-width: 80px; }
 
-  .btn-remove {
-    background-color: rgba(theme(--color-error) / 0.2);
-    color: theme(--color-error);
-    font-weight: 500;
-    border-radius: 0.375rem;
-    border: 1px solid theme(--color-error);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 0.875rem;
-    padding: 0.25rem 0.75rem;
-  }
-  .btn-remove:hover {
-    background-color: rgba(theme(--color-error) / 0.4);
-  }
-  .btn-remove:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+/* Button touch target (mobile a11y minimum) */
+@utility touch-target     { min-width: 64px; min-height: 44px; }
 
-  /* --- Close Button (modal/dialog dismiss) --- */
+/* Topbar avatar name truncation */
+@utility max-w-avatar-name { max-width: 100px; }
 
-  .btn-close {
-    color: theme(--color-text-secondary);
-    transition: color 0.15s ease;
-    font-size: 1.25rem;
-    line-height: 1;
-    background: none;
-    border: none;
-    cursor: pointer;
-  }
-  .btn-close:hover {
-    color: theme(--color-text);
-  }
-
-  /* ============================================
-     BADGES
-     Small status/role indicators with colored tint.
-     ============================================ */
-
-  .badge-owner {
-    background-color: rgba(theme(--color-warning) / 0.3);
-    color: theme(--color-warning);
-    border-color: theme(--color-warning);
-  }
-  .badge-admin {
-    background-color: rgba(theme(--color-accent) / 0.3);
-    color: theme(--color-accent);
-    border-color: theme(--color-accent);
-  }
-  .badge-member {
-    background-color: rgba(theme(--color-member) / 0.3);
-    color: theme(--color-member);
-    border-color: theme(--color-member);
-  }
-  .badge-warning {
-    background-color: rgba(theme(--color-warning) / 0.2);
-    color: theme(--color-warning);
-    border-color: rgba(theme(--color-warning) / 0.5);
-  }
-  .badge-success {
-    background-color: rgba(theme(--color-success) / 0.2);
-    color: theme(--color-success);
-    border-color: rgba(theme(--color-success) / 0.5);
-  }
-  .badge-error {
-    background-color: rgba(theme(--color-error) / 0.2);
-    color: theme(--color-error);
-    border-color: rgba(theme(--color-error) / 0.5);
-  }
-  .badge-text-muted {
-    background-color: rgba(theme(--color-text-muted) / 0.3);
-    color: theme(--color-text-muted);
-    border-color: rgba(theme(--color-text-muted) / 0.5);
-  }
-
-  /* ============================================
-     CARDS & CONTAINERS
-     ============================================ */
-
-  .card {
-    background-color: theme(--color-surface);
-    border-radius: 0.75rem;
-    border: 1px solid theme(--color-border);
-    padding: 1.5rem;
-  }
-
-  .modal-content {
-    background-color: theme(--color-surface);
-    border-radius: 0.75rem;
-    border: 1px solid theme(--color-border);
-    max-width: 28rem;
-    width: 100%;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    padding: 1.5rem;
-  }
-
-  .invite-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    background-color: theme(--color-surface);
-    border-radius: 0.75rem;
-    border: 1px solid theme(--color-border);
-    transition: border-color 0.15s ease;
-  }
-  .invite-card:hover {
-    border-color: rgba(theme(--color-primary) / 0.3);
-  }
-
-  .category-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    border-radius: 0.75rem;
-    border: 2px solid transparent;
-    transition: border-color 0.15s ease;
-  }
-
-  /* ============================================
-     ALERTS
-     ============================================ */
-
-  .alert-error {
-    background-color: rgba(theme(--color-error) / 0.1);
-    border: 1px solid theme(--color-error);
-    border-radius: 0.75rem;
-    color: theme(--color-error);
-    padding: 1rem;
-  }
-  .alert-success {
-    background-color: rgba(theme(--color-success) / 0.1);
-    border: 1px solid theme(--color-success);
-    border-radius: 0.75rem;
-    color: theme(--color-success);
-    padding: 1rem;
-  }
-  .alert-warning {
-    background-color: rgba(theme(--color-warning) / 0.1);
-    border: 1px solid theme(--color-warning);
-    border-radius: 0.75rem;
-    color: theme(--color-warning);
-    padding: 1rem;
-  }
-
-  /* ============================================
-     FORM ELEMENTS
-     ============================================ */
-
-  .label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: theme(--color-text-secondary);
-  }
-
-  .input {
-    width: 100%;
-    padding: 0.5rem 1rem;
-    background-color: theme(--color-surface-elevated);
-    border: 1px solid theme(--color-border);
-    border-radius: 0.75rem;
-    color: theme(--color-text);
-    font-size: 0.875rem;
-    transition: border-color 0.15s ease;
-  }
-  .input::placeholder {
-    color: theme(--color-text-muted);
-  }
-  .input:focus {
-    outline: none;
-    border-color: theme(--color-primary);
-  }
-  .input-error:focus {
-    border-color: theme(--color-error);
-  }
-
-  .select {
-    width: 100%;
-    padding: 0.5rem 1rem;
-    background-color: theme(--color-surface-elevated);
-    border: 1px solid theme(--color-border);
-    border-radius: 0.75rem;
-    color: theme(--color-text);
-    font-size: 0.875rem;
-    transition: border-color 0.15s ease;
-    appearance: none;
-  }
-  .select:focus {
-    outline: none;
-    border-color: theme(--color-primary);
-  }
-
-  .select-sm {
-    padding: 0.25rem 0.75rem;
-    background-color: theme(--color-background);
-    border: 1px solid theme(--color-border);
-    border-radius: 0.375rem;
-    color: theme(--color-text);
-    font-size: 0.875rem;
-  }
-  .select-sm:focus {
-    outline: none;
-    border-color: theme(--color-primary);
-  }
-
-  .textarea {
-    width: 100%;
-    padding: 0.5rem 1rem;
-    background-color: theme(--color-surface-elevated);
-    border: 1px solid theme(--color-border);
-    border-radius: 0.75rem;
-    color: theme(--color-text);
-    font-size: 0.875rem;
-    transition: border-color 0.15s ease;
-    resize: none;
-  }
-  .textarea::placeholder {
-    color: theme(--color-text-muted);
-  }
-  .textarea:focus {
-    outline: none;
-    border-color: theme(--color-primary);
-  }
-
-  /* ============================================
-     NAVIGATION
-     ============================================ */
-
-  .header-bar {
-    background-color: theme(--color-surface);
-    border-bottom: 1px solid theme(--color-border);
-    padding: 1rem 2rem;
-  }
-
-  .nav-link {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: theme(--color-text-secondary);
-    transition: color 0.15s ease;
-  }
-  .nav-link:hover {
-    color: theme(--color-primary);
-  }
-
-  .nav-item {
-    color: theme(--color-text-secondary);
-    transition: all 0.15s ease;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
-    border-radius: 0.375rem;
-  }
-  .nav-item:hover {
-    color: theme(--color-primary);
-    background-color: theme(--color-surface-elevated);
-  }
-  .nav-item-danger:hover {
-    color: theme(--color-error);
-  }
-
-  /* ============================================
-     TABLES
-     ============================================ */
-
-  .table-header-cell {
-    text-align: left;
-    padding: 0.75rem 1rem;
-    color: theme(--color-text-secondary);
-    font-weight: 500;
-  }
-  .table-row {
-    border-bottom: 1px solid theme(--color-border);
-  }
-  .table-row:hover {
-    background-color: rgba(theme(--color-surface-elevated) / 0.5);
-  }
-  .table-cell {
-    padding: 0.75rem 1rem;
-    color: theme(--color-text-secondary);
-  }
-
-  /* ============================================
-     TAGS & CHIPS
-     ============================================ */
-
-  .tag {
-    display: inline-block;
-    padding: 0.125rem 0.5rem;
-    font-size: 0.75rem;
-    border-radius: 9999px;
-    font-weight: 500;
-  }
-  .tag-success {
-    background-color: rgba(theme(--color-success) / 0.1);
-    color: theme(--color-success);
-  }
-  .tag-error {
-    background-color: rgba(theme(--color-error) / 0.1);
-    color: theme(--color-error);
-  }
-  .tag-primary {
-    background-color: rgba(theme(--color-primary) / 0.1);
-    color: theme(--color-primary);
-  }
-
-  /* ============================================
-     ICON BUTTONS
-     ============================================ */
-
-  .icon-btn {
-    padding: 0.5rem;
-    color: theme(--color-text-secondary);
-    transition: color 0.15s ease;
-    background: none;
-    border: none;
-    cursor: pointer;
-  }
-  .icon-btn:hover {
-    color: theme(--color-primary);
-  }
-  .icon-btn-error:hover {
-    color: theme(--color-error);
-  }
-  .icon-btn-success:hover {
-    color: theme(--color-success);
-  }
-
-  /* ============================================
-     UTILITY COMPONENTS
-     ============================================ */
-
-  .section-divider {
-    border-top: 1px solid theme(--color-border);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: theme(--color-text-secondary);
-  }
-
-  .danger-zone {
-    border-top: 1px solid rgba(theme(--color-error) / 0.3);
-  }
-
-  .toast-success {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    padding: 0.75rem 1rem;
-    background-color: theme(--color-surface-elevated);
-    border: 1px solid rgba(theme(--color-success) / 0.3);
-    border-radius: 0.75rem;
-    color: theme(--color-success);
-    font-size: 0.875rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  }
-
-  .color-swatch {
-    width: 3rem;
-    height: 3rem;
-    border-radius: 0.75rem;
-    cursor: pointer;
-    border: 2px solid theme(--color-border);
-  }
-
-  .animate-wiggle {
-    animation: wiggle 0.6s ease-in-out;
-  }
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

@@ -1,14 +1,9 @@
-# generated: 2026-05-24
-# last_updated: 2026-05-25
-# project: Financial Tracker
+# generated: 2026-05-28
+# last_updated: 2026-05-28T21:45
+# project: financial-tracker
 # project_key: NOKEY
 # tracking_system: file-system
-# story_location: implementation-artifacts/stories
-#
-# ★ CANONICAL SOURCE FOR IMPLEMENTATION PROGRESS ★
-# All other documents (brief.md, epics.md, prd.md, ux-design-specification.md)
-# cross-reference this file for implementation status rather than duplicating it.
-# See _bmad-output/README.md for the full artifact navigation guide.
+# story_location: _bmad-output/implementation-artifacts/stories
 
 # STATUS DEFINITIONS:
 # ==================
@@ -24,9 +19,9 @@
 # Story Status:
 #   - backlog: Story only exists in epic file
 #   - ready-for-dev: Story file created in stories folder
-#   - in-progress: Developer actively working
+#   - in-progress: Developer actively working on implementation
 #   - review: Ready for code review (via Dev's code-review workflow)
-#   - done: Completed
+#   - done: Story completed
 #
 # Retrospective Status:
 #   - optional: Can be completed but not required
@@ -39,106 +34,118 @@
 # - Developer typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-05-24
-last_updated: 2026-05-26
-project: Financial Tracker
+generated: 2026-05-28
+last_updated: 2026-05-29T00:00
+project: financial-tracker
 project_key: NOKEY
 tracking_system: file-system
-story_location: implementation-artifacts/stories
+story_location: _bmad-output/implementation-artifacts/stories
 
 development_status:
-  # Epic 1: Authentication & User Management [FINALIZED 2026-05-24]
+  # Epic 1 — Backend Foundation
   epic-1: done
-  1-1-google-oauth-login: done
-  1-2-household-member-management: done
-  1-3-session-timeout-and-csrf-protection: done
+  be-001-python-project-scaffold-and-config: done
+  be-002-baseentity-monetaryvaluemixin-and-shared-enums: done
+  be-003-household-person-session-and-invitation-models: done
+  be-004-account-and-related-models: done
+  be-005-financialevent-and-occurrencerecord-models: done
+  be-006-remaining-models-budget-category-currency-formula-audit-alert: done
+  be-007-alembic-initial-migration: done
+  be-008-fastapi-app-middleware-stack-di-and-audit-service: done
   epic-1-retrospective: done
 
-  # Epic 2: Core Infrastructure & Categories [COMPLETE 2026-05-25]
+  # Epic 2 — Frontend Foundation
   epic-2: done
-  2-1-default-category-seeding: done
-  2-2-category-crud-operations: done
-  2-3-subcategory-support: done
-  2-4-merge-duplicate-categories: done
-  2-5-import-category-mapping: done
+  fe-001-vite-react-typescript-scaffold-and-design-tokens: done
+  fe-002-design-system-atomic-components: done
+  fe-003-design-system-form-and-selection-components: done
+  fe-004-design-system-containers-layout-and-feedback: done
+  fe-005-generic-entity-components: done
+  fe-006-zustand-stores-and-tanstack-query-client: done
+  fe-007-app-shell-routing-and-auth-guard: done
   epic-2-retrospective: done
 
-  # Epic 3: Transactions & Transfers [IN PROGRESS 2026-05-26]
-  epic-3: in-progress
-  3-0-shared-component-architecture: done
-  3-3-account-management: done
-  3-1-quick-transaction-entry: backlog
-  3-2-multi-currency-transactions-with-sgd-override: backlog
-  3-4-inter-account-transfers: backlog
-  3-5-transaction-crud-and-duplicate-detection: backlog
+  # Epic 3 — Authentication & Household
+  epic-3: backlog
+  auth-001-google-oauth-backend-flow-callback-session: backlog
+  auth-002-household-member-management-backend: backlog
+  auth-003-auth-frontend-login-page-useauth-hook-route-hydration: backlog
+  auth-004-household-settings-and-member-management-frontend: backlog
   epic-3-retrospective: optional
 
-  # Epic 4: Recurring Payments
+  # Epic 4 — Categories
   epic-4: backlog
-  4-1-create-recurring-payment: backlog
-  4-2-apscheduler-processing: backlog
-  4-3-recurring-payment-verification-view: backlog
-  4-4-manual-trigger-for-recurring-payment: backlog
+  cat-001-category-schemas-and-service-crud-seeding: backlog
+  cat-002-category-routes-and-hierarchy-endpoints: backlog
+  cat-003-category-merge-and-duplicate-detection: backlog
+  cat-004-import-category-mapping-service: backlog
+  cat-005-category-management-frontend: backlog
   epic-4-retrospective: optional
 
-  # Epic 5: Financial Modules
+  # Epic 5 — Accounts
   epic-5: backlog
-  5-1-budget-crud-with-progress-bars: backlog
-  5-2-capital-and-investment-tracking: backlog
-  5-3-credit-card-payment-tracking: backlog
+  acct-001-account-pydantic-schemas: backlog
+  acct-002-account-service: backlog
+  acct-003-account-api-routes-and-valuation-routes: backlog
+  acct-004-account-frontend-pages: backlog
   epic-5-retrospective: optional
 
-  # Epic 6: Debt Tracking
+  # Epic 6 — Transactions & Events
   epic-6: backlog
-  6-1-internal-household-debt: backlog
-  6-2-credit-card-debt-tracking: backlog
-  6-3-cpf-mortgage-payment-tracking: backlog
+  event-001-event-pydantic-schemas: backlog
+  event-002-transaction-service-fx-duplicate-detection-reconciliation: backlog
+  event-003-event-api-routes: backlog
+  event-004-transaction-ledger-frontend-and-categoryselect: backlog
   epic-6-retrospective: optional
 
-  # Epic 7: Dashboard & Visualization
+  # Epic 7 — Recurring Payments
   epic-7: backlog
-  7-1-spending-by-category-chart: backlog
-  7-2-income-vs-expenses-chart: backlog
-  7-3-net-worth-summary: backlog
-  7-4-responsive-layout-and-performance: backlog
+  recur-001-recurringdateparser-service: backlog
+  recur-002-recurring-payment-service-and-routes: backlog
+  recur-003-scheduler-recurring-payment-processor-and-missed-occurrence-detection: backlog
+  recur-004-recurring-payments-frontend: backlog
   epic-7-retrospective: optional
 
-  # Epic 8: Universal Operations
+  # Epic 8 — Budgets
   epic-8: backlog
-  8-1-duplicate-functionality: backlog
-  8-2-archive-and-restore: backlog
-  8-3-delete-with-confirmation: backlog
+  budg-001-budget-schemas-and-service: backlog
+  budg-002-budget-api-routes: backlog
+  budg-003-budget-scheduler-rolling-periods-and-threshold-alerts: backlog
+  budg-004-budget-frontend-with-drill-down: backlog
   epic-8-retrospective: optional
 
-  # Epic 9: Import/Export
+  # Epic 9 — Transfers & Debt
   epic-9: backlog
-  9-1-csv-export-with-filters: backlog
-  9-2-csv-import-with-validation: backlog
-  9-3-category-mapping-interface: backlog
-  9-4-auto-create-categories-from-import: backlog
+  debt-001-transfer-service-and-debt-computation: backlog
+  debt-002-transfer-api-routes: backlog
+  debt-003-transfers-frontend-and-debt-widget: backlog
   epic-9-retrospective: optional
 
-  # Epic 10: Alerts & Notifications
+  # Epic 10 — Formulas
   epic-10: backlog
-  10-1-alert-system-infrastructure: backlog
-  10-2-recurring-payment-alerts: backlog
-  10-3-budget-threshold-alerts: backlog
-  10-4-credit-card-and-mortgage-alerts: backlog
+  form-001-formula-service-and-routes: backlog
+  form-002-formula-management-frontend: backlog
   epic-10-retrospective: optional
 
-  # Epic 11: Deployment & Infrastructure
+  # Epic 11 — Visualisations
   epic-11: backlog
-  11-1-security-measures: backlog
-  11-2-input-validation: backlog
-  11-3-error-handling: backlog
-  11-4-audit-trail: backlog
-  11-5-rate-limiting: backlog
+  viz-001-visualisation-aggregation-api: backlog
+  viz-002-dashboard-page: backlog
+  viz-003-per-entity-chart-components: backlog
+  viz-004-comparison-mode: backlog
   epic-11-retrospective: optional
 
-  # Epic 12: Testing
+  # Epic 12 — Import / Export
   epic-12: backlog
-  12-1-unit-testing: backlog
-  12-2-integration-testing: backlog
-  12-3-end-to-end-testing: backlog
-  12-4-security-testing: backlog
+  import-001-csv-parser-and-column-detection-backend: backlog
+  import-002-import-execution-service: backlog
+  import-003-import-export-frontend-wizard: backlog
   epic-12-retrospective: optional
+
+  # Epic 13 — Settings, Currencies & Backup
+  epic-13: backlog
+  settings-001-person-and-currency-api-routes: backlog
+  settings-002-fx-rate-scheduler-job: backlog
+  settings-003-settings-page-frontend-currencies-and-profile: backlog
+  settings-004-backup-scheduler-job: backlog
+  epic-13-retrospective: optional

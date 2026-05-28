@@ -1,123 +1,105 @@
-"""Financial Tracker — FastAPI application entry point."""
+"""FastAPI application factory and entry-point.
+
+Creates the FastAPI app, registers middleware (Auth → Household → CSRF),
+error handlers, and security headers.
+"""
 
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
-from .database import get_db, init_db
-from . import config
-from .routes import admin, auth, categories, dashboard, households, invitations, accounts
-from .models import CsrfToken
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize database on startup."""
-    init_db()
-    yield
+from backend.dependencies import get_db
+from backend.middleware.auth_middleware import AuthMiddleware
+from backend.middleware.csrf_middleware import CSRFMiddleware
+from backend.middleware.household_middleware import HouseholdMiddleware
 
 
-app = FastAPI(
-    title="Financial Tracker",
-    description="Personal finance tracking for households",
-    version="0.1.0",
-    lifespan=lifespan,
-)
+# ---------------------------------------------------------------------------
+# Security Headers Middleware
+# ---------------------------------------------------------------------------
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=[
-        "Content-Type",
-        "Accept",
-        "x-csrf-token",
-        "x-session-id",
-    ],
-)
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security-focused HTTP response headers to every response."""
 
-
-# CSRF validation middleware
-@app.middleware("http")
-async def csrf_middleware(request: Request, call_next):
-    """Validate CSRF tokens for state-changing requests."""
-    # Skip CSRF validation for GET, HEAD, OPTIONS requests
-    if request.method in ("GET", "HEAD", "OPTIONS"):
-        return await call_next(request)
-    
-    # Skip CSRF validation for exempt paths (auth endpoints, health checks)
-    path = str(request.url.path)
-    if any(path.startswith(p) for p in config.settings.CSRF_EXEMPT_PATHS):
-        return await call_next(request)
-    
-    # Get CSRF token from header
-    csrf_token = request.headers.get("x-csrf-token")
-    
-    if not csrf_token:
-        return JSONResponse(
-            status_code=403,
-            content={"detail": "CSRF token missing"}
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
         )
-    
-    # Get database session
-    db = next(get_db())
-    
-    try:
-        # Find the token in database
-        csrf_record = db.query(CsrfToken).filter(
-            CsrfToken.token == csrf_token,
-            CsrfToken.used == False
-        ).first()
-        
-        if not csrf_record:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "Invalid CSRF token"}
-            )
-        
-        # Check expiration
-        from datetime import datetime
-        if csrf_record.expires_at < datetime.now():
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "CSRF token expired"}
-            )
-        
-        # Don't mark as used - allow token reuse until expiration
-        
-    finally:
-        db.close()
-    
-    return await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
 
 
-# Mount routes
-app.include_router(admin.router, prefix="/api")
-app.include_router(auth.router, prefix="/api")
-app.include_router(categories.router)
-app.include_router(accounts.router)
-app.include_router(dashboard.router)
-app.include_router(households.router)
-app.include_router(invitations.router)
+# ---------------------------------------------------------------------------
+# Exception Handlers
+# ---------------------------------------------------------------------------
 
-# Conditionally include dev-login endpoint in development mode
-if config.settings.DEV_MODE:
-    app.include_router(auth.dev_login_router, prefix="/api")
-
-# Static files for frontend
-import os
-
-STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Convert Pydantic validation errors to a consistent JSON response."""
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": "Validation failed",
+            "code": "VALIDATION_ERROR",
+            "detail": exc.errors(),
+        },
+    )
 
 
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {"status": "ok"}
+async def http_exception_handler(
+    request: Request, exc: Exception  # FastAPI HTTPException
+) -> JSONResponse:
+    """Wrap FastAPI HTTPExceptions in our standard error envelope."""
+    return JSONResponse(
+        status_code=exc.status_code,  # type: ignore[attr-defined]
+        content={
+            "error": getattr(exc, "detail", "Unknown error"),
+            "code": "HTTP_ERROR",
+            "detail": {},
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# App Factory
+# ---------------------------------------------------------------------------
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application instance."""
+    app = FastAPI(
+        title="Financial Tracker API",
+        version="0.1.0",
+    )
+
+    # --- Security headers (runs on every response) ---
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    # --- Middleware stack order: Auth → Household → CSRF ---
+    # Outer middleware runs first, so Auth validates session before
+    # Household can access request.state.person, and CSRF runs innermost.
+    app.add_middleware(AuthMiddleware)
+    app.add_middleware(HouseholdMiddleware)
+    app.add_middleware(CSRFMiddleware)
+
+    # --- Exception handlers ---
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+    # --- Health check ---
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+# Module-level app for uvicorn compatibility (uvicorn backend.main:app)
+app = create_app()
