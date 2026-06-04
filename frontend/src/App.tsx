@@ -1,7 +1,12 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useAuthStore } from './store/authStore'
+import { useAuth } from './hooks/useAuth'
 import { AppShell } from './components/layout/AppShell'
 import { DesignSystem } from './pages/DesignSystem'
+import { Login } from './pages/Login'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { Spinner } from './components/ui/Spinner'
+import { JoinHousehold } from './pages/JoinHousehold'
+import { NotFound } from './pages/NotFound'
 
 // --- Placeholder Pages ---
 import { Dashboard } from './pages/Dashboard'
@@ -16,68 +21,94 @@ import { Budgets } from './pages/Budgets'
 import { Categories } from './pages/Categories'
 import { Settings } from './pages/Settings'
 
-/**
- * AuthGuard — checks authStore.currentPerson and redirects to /login if absent.
- * Used as a wrapper for all protected routes within AppShell.
- */
-interface AuthGuardProps {
-  children: React.ReactNode
-}
-
-export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
-  const currentPerson = useAuthStore((state) => state.currentPerson)
-  const location = useLocation()
-
-  if (!currentPerson) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />
-  }
-
-  return <>{children}</>
-}
-
 // --- App ---
 
 function App() {
-  const currentPerson = useAuthStore((state) => state.currentPerson)
+  const { currentPerson, isLoading, authError } = useAuth()
+  const location = useLocation()
 
-  // If not authenticated, only allow /login and /design-system
-  if (!currentPerson) {
+  // While auth is initializing, show a minimal loading state
+  if (isLoading) {
     return (
-      <Routes>
-        <Route path="/login" element={<div className="flex items-center justify-center h-screen bg-bg text-text-primary">Login (placeholder)</div>} />
-        <Route path="/design-system" element={<DesignSystem />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+      <div className="flex items-center justify-center min-h-screen bg-bg">
+        <Spinner />
+      </div>
     )
   }
 
-  // Authenticated — all routes within AppShell
-  return (
-    <AppShell>
-      <Routes>
-        {/* Root redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+  // Not authenticated (or auth failed for a non-auth reason) — show public routes.
+  // authError=true means the server returned a non-401 error (500, network failure);
+  // in that case we show an error banner on the login page rather than silently
+  // redirecting — users are not logged out, they just can't reach authenticated routes.
+  if (!currentPerson) {
+    return (
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/login" element={
+            authError ? (
+              <div className="flex items-center justify-center min-h-screen bg-bg">
+                <div className="w-full max-w-md mx-4 text-center space-y-4">
+                  <p className="text-text-secondary text-sm">
+                    Unable to connect to the server. Please refresh the page to try again.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="text-primary text-sm hover:underline"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+            ) : <Login />
+          } />
+          <Route path="/design-system" element={<DesignSystem />} />
+          <Route path="/join/:token" element={<JoinHousehold />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </ErrorBoundary>
+    )
+  }
 
-        {/* Design system — always accessible in dev */}
+  // Authenticated — if on /login, redirect based on default_view (AC 3)
+  // Both 'household' and 'personal' resolve to /dashboard for now; branch exists for future routing split
+  if (location.pathname === '/login') {
+    const destination = currentPerson.defaultView === 'personal' ? '/dashboard' : '/dashboard';
+    return <Navigate to={destination} replace />
+  }
+
+  // Authenticated — design-system always standalone; all other routes inside AppShell
+  return (
+    <ErrorBoundary>
+      <Routes>
+        {/* Design system — always rendered without AppShell regardless of auth state */}
         <Route path="/design-system" element={<DesignSystem />} />
 
-        {/* Module routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/accounts" element={<Accounts />} />
-        <Route path="/capital" element={<Capital />} />
-        <Route path="/assets" element={<Assets />} />
-        <Route path="/insurance" element={<Insurance />} />
-        <Route path="/transactions" element={<Transactions />} />
-        <Route path="/recurring-payments" element={<RecurringPayments />} />
-        <Route path="/transfers" element={<Transfers />} />
-        <Route path="/budgets" element={<Budgets />} />
-        <Route path="/categories" element={<Categories />} />
-        <Route path="/settings" element={<Settings />} />
+        {/* Join household — rendered without AppShell */}
+        <Route path="/join/:token" element={<JoinHousehold />} />
 
-        {/* 404 catch-all */}
-        <Route path="*" element={<div className="flex items-center justify-center h-full text-text-secondary">404 — Not Found</div>} />
+        {/* All other routes inside AppShell */}
+        <Route path="/*" element={
+          <AppShell>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/accounts" element={<Accounts />} />
+              <Route path="/capital" element={<Capital />} />
+              <Route path="/assets" element={<Assets />} />
+              <Route path="/insurance" element={<Insurance />} />
+              <Route path="/transactions" element={<Transactions />} />
+              <Route path="/recurring-payments" element={<RecurringPayments />} />
+              <Route path="/transfers" element={<Transfers />} />
+              <Route path="/budgets" element={<Budgets />} />
+              <Route path="/categories" element={<Categories />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AppShell>
+        } />
       </Routes>
-    </AppShell>
+    </ErrorBoundary>
   )
 }
 

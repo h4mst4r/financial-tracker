@@ -7,8 +7,6 @@
  * ARCH §3.2 — HTTP client layer
  */
 
-import { useAlertStore } from '../store/alertStore';
-
 // --- Lazy import authStore to avoid circular dependencies ---
 // We use a getter function so the store is only accessed when needed.
 let getAuthStore: () => { csrfToken: string | null; clearAuth: () => void } | undefined;
@@ -75,10 +73,17 @@ export async function apiClient<T = unknown>(config: ApiRequestConfig): Promise<
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+  }
+
+  // Dev fallback: Vite proxy strips Set-Cookie, so session is passed via header
+  const devSessionToken = sessionStorage.getItem('dev_session_token')
+  if (devSessionToken) {
+    headers['X-Session-Token'] = devSessionToken
   };
 
-  // Attach CSRF token for mutating requests
-  if (!skipCsrf && getAuthStore) {
+  // Attach CSRF token for mutating requests; skip for safe methods automatically (E99)
+  const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+  if (!skipCsrf && !SAFE_METHODS.has(method) && getAuthStore) {
     const authStore = getAuthStore();
     const csrfToken = authStore?.csrfToken ?? null;
     if (csrfToken) {
@@ -100,8 +105,11 @@ export async function apiClient<T = unknown>(config: ApiRequestConfig): Promise<
       const authStore = getAuthStore();
       authStore?.clearAuth();
     }
-    // Hard redirect to ensure clean state
-    window.location.href = '/login';
+    // Hard redirect only when on a protected page — not when already on /login
+    // (fetchMe() from useAuth on the login page would otherwise cause an infinite reload loop)
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
     throw new ApiError(401, url, 'Unauthorized — session expired');
   }
 
@@ -114,6 +122,11 @@ export async function apiClient<T = unknown>(config: ApiRequestConfig): Promise<
       details = response.statusText;
     }
     throw new ApiError(response.status, url, `Request failed with status ${response.status}`, details);
+  }
+
+  // 204 No Content — body is absent; reading it throws in some proxy environments
+  if (response.status === 204) {
+    return { data: null as T, status: 204 };
   }
 
   // Parse successful response
@@ -143,6 +156,6 @@ export const api = {
   patch: <T = unknown>(url: string, body?: unknown) =>
     apiClient<T>({ method: 'PATCH', url, body }),
 
-  delete: <T = unknown>(url: string) =>
-    apiClient<T>({ method: 'DELETE', url }),
+  delete: <T = unknown>(url: string, body?: unknown) =>
+    apiClient<T>({ method: 'DELETE', url, body }),
 };

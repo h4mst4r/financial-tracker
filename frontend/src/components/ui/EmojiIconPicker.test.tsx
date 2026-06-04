@@ -6,7 +6,7 @@ import { EmojiIconPicker } from './EmojiIconPicker';
 describe('EmojiIconPicker', () => {
 	it('renders with placeholder', () => {
 		render(<EmojiIconPicker onChange={() => {}} />);
-		expect(screen.getByText('Select')).toBeInTheDocument();
+		expect(screen.getByText('Pick emoji or icon…')).toBeInTheDocument();
 	});
 
 	it('opens picker on click', async () => {
@@ -23,14 +23,14 @@ describe('EmojiIconPicker', () => {
 		render(<EmojiIconPicker onChange={() => {}} />);
 		await user.click(screen.getByRole('button'));
 		await user.click(screen.getByText('Icons'));
-		expect(screen.getByText('Icons')).toHaveClass('bg-accent/20');
+		expect(screen.getByText('Icons')).toHaveClass('bg-accent-active');
 	});
 
 	it('searches emojis', async () => {
 		const user = userEvent.setup();
 		render(<EmojiIconPicker onChange={() => {}} />);
 		await user.click(screen.getByRole('button'));
-		const searchInput = screen.getByPlaceholderText('Search...');
+		const searchInput = screen.getByPlaceholderText('Search…');
 		await user.type(searchInput, 'heart');
 		await waitFor(() => {
 			expect(searchInput).toHaveValue('heart');
@@ -66,7 +66,9 @@ describe('EmojiIconPicker', () => {
 				<button type="button">Outside</button>
 			</div>
 		);
-		await user.click(screen.getByRole('button', { name: /select/i }));
+		const buttons = screen.getAllByRole('button');
+		// First button is the EmojiIconPicker trigger
+		await user.click(buttons[0]);
 		await waitFor(() => {
 			expect(screen.getByText('Emojis')).toBeInTheDocument();
 		});

@@ -6,7 +6,7 @@ import { Accordion } from './Accordion';
 describe('Accordion', () => {
   it('renders collapsed by default', () => {
     render(
-      <Accordion items={[{ title: 'Section 1', content: 'Content 1' }]} />
+      <Accordion items={[{ label: 'Section 1', content: 'Content 1' }]} />
     );
     expect(screen.getByText('Section 1')).toBeInTheDocument();
     expect(screen.queryByText('Content 1')).not.toBeInTheDocument();
@@ -14,7 +14,7 @@ describe('Accordion', () => {
 
   it('expands on click', async () => {
     render(
-      <Accordion items={[{ title: 'Section 1', content: 'Content 1' }]} />
+      <Accordion items={[{ label: 'Section 1', content: 'Content 1' }]} />
     );
     await userEvent.click(screen.getByText('Section 1'));
     expect(await screen.findByText('Content 1')).toBeInTheDocument();
@@ -22,7 +22,7 @@ describe('Accordion', () => {
 
   it('collapses when clicked again', async () => {
     render(
-      <Accordion items={[{ title: 'Section 1', content: 'Content 1' }]} />
+      <Accordion items={[{ label: 'Section 1', content: 'Content 1' }]} />
     );
     await userEvent.click(screen.getByText('Section 1'));
     expect(screen.getByText('Content 1')).toBeInTheDocument();
@@ -35,8 +35,8 @@ describe('Accordion', () => {
       <Accordion
         allowMultiple
         items={[
-          { title: 'Section 1', content: 'Content 1' },
-          { title: 'Section 2', content: 'Content 2' },
+          { label: 'Section 1', content: 'Content 1' },
+          { label: 'Section 2', content: 'Content 2' },
         ]}
       />
     );
@@ -50,8 +50,8 @@ describe('Accordion', () => {
     render(
       <Accordion
         items={[
-          { title: 'Section 1', content: 'Content 1' },
-          { title: 'Section 2', content: 'Content 2' },
+          { label: 'Section 1', content: 'Content 1' },
+          { label: 'Section 2', content: 'Content 2' },
         ]}
       />
     );

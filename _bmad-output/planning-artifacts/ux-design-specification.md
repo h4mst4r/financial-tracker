@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — UX Design Specification
-version: 2.0
+version: 2.3
 status: living
 created: 2026-05-26
 authority: Complete design system and UI component reference. Derives from
@@ -14,6 +14,29 @@ authority: Complete design system and UI component reference. Derives from
 > and VisualizationFilter architecture are specified in `entity-design-philosophy.md` [EDP].
 > This document specifies *how the application looks, feels, and behaves* — every
 > component, every interaction state, every animation, every accessibility rule.
+
+---
+
+## 0a. Developer Process Standards
+
+These process requirements apply to all frontend stories from Epic 3 onwards (established: Epic 2 Retrospective, 2026-06-01).
+
+### Visual Verification — Part of Done
+
+Before any frontend story is marked Done, the delivered component(s) must be visually verified against this specification, either:
+
+- On the `/design-system` page — use the relevant sub-section as the verification surface, or
+- In the app in-context — compare rendered output against the component section referenced in the story's **Ref:** field
+
+Tests passing is necessary but not sufficient. A story with green tests but unverified visual output is **not Done**.
+
+### No Magic Values
+
+All hardcoded colours, opacities, sizes, z-indices, transition durations, and breakpoints that represent design decisions must be named tokens in `frontend/src/index.css`. See §1.9 for the complete utility table. If a value is not listed there, add it before using it in a component.
+
+### CSS Nuances — Document at Story-Close
+
+Every frontend story's Dev Agent Record must include a **"Known CSS / Architecture Nuances"** section capturing any non-obvious behaviour discovered during implementation. Future agents inherit the knowledge, not the bugs.
 
 ---
 
@@ -50,23 +73,35 @@ anywhere in the codebase.
 @theme {
   /* === BACKGROUNDS === */
   --color-bg:               #09090f;   /* Page background — deepest layer */
-  --color-surface:          #111118;   /* Cards, panels */
-  --color-surface-raised:   #1a1a24;   /* Elevated cards, dropdowns */
-  --color-surface-overlay:  #22222e;   /* Modals, drawers */
-  --color-surface-hover:    #2a2a38;   /* Hover state on interactive surfaces */
+  --color-surface:          #16162a;   /* Sidebar, topbar, main content areas */
+  --color-surface-raised:   #1c1c34;   /* Cards, panels, inputs, picker dropdowns */
+  --color-surface-hover:    #1e1e38;   /* Full-width list row hover (e.g. dropdown options, table rows) */
+  --color-surface-active:   #26264a;   /* Small button hover INSIDE panels (emoji/icon grid, calendar days) — more visible than surface-hover on raised backgrounds */
+  --color-surface-overlay:  #222244;   /* Modals, drawers, elevated floating panels */
 
   /* === BORDERS === */
-  --color-border:           #2a2a3a;   /* Default border */
-  --color-border-strong:    #3a3a52;   /* Emphasized borders */
-  --color-border-focus:     #6366f1;   /* Focus ring — matches primary */
-  --color-border-error:     #ef4444;
+  --color-border:                #2a2a45;              /* Default border */
+  --color-border-light:          #3a3a5c;              /* Hover border */
+  --color-border-strong:         #4a4a6a;              /* Focused non-picker inputs */
+  --color-border-focus:          #6366f1;              /* Keyboard focus ring — matches primary */
+  --color-border-error:          #ef4444;              /* Input error border */
+  --color-border-state:          rgb(99 102 241 / 0.3); /* Controls with persistent selection state */
+  --color-border-state-subtle:   rgb(99 102 241 / 0.2); /* Internal divider within state controls */
+
+  /* === FOCUS RING GLOWS === */
+  --color-glow-primary:    rgb(99 102 241 / 0.2);   /* ring colour: focused text inputs (Input, Checkbox, etc.) */
+  --color-glow-accent:     rgb(6 182 212 / 0.2);    /* ring colour: open/focused picker triggers (Dropdown, DatePicker, ColourPicker, EmojiIconPicker) */
+  --color-glow-error:      rgb(239 68 68 / 0.2);    /* ring colour: focused error-state inputs */
+
+  /* === BACKDROP === */
+  --color-backdrop:        rgb(0 0 0 / 0.7);         /* modal / drawer overlay */
 
   /* === TEXT === */
   --color-text:             #f1f1f5;   /* Primary text */
   --color-text-secondary:   #9898aa;   /* Labels, captions */
   --color-text-muted:       #606072;   /* Placeholders, disabled labels */
   --color-text-disabled:    #3a3a4a;   /* Disabled content */
-  --color-text-inverse:     #09090f;   /* Text on light backgrounds */
+  --color-text-inverse:     #ffffff;   /* Text on coloured/accent surfaces (primary buttons, avatar initials, entity-coloured chips). NOT for light backgrounds — use --color-text for standard dark-surface text. */
   --color-text-link:        #818cf8;   /* Links */
 
   /* === SEMANTIC COLOURS === */
@@ -112,6 +147,25 @@ anywhere in the codebase.
   --chart-8:  #14b8a6;
 }
 ```
+
+**Focus ring / glow tokens** — used as `ring-2 ring-glow-*` on focused elements:
+
+| Token | Value | Applies to |
+|---|---|---|
+| `ring-glow-primary` | `rgb(99 102 241 / 0.2)` | Text inputs (`Input`, search fields, hex input in ColourPicker) |
+| `ring-glow-accent` | `rgb(6 182 212 / 0.2)` | Picker triggers when open (Dropdown, DatePicker, ColourPicker, EmojiIconPicker); search input inside picker panels |
+| `ring-glow-error` | `rgb(239 68 68 / 0.2)` | Any input in error state |
+
+Pattern: `focus:ring-2 focus:ring-glow-primary focus:border-border-focus` (text inputs) or `open ? 'ring-2 ring-glow-accent border-accent' : '...'` (picker triggers). Never mix; pickers use accent (cyan), text inputs use primary (indigo), errors always override with error (red).
+
+**`text-text-inverse` semantics** — white text for coloured backgrounds:
+
+`--color-text-inverse: #ffffff`. Used exclusively on surfaces that have a coloured (non-neutral) background:
+- Primary Button text (`bg-primary` → `text-text-inverse`)
+- Active SegmentedControl pill (`bg-primary` → `text-text-inverse`)
+- Avatar initials on entity-colour backgrounds (`bg-entity-*` → `text-text-inverse`)
+
+Never use `text-text-inverse` on neutral dark surfaces (`bg-surface`, `bg-surface-raised`, etc.) — use `text-text-primary` (#e8e8f0) there. `text-text-inverse` and `text-text-primary` are not interchangeable.
 
 **Colour-blind safety:**
 The 8-colour chart palette is distinguishable under Deuteranopia, Protanopia, and
@@ -212,29 +266,41 @@ so decimal points align in columns.
 
 ```css
 @theme {
-  --z-below:    -1;
-  --z-base:      0;
-  --z-raised:   10;    /* Cards in hover state */
-  --z-dropdown: 100;   /* Dropdowns, popovers */
-  --z-sticky:   200;   /* Sticky headers */
-  --z-sidebar:  300;   /* Sidebar overlay on mobile */
-  --z-modal:    400;   /* Modals */
-  --z-toast:    500;   /* Toast notifications */
-  --z-tooltip:  600;   /* Tooltips — highest */
+  --z-below:    -1;    /* Reserved; no current use */
+  --z-base:      0;    /* Normal document flow */
+  --z-raised:   10;    /* Cards in hover state (shadow lift) */
+  --z-dropdown: 100;   /* Dropdown panels, DatePicker, ColourPicker, EmojiIconPicker */
+  --z-sticky:   200;   /* Table <thead> sticky positioning */
+  --z-sidebar:  300;   /* Sidebar on mobile overlay */
+  --z-modal:    400;   /* Modal backdrop AND modal panel (backdrop is absolute; panel is relative) */
+  --z-toast:    500;   /* Toast notifications — above modals */
+  --z-tooltip:  600;   /* Tooltips — topmost; always readable */
 }
 ```
+
+**Stacking context rules:**
+
+- **Floating panels** (Dropdown, DatePicker, ColourPicker, EmojiIconPicker) use `createPortal(document.body)` to escape parent `overflow-hidden` containers that would clip them. They receive `position: fixed` + `z-dropdown`.
+- **Modal backdrop + panel** both use `z-modal` (400). The backdrop is `fixed inset-0`; the panel is `relative z-modal` inside the backdrop's flex container — not a separate stacking context.
+- **Toast container** is rendered in `main.tsx` (outside `<AppShell>`) so it is never trapped by `AppShell`'s overflow-hidden. It is positioned `fixed top-[80px]` — 80px from top to sit below the 64px Topbar with an 16px gap.
+- **Tooltip** is always in the DOM (never portalled); visibility is controlled by CSS `opacity` and `transition-delay`. Since it lives inside the component tree it inherits the parent's stacking context — it relies on `z-tooltip` (600) being higher than any ancestor context.
+- **Never use raw integers** for z-index. If a new layer is needed, add a named `--z-*` token to `index.css`.
 
 ### 1.7 Breakpoints
 
 ```css
 @theme {
-  --bp-sm:  640px;    /* Small phones */
-  --bp-md:  768px;    /* Tablets */
-  --bp-lg:  1024px;   /* Laptop */
-  --bp-xl:  1280px;   /* Desktop */
-  --bp-2xl: 1536px;   /* Wide desktop */
+  --breakpoint-xs:  480px;   /* Topbar filter bar collapse threshold (§5.3) */
+  --breakpoint-sm:  640px;
+  --breakpoint-md:  768px;   /* Sidebar switches to icon-only below this */
+  --breakpoint-lg:  1024px;  /* Full sidebar appears above this */
+  --breakpoint-xl:  1280px;
+  --breakpoint-2xl: 1536px;
 }
 ```
+
+All Tailwind responsive utilities use these named tokens (`xs:`, `sm:`, `md:`, etc.).
+Never use arbitrary bracket breakpoints (`min-[480px]:`) — add a named token instead.
 
 ### 1.8 Motion Tokens
 
@@ -255,6 +321,37 @@ so decimal points align in columns.
   --ease-spring:     cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 ```
+
+### 1.9 Component Size Utilities and Interaction Utilities
+
+Named `@utility` classes in `index.css` that encode specific component dimensions and interaction
+patterns. **Always prefer these over arbitrary bracket values.** If a needed size doesn't exist,
+add it to `index.css` with a semantic name — never inline `w-[320px]` in a component.
+
+| Utility | Value | Used by |
+|---------|-------|---------|
+| `max-w-tooltip` | 280px | Tooltip bubble |
+| `w-date-picker` | 320px | DatePicker calendar panel |
+| `max-h-dropdown-list` | 280px | Dropdown scrollable option list |
+| `max-w-dropdown-chip` | 10rem | Multi-select chip truncation |
+| `w-colour-picker` | 280px | ColourPicker panel |
+| `w-emoji-picker` | 480px | EmojiIconPicker panel |
+| `w-drawer-sm` | 480px | Drawer (medium) |
+| `w-drawer-md` | 600px | Drawer (large) |
+| `max-w-dialog-xs` | 400px | ConfirmationDialog |
+| `max-w-dialog-sm` | 560px | Modal (small) |
+| `max-w-dialog-md` | 720px | Modal (medium) |
+| `max-w-dialog-lg` | 960px | Modal (large) |
+| `min-h-error-state` | 200px | ErrorBoundary fallback |
+| `min-w-toast` / `max-w-toast` | 320px / 400px | Toast notification |
+| `min-w-context-menu` | 180px | ContextMenu panel |
+| `bg-accent-subtle` | primary at 15% opacity | Nav item active background |
+| `bg-control-active` | primary at 20% opacity | Navigation/control tab active background — SegmentedControl, Topbar tabs, view toggles. **NOT for picker panel tabs.** |
+| `bg-accent-active` | accent/cyan at 20% opacity | **Active tab inside picker panels only** — ColourPicker (Palette/Hex), EmojiIconPicker (Emojis/Icons). Always paired with `text-accent`. Never use `bg-control-active` inside a picker panel. |
+| `ring-glow-accent` | `--color-glow-accent` (cyan 20%) | Open-state ring on picker triggers (Dropdown, DatePicker, ColourPicker, EmojiIconPicker) |
+| `bg-entity-accent-muted` | `--entity-accent` at 15% | Badge entity variant background |
+| `border-entity-accent` | 4px solid `--entity-accent` | Demo contexts without a conflicting `border` class |
+| `text-entity-accent` | `--entity-accent` colour | Badge entity variant text |
 
 ---
 
@@ -300,8 +397,8 @@ text `--text-sm`, colour `--color-text`.
 **States:**
 - `default`: base styles
 - `hover`: border `--color-border-strong`
-- `focus`: border `--color-border-focus`; box-shadow `0 0 0 3px rgb(99 102 241 / 0.2)`
-- `error`: border `--color-border-error`; icon slot shows error icon in red
+- `focus`: border `--color-border-focus`; ring `ring-glow-primary` (`--color-glow-primary` = `rgb(99 102 241 / 0.2)`)
+- `error`: border `--color-border-error`; ring `ring-glow-error` (`--color-glow-error`); icon slot shows error icon in red
 - `disabled`: opacity 0.5; background `--color-surface`; cursor not-allowed
 - `read-only`: background transparent; border dashed; no focus ring
 
@@ -334,7 +431,7 @@ Padding `2px --space-2`. Text `--text-xs --font-medium`.
 | `error` | `--color-error-muted` | `--color-error` |
 | `info` | `--color-info-muted` | `--color-info` |
 | `neutral` | `--color-surface-raised` | `--color-text-secondary` |
-| `entity` | `var(--entity-accent, --color-primary)` at 15% | `var(--entity-accent)` |
+| `entity` | `bg-entity-accent-muted` utility (15% opacity, via `--entity-accent` CSS var) | `text-entity-accent` utility (via `--entity-accent` CSS var) |
 
 **Chip (dismissible):** Badge + trailing × button. Used for VisualizationFilter
 active filters in breadcrumb trail. Hover on × shows red tint.
@@ -342,9 +439,22 @@ active filters in breadcrumb trail. Hover on × shows red tint.
 ### 2.5 Avatar
 
 Circular. Sizes: `sm`=24px, `md`=32px, `lg`=40px, `xl`=56px.
-Displays person's `picture_url` if available; falls back to initials
-(first letter of first + last name) on `--color-entity-person` background.
-Archived persons: greyscale + 50% opacity.
+
+**Image path:** Displays `pictureUrl` (Google profile photo) when available and loads without error. If `pictureUrl` is null, empty, or the `<img>` fires `onError`, falls back to initials.
+
+**Initials algorithm:**
+```
+"Ben Tan"      → "BT"   (first char of first word + first char of last word, uppercased)
+"Kim"          → "KI"   (single word — first 2 chars)
+""  / undefined → "?"   (no name available)
+```
+Split on whitespace; if two or more parts, take `parts[0][0] + parts[last][0]`. If one part, take `parts[0].slice(0, 2)`. Always `.toUpperCase()`.
+
+**Initials fallback background:** `--color-entity-person` (sky blue `#38bdf8`). Text: `--color-text-inverse` (white). This maximises contrast at all avatar sizes without anti-aliasing issues.
+
+**Alt text:** `alt={name ?? 'Avatar'}` on `<img>`; `aria-label={name ?? 'Avatar'}` on the div fallback (`role="img"`).
+
+Archived persons: `grayscale opacity-50`.
 
 **AvatarStack:** Multiple overlapping avatars for account owners.
 Max 3 shown + "+N" overflow badge.
@@ -363,9 +473,16 @@ Colour: inherits `currentColor`. Never hardcoded.
 
 ### 2.7 Tooltip
 
-Trigger: hover (200ms delay) or focus. Max width: 280px. Background: `--color-surface-overlay`.
-Border: `--color-border-strong`. `--radius-md`. `--shadow-lg`. `--text-xs`.
-Padding: `--space-2 --space-3`. Arrow pointing to trigger. `z-index: --z-tooltip`.
+**CSS-primary implementation** — visibility is driven by CSS `group-hover` and `group-focus-within`
+on the wrapper element. The tooltip bubble is always in the DOM; only opacity changes. Never use `setTimeout` or `onMouseEnter/Leave` state — CSS transitions handle show/hide.
+
+Trigger: hover or focus. Delay: 200ms via CSS `transition-delay` (inline style `transitionDelay: '200ms'` on the bubble). Max width: `max-w-tooltip` (280px). Text wrapping: `whitespace-normal break-words` — the bubble wraps at word boundaries and hyphenates long words. Never `whitespace-nowrap` (single-line tooltips silently overflow on long strings). Background: `--color-surface-overlay`. Border: `--color-border-strong`. `--radius-md`. `--shadow-lg`. `--text-xs`. Padding: `--space-2 --space-3`. Arrow pointing to trigger. `z-index: --z-tooltip` (600).
+
+Escape key dismiss: JS listener sets a `dismissed` flag that forces `opacity-0` via `!opacity-0` override until the next hover/focus clears the flag.
+
+**Viewport boundary clamping:** The tooltip is horizontally centred on the trigger by default. When the trigger is near a viewport edge, JS measures the tooltip's rendered width via `requestAnimationFrame` on each show and adjusts the `left` offset so the bubble stays ≥ 8px from the viewport edge. The arrow's horizontal position follows the clamped offset (not always centred on trigger).
+
+**Vertical auto-flip:** Renders above the trigger by default (`bottom-full mb-2`). If space above trigger < tooltip height, JS flips to below (`top-full mt-2`, arrow pointing upward). No `placement` prop needed — always self-corrects. Decision made by comparing `wrapperRect.top` (space above) vs `viewportHeight - wrapperRect.bottom` (space below).
 
 **Formula hover tooltip** [EDP §11]: Wider variant (360px). Shows:
 formula name (bold), variable inputs (table), computed result (large + highlighted),
@@ -399,6 +516,28 @@ Three sizes: `sm`=16px, `md`=24px, `lg`=40px.
 SVG circle with stroke-dasharray animation. Colour: `--color-primary`.
 Animation: 800ms linear infinite rotation. Respects `prefers-reduced-motion`
 (pauses animation; shows static arc).
+
+### 2.10 Segmented Control
+
+Used for binary or small-N mode toggles that hold **persistent state**. First instance:
+the Household / My Finances view toggle in the Sidebar.
+
+**Visual language:**
+- Container: `--radius-md`, `border: --color-border-state` (primary at 30% opacity) — the tinted border
+  is the visual cue that this control holds state, not just performs a transient action.
+  `overflow-hidden` keeps all four border edges pixel-flush regardless of inner content height.
+- Background: `--color-bg` (recessed relative to sidebar's `--color-surface`)
+- Active pill: `background: --color-primary`, `color: --color-text-inverse`, `font-weight: medium`
+- Inactive pill: `color: --color-text-secondary`, hover `--color-surface-hover` — inherits nav item language
+- Internal divider between pills: `border: --color-border-state-subtle` (primary at 20% opacity)
+- Typography: `--text-sm --font-medium` — same as sidebar nav item labels
+
+**Collapsed variant (icon-only sidebar):** pills stacked vertically; single letter (H / M) per option.
+Divider becomes `border-top` instead of `border-left`. Same active/inactive token set.
+
+**Rule:** Every segmented control instance must reference `--color-border-state` for its outer border.
+Never use `border-primary/30` or similar arbitrary opacity fractions — these are design decisions,
+not implementation details, and belong in named tokens.
 
 ---
 
@@ -473,26 +612,52 @@ opens a calendar popover.
 
 Two modes, toggled by a tab:
 
-**Palette mode (default):** Grid of 32 preset swatches (8 × 4). Each 28×28px circle.
-Selected: white ring. Preset palette includes the entity accent colours and
-common financial category colours (food = orange, transport = blue, etc.).
+**Palette mode (default):** Two labelled sections:
+1. **Entity colours** — 12 unique entity accent swatches (6-col grid, 28×28px circles, `title` shows entity name). These are the 14 entity accent tokens deduplicated to 12 unique hex values. Selected swatch: `ring-2 ring-offset-1 ring-accent ring-offset-surface-raised` — uses design tokens, never `ring-white/80` (magic value).
+2. **Extended palette** — 16 curated general-purpose swatches (8-col grid) for categories and custom entities that don't match an entity type.
 
-**Hex mode:** Text input for `#RRGGBB` value. Live preview swatch left of input.
-Validates on blur — rejects non-hex values.
+**Hex mode:** Text input for `#RRGGBB` value. Live preview swatch left of input. Validates on blur — rejects non-hex values.
 
-Input renders the selected colour as a filled circle + hex value in the trigger.
+Trigger renders the selected colour as a filled circle + hex value. Trigger placeholder: closed shows current value; no empty state (always has a default colour).
+
+**Swatch buttons:** `focus:outline-none` — browser default focus rings must be suppressed. The `ring-accent ring-offset-surface-raised` selected indicator is visible against any swatch colour without using a magic value.
+
+**Token alignment (must match Dropdown / DatePicker / EmojiIconPicker):**
+- Trigger open state: `border-accent ring-2 ring-glow-accent` — cyan. Using `border-primary` or `ring-glow-primary` is incorrect.
+- **Panel tabs (Palette / Hex) active state: `bg-accent-active text-accent font-medium`** — cyan. The picker panel is an accent-themed context; indigo (`bg-control-active text-primary`) is for navigation/control tabs, NOT picker panel tabs. This is the `bg-accent-active` utility's primary use case.
+- Panel tabs inactive state: `text-text-secondary hover:text-text-primary hover:bg-surface-active` — `text-text-muted` is too dark for interactive text on dark backgrounds (~1.9:1 contrast).
+- Hex text input focus: `border-border-focus ring-glow-primary` — text input, follows TextInput convention (indigo).
 
 ### 3.8 Emoji / Icon Picker
 
 Used for category icons. Trigger: shows current emoji/icon in a pill button.
 
-**Picker panel:** 360px wide.
-- Search bar at top (searches emoji names and icon names)
+**Picker panel:** `w-emoji-picker` (480px, matches Drawer `md` width for visual consistency).
+- Search bar at top (searches emoji names and icon names in real time)
 - Tabbed: Emojis | Icons (Lucide subset)
-- Emoji grid: 10 columns, 40px cells, groups by category (Smileys, Food, Travel, Objects, etc.)
-- Icon grid: same layout showing Lucide icon outlines
-- Hover: `--color-surface-hover` background; tooltip shows name
-- Recently used: top row of 10 most recently selected
+- **Grid button hover: `bg-surface-active`** — `bg-surface-hover` is nearly invisible on `bg-surface-raised` panels (delta: #1c1c34 → #1e1e38 = 4 per channel). Use `bg-surface-active` (#26264a) for small items inside panels.
+- `title` attribute on each button shows name on hover
+- Recently used: top row of 10 most recently selected (component state); shown when not searching
+
+**Emojis tab — 8 grouped sections (~160 emojis, 10 columns, sticky section headers):**
+Finance · Food & Drink · Home & Utilities · Transport · Health & Fitness · Shopping & Lifestyle · Entertainment · Education & Work
+
+**Icons tab — 9 grouped Lucide sections (~86 icons, 8 columns, sticky section headers):**
+Finance · Home & Utilities · Food & Drink · Transport · Health · Shopping · Entertainment · Work · General
+
+Finance section leads in both tabs since this is a financial tracker. Scroll area: `max-h-56`.
+
+**Trigger placeholder:** When no value is selected, show `Pick emoji or icon…` in `text-text-muted`. Never just "Select" — the placeholder must communicate what kind of content is being selected.
+
+**Clear button:** When a value is selected and the picker is closed, show an X button on the trigger (right side, `<span role="button">` to avoid nesting `<button>` inside `<button>`). Clicking clears the selection (calls `onChange('', 'emoji')`).
+
+**Icon buttons inside panel:** `focus:outline-none` on all emoji and icon buttons — browser default focus rings must be suppressed.
+
+**Token alignment (must match Dropdown / DatePicker / ColourPicker):**
+- Trigger open state: `border-accent ring-2 ring-glow-accent` — cyan. Never raw `ring-accent/20`.
+- **Panel tabs (Emojis / Icons) active state: `bg-accent-active text-accent font-medium`** — cyan. Matches ColourPicker tabs. `bg-control-active text-primary` (indigo) is for navigation tabs, not picker panel tabs.
+- Panel tabs inactive state: `text-text-secondary hover:text-text-primary hover:bg-surface-active`.
+- Search input focus: `border-accent ring-glow-accent` — search is within the picker context; inherits accent colour.
 
 ### 3.9 Currency Input (MonetaryValue Component)
 
@@ -560,7 +725,11 @@ Base card: `background: --color-surface`, `border: 1px solid --color-border`,
 
 **Card hover lift:** On hover, `box-shadow: --shadow-md` and
 `translate: 0 -2px`. Transition `--duration-fast --ease-out`.
-Left border accent: `4px solid var(--entity-accent)` — colour set by entity type [EDP §14.5].
+Left border accent: **inline style** `borderLeft: '4px solid var(--entity-accent)'` — set directly
+on the Card element alongside `--entity-accent` CSS var. Inline style is used rather than the
+`border-entity-accent` utility because Tailwind's `border-width: 1px` shorthand (applied by the
+`border` class in the Card variant) can override CSS utility longhands via cascade ordering.
+Colour set by entity type [EDP §14.5]. Never hardcode the hex color directly — always use the CSS var.
 
 **Card variants:**
 - `default`: base styles
@@ -574,18 +743,41 @@ Centred overlay. Backdrop: `background: rgb(0 0 0 / 0.7)`, `backdrop-filter: blu
 Panel: `background: --color-surface-overlay`, `--radius-xl`, `--shadow-xl`.
 Max-width: 560px (sm), 720px (md), 960px (lg). Width: `calc(100vw - 2rem)` on mobile.
 
-**Anatomy:**
+**Anatomy (titled modals):**
 - Header: title (left) + close button × (right); `padding: --space-5 --space-6`; border-bottom
 - Body: scrollable; `padding: --space-6`; max-height 60vh
 - Footer: right-aligned action buttons; `padding: --space-4 --space-6`; border-top
 
+**Headerless modals (no title):** When no title is provided (e.g. `ConfirmationDialog`), the
+header strip and border-bottom are omitted entirely. The × close button is positioned absolutely
+at `top-3 right-3`. The consuming component provides its own heading with `id="modal-title"`
+so `aria-labelledby` resolves correctly. This prevents the visual artefact of an empty dark
+header band making the body appear as a separate, lighter surface.
+
+**Form controls inside modals:** Inputs and dropdowns use `--color-surface-raised` (#1c1c34),
+which is darker than the modal background (`--color-surface-overlay`, #222244). This creates
+an intentional recessed/basin affordance — the darker field clearly demarcates where the user
+types or selects. Do not change input tokens to match the overlay. See EDP §14.6.
+
+**Dirty-guard banner:** When a form modal has unsaved changes and the user clicks × or the backdrop, an inline banner appears inside the modal above the body (not a `window.confirm` dialog): `bg-warning-muted border border-warning/30 rounded-md px-3 py-2 text-sm text-warning`. It asks "You have unsaved changes. Leave anyway?" with "Discard" (secondary) and "Keep editing" (primary) buttons. Only shown when the consumer passes `isDirty={true}`.
+
+**Sizes:**
+| Size | Max width | Used by |
+|---|---|---|
+| `xs` | 400px (`max-w-dialog-xs`) | ConfirmationDialog |
+| `sm` | 560px (`max-w-dialog-sm`) | Default form modals |
+| `md` | 720px (`max-w-dialog-md`) | Wide entity modals |
+| `lg` | 960px (`max-w-dialog-lg`) | Complex forms, preview modals |
+| `fullscreen` | 100vw / 100vh, no radius | Mobile-optimised views |
+
+**Mobile bottom-sheet (below `md` breakpoint):** On narrow viewports, the modal container uses `items-end` instead of `items-center` — the panel slides up from the bottom edge. The panel receives `rounded-t-xl` only (no bottom radius). This mirrors native mobile sheet behaviour.
+
 **Variants:**
-- `form`: standard entity create/edit modal
-- `confirmation`: smaller (max 400px); single-paragraph message + Confirm/Cancel
+- `form`: standard entity create/edit modal — always titled
+- `confirmation`: `ConfirmationDialog` component — always headerless; `size="xs"` (max 400px)
 - `fullscreen`: no max-width; full viewport on mobile
 
-**Close behaviour:** × button, Escape key, or backdrop click. Unsaved changes trigger
-a confirmation dialog before closing.
+**Close behaviour:** × button, Escape key, or backdrop click. Unsaved changes trigger the dirty-guard banner (see above).
 
 **Focus trap:** Tab key cycles only through modal content while open. On open,
 focus moves to first interactive element. On close, focus returns to trigger.
@@ -593,7 +785,13 @@ focus moves to first interactive element. On close, focus returns to trigger.
 ### 4.3 Drawer / Side Panel
 
 Slides in from the right. Width: 480px (md), 600px (lg). Full-width on mobile.
+Panel: `background: --color-surface-overlay` (same as Modal — NOT `--color-surface`).
 Backdrop same as Modal. Header + scrollable body + optional footer.
+
+**Form controls inside drawers:** Same recessed-basin rule as Modal (EDP §14.6 Rule 2) — inputs use
+`--color-surface-raised` (#1c1c34), which is darker than the drawer's `--color-surface-overlay` (#222244),
+creating a visible inset. Using `--color-surface` for the drawer panel instead would invert this relationship
+and make inputs appear elevated (lighter than the panel) — incorrect.
 
 Used for: entity detail views, filter panels, import preview.
 
@@ -601,9 +799,15 @@ Animation: `translateX(100%) → translateX(0)`, `--duration-slow --ease-out`.
 
 ### 4.4 Accordion / Collapsible
 
-Header row (full-width button): label + ChevronDown icon (rotates 180° when open).
-Body: collapses/expands with height animation (`--duration-normal --ease-default`).
+Header row (full-width button): `background: --color-surface`, label + ChevronDown icon (rotates 180° when open).
+Body: `background: --color-surface` (same as header — content is revealed within the container, not floating above it);
+`border-top: --color-border`; padding `--space-4`.
+Collapses/expands with height animation (`--duration-normal --ease-default`).
 Used for: Settings sections, formula variable editors.
+
+**Background rule:** The content area always uses the same token as the header (`--color-surface`). Using
+`--color-surface-raised` for the body creates a "floats above" appearance that implies incorrect depth — the
+content is inside the accordion item, not elevated relative to it. See EDP §14.6 Rule 1.
 
 ### 4.5 Popover
 
@@ -617,26 +821,70 @@ Right-click or ⋯ trigger. Floating panel, `--z-dropdown`. Min-width 180px.
 Items: 36px height, padding `--space-2 --space-3`. Leading icon slot.
 
 Standard entity context menu items:
-`Edit` · `Duplicate` · divider · `Archive` (danger colour) · `Delete` (danger; only in archived view)
+`Edit` · `Duplicate` · divider · `Archive` or `Restore` · divider · `Delete` (destructive; only shown in archived view)
+
+**Custom trigger:** When a `trigger` prop is passed (e.g. `<Button>Options</Button>`), `ContextMenu` wraps it in an `<span className="inline-block">` — NOT a `<button>`. This prevents button-in-button invalid HTML and removes the unintended outer hover area that would appear if the wrapper were a `<button p-1 hover:bg-surface-hover>`. The custom trigger element's own hover styles apply unchanged.
+
+**Divider rule — the `ContextMenu` component automatically suppresses orphan dividers:**
+Callers (e.g. `EntityCard`) may unconditionally push `{ divider: true }` before conditional items. The component's render pass removes:
+- Leading dividers (nothing precedes them)
+- Trailing dividers (nothing follows them)
+- Consecutive dividers (empty section between two dividers)
+
+This means callers never need to guard dividers with `if (hasItemAboveAndBelow)` — just declare the intended group structure and let the component normalise it. The filtering is applied to the `visibleItems` list before rendering, not to the `items` prop itself.
+
+**Viewport boundary clamping:** The `useFloatingPosition` hook accepts a `panelMinWidth` option. When set, the returned `left` value is clamped so that `left + panelMinWidth ≤ viewportWidth - 8px`. ContextMenu passes `{ panelMinWidth: 180 }` matching its `min-w-context-menu` utility. This prevents the menu panel from overflowing the right viewport edge when the trigger is near the right side of the screen.
+
+---
+
+### 4.6a Floating Position Pattern (shared by all floating panels)
+
+All panels that detach from normal document flow and follow their trigger — Dropdown, DatePicker, ColourPicker, EmojiIconPicker, ContextMenu — use the `useFloatingPosition` hook in `frontend/src/hooks/useFloatingPosition.ts`.
+
+**Behaviour:**
+- On open: measures trigger `getBoundingClientRect()` synchronously and sets `top/left` as `position: fixed` styles — no flash or post-render repositioning
+- Scroll + resize tracking: `requestAnimationFrame`-throttled event listeners (capture phase) keep the panel attached to its trigger as the page scrolls or resizes
+- Horizontal clamping: optional `panelMinWidth` prevents right-edge overflow (8px viewport padding)
+- Vertical flip: optional `preferAbove` causes the panel to render above the trigger when there's insufficient space below
+
+**Portal escaping:** All floating panels use `ReactDOM.createPortal(panel, document.body)` to escape ancestor `overflow-hidden` containers (e.g. table cells, card wrappers). The portal target is always `document.body` — never a custom container.
+
+**Rule:** Do not implement custom positioning logic in individual components. All new floating panels must use `useFloatingPosition`. This ensures consistent boundary awareness across the product.
 
 ### 4.7 Table
 
 Used for transaction ledger, recurring payment list, budget detail.
 
+**Container:** `rounded-lg border border-border bg-surface overflow-hidden` — the whole table is enclosed in a card-like surface container. This ensures the area below the last row is not bare `bg-bg`.
+
+**Background hierarchy:**
+
+| Layer | Token | Value |
+|---|---|---|
+| `<thead>` | `bg-surface-raised` | #1c1c34 — distinctly lighter than body rows |
+| `<thead>` border | `border-b-2 border-border-light` | 2px `#3a3a5c` — thicker than row dividers to clearly separate header from body |
+| Odd body rows | inherit `bg-surface` from container | #16162a |
+| Even body rows | `bg-surface-raised` | #1c1c34 |
+| Hover (all rows) | `bg-surface-hover` | #1e1e38 |
+| Selected row | `bg-primary-muted` | indigo at ~10% opacity |
+
+**Why `<thead>` must be visually distinct from body rows:** The header and odd body rows both inherit similar colours if the same token is used — the visual result is that header cells look like regular rows. Using `bg-surface-raised` for `<thead>` paired with a 2px border provides clear, obvious separation without introducing a jarring new colour.
+
 **Anatomy:**
-- `<thead>`: sticky on scroll; `background: --color-surface`; border-bottom
-- Column header: `--text-xs --tracking-widest --font-medium --color-text-muted`; sortable headers show sort icon
-- `<tbody>`: row height 52px; hover `--color-surface-hover`
-- Row: click selects (highlights in `--color-primary-muted`)
-- `<tfoot>` (optional): summary row; bold totals
+- `<thead>`: `sticky top-0 z-sticky bg-surface-raised border-b-2 border-border-light`; column headers `text-sm font-medium text-text-secondary`; sortable headers show ChevronUp/Down icon
+- `<tbody>`: row height ~52px; `divide-y divide-border`; zebra as above; row `transition-colors duration-fast`
+- `<tfoot>` (optional): summary row; bold totals; `border-t-2 border-border-light` to mirror header weight
 
-**Sortable column:** click header to sort asc; click again for desc; click again for none.
-Sort indicator: `↑` / `↓` icon in header.
+**Sortable columns:**
+- Clicking a header button cycles: none → asc → desc → none
+- Sort icon: `opacity-0 group-hover:opacity-60` when not sorted by this column (hints at sortability); `opacity-100` when this column is the active sort. Uses `ChevronUp` (asc) or `ChevronDown` (desc).
+- Sorted column header: `text-text-primary` (full brightness vs muted for unsorted)
 
-**Column pinning:** Name/Date columns optionally pinned left on horizontal scroll.
+**Mobile responsive (below 768px):** Table collapses to a card-list view. Each row becomes a `bg-surface border border-border rounded-lg p-4` card. Key fields display as `flex justify-between` label/value pairs. Selected card: `border-primary bg-primary-muted`. No horizontal scrolling — collapse to card is preferred.
 
-**Responsive:** On mobile (< 768px), table collapses to card-list view — each row
-becomes a card with key fields. Horizontal scrolling is not used.
+**Row actions:** All row-level actions (edit, archive, delete, reconcile) are accessed via a single `⋯` ContextMenu trigger per row (§4.6). Never render multiple inline action buttons in a table row — they consume column space and increase DOM node count.
+
+**Column pinning:** Name/Date columns optionally pinned left on horizontal scroll (desktop only).
 
 **Empty state:** Full-width cell spanning all columns with EmptyState component.
 
@@ -776,9 +1024,12 @@ Leading icon + label. `--radius-md`.
 
 **Collapsed (icon-only, tablet):** Icons only, 64px wide. Tooltip on hover shows label.
 
-**View toggle (bottom):** Pill toggle between "Household" and "My Finances".
-Persists via `Person.default_view` [FR-P-006]. Active mode highlighted with
-`--color-primary-muted` background.
+**View toggle (bottom):** Segmented control (§2.10) with two pills: "Household" / "My Finances".
+Persists via `Person.default_view` [FR-P-006].
+- Outer border: `--color-border-state` (signals persistent state)
+- Active pill: `--color-primary` fill, `--color-text-inverse` text
+- Inactive pill: `--color-text-secondary`, hover `--color-surface-hover`
+- Collapsed: stacked `H` / `M` pills, same token set
 
 > **No detail panel exists in this application.** All entity inspection and editing
 > is performed in the EntityModal (edit modal). There is no separate detail/side panel.
@@ -801,7 +1052,32 @@ Each filter chip snaps on scroll. A fade gradient on the right edge indicates mo
 controls are available. On very small screens (< 480px), the centre controls collapse
 to a single "Filters" pill button that opens a full-screen filter drawer.
 
-**Account menu** (popover): display name, email, display currency selector, logout.
+**Account menu** (popover — opens on avatar button click in the right rail):
+
+```
+┌──────────────────────────────┐
+│  Ben Tan                     │  ← display name  text-text-primary font-medium text-sm
+│  ben@example.com             │  ← email         text-text-secondary text-xs
+├──────────────────────────────┤  ← border-t border-border
+│  ⚙  Settings                 │  ← navigates to /settings; closes menu
+├──────────────────────────────┤  ← border-t border-border
+│  ↪  Log out                  │  ← destructive colour (text-error); calls logout()
+└──────────────────────────────┘
+```
+
+Panel: `bg-surface-overlay border border-border rounded-lg shadow-xl py-1`. Positioned below-right of the trigger via `useFloatingPosition`. `z-dropdown`. `min-w-context-menu` (180px).
+
+Header section (display name + email): non-interactive, `px-3 py-2`, no hover background.
+
+Menu items: 36px height, `px-3 py-2 text-sm`. Leading icon slot (16px Lucide icon). Hover: `bg-surface-hover`. Settings item: `text-text-primary`. Log out item: `text-error`.
+
+Trigger: the existing avatar+name button in the right rail — replaced from a `<Link>` to a `<button>` that toggles the panel.
+
+Close on: Escape, click outside, or re-click trigger.
+
+**Deferred:** Display currency selector — added in the Settings epic (too wide a concern for this panel in MVP).
+
+**Implementation note:** Uses `ContextMenu` with a custom `trigger` prop and an extended `ContextMenuItem` type that includes a `header` variant for the non-interactive name/email block. Callers pass `{ header: true, displayName, email }` as the first item.
 
 ### 5.4 Breadcrumb Trail
 
@@ -865,6 +1141,11 @@ Appears top-right (desktop) or top-centre (mobile). Slides in from above.
 Auto-dismisses after 4s (success/info) or 8s (error). Manual × dismiss always available.
 Max 3 toasts stacked. Older toasts slide up when new one appears.
 
+**Vertical position** [patch 2026-06-04]: Toasts are positioned at `top-[80px]` (64px topbar height
++ 16px margin) — NOT `top-4`. This ensures toasts appear below the sticky topbar and never obscure
+it. The topbar is `z-sticky` (200) and toasts are `z-toast` (500), so without the vertical offset,
+toasts would render on top of the topbar.
+
 | Variant | Icon | Border accent |
 |---|---|---|
 | `success` | CheckCircle2 | `--color-success` |
@@ -913,15 +1194,20 @@ Food Budget — August
 ### 6.5 Skeleton Loader
 
 Placeholder shown while data is loading. Matches the shape of the real content.
-Uses `background: linear-gradient(90deg, --color-surface-raised, --color-surface-hover, --color-surface-raised)`.
-Background-size 200%. Animation: shimmer sweep left-to-right, 1.5s ease infinite.
+
+**Shimmer bars:** `background: linear-gradient(90deg, --color-surface-raised, --color-surface-active, --color-surface-raised)`.
+`background-size: 200%`. Animation: shimmer sweep left-to-right, 1.5s ease infinite.
 Respects `prefers-reduced-motion` (static grey if set).
 
+**Container model — critical for visual correctness:**
+- `card`, `chart`, `stat` shapes include their own `bg-surface` container frame (matching the real component they represent). Place these shapes on a `bg-bg` page background so the container is visible, exactly as real cards appear.
+- `table-row` shape is a bare shimmer row with no container — place it inside a `bg-surface` table wrapper (matching the real table's thead/tbody context).
+
 Shapes defined per component:
-- `SkeletonCard`: card shape with 3 text lines
-- `SkeletonTableRow`: row with 5 varying-width rectangles
-- `SkeletonChart`: rectangle + axis lines
-- `SkeletonStat`: large number + label below
+- `card`: `bg-surface` card frame + 3 shimmer text lines
+- `table-row`: bare row with 5 varying-width shimmer rectangles (no container — lives inside a table)
+- `chart`: `bg-surface` card frame + large shimmer area + 3 axis-label shimmer lines
+- `stat`: `bg-surface` card frame + large number shimmer + label shimmer below
 
 ### 6.6 Empty State
 
@@ -1151,10 +1437,18 @@ Generic card component. All entity cards inherit from this.
 └──────────────────────────────────────────────────────┘
 ```
 
-Left accent bar: 4px, `var(--entity-accent)`.
-Context menu (⋯) appears on row hover. Contains standard entity operations.
+Left accent bar: 4px inline style `borderLeft: '4px solid var(--entity-accent)'` on the Card wrapper. The CSS variable `--entity-accent` is set inline alongside it: `style={{ '--entity-accent': colour, borderLeft: '4px solid colour' }}`. Inline style is required — Tailwind's `border` shorthand overrides `border-left-width` via cascade ordering. Never use the `border-entity-accent` utility alone on an element that also has `border` or `border-*` class.
+
+Context menu (⋯) appears on row hover. Contains standard entity operations: Edit, Duplicate, divider, Archive/Restore, divider, Delete.
 Status badge right-aligned.
-Archived cards: muted opacity (60%), dashed border, "[Archived]" badge.
+Archived cards: `grayscale opacity-60` + dashed border, "[Archived]" `Badge`.
+
+**Design System page — EntityCard variants (§FE-008):**
+The `/design-system` page demos four EntityCard states:
+1. **Default** — active entity with accent bar and standard context menu
+2. **Archived** — `grayscale opacity-60`, dashed border
+3. **Warning status** — status Badge renders `variant="warning"` (amber)
+4. **With body slot** — optional `renderBody` prop for custom content below the header row
 
 ### 9.2 EntityModal\<T\> [EDP §14.3]
 
@@ -1187,6 +1481,10 @@ Standard module page layout.
 ```
 
 "Show archived" toggle in the action bar. Archived entities shown with visual distinction.
+
+**Design System page — EntityPage demo (§FE-008):** The `/design-system` page shows the action bar in isolation: Create button (primary, fires a toast), Show Archived toggle. Layout verified at full page width.
+
+**Multi-select + BulkActionBar (§FE-008):** The design system page demos 5 selectable EntityCards with the `useMultiSelect` hook. Selection via Ctrl+click (toggle), Ctrl+A (select all), Escape (clear). `BulkActionBar` appears with slide-in animation (`animate-slide-in`) when `selectedCount > 0`, showing: "N selected" count, Archive (secondary) and Delete (danger) buttons, × clear button.
 
 ### 9.4 MonetaryValue Component [EDP §3.2]
 
@@ -1226,7 +1524,369 @@ Clicking opens PersonDashboard or account menu depending on context.
 
 Toggle between Household and My Finances view [FR-P-006]. Persists via `Person.default_view`.
 
-### 9.6 DebtSummaryView
+### 9.6 PublicPage [AUTH-003, AUTH-005]
+
+Shell-less page layout component. Parallel to `EntityPage` — same design token discipline, no Sidebar or Topbar. Used by Login, JoinHousehold, NotFound, and Forbidden.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  bg-bg (full viewport, min-h-screen)                 │
+│  flex items-center justify-center                    │
+│                                                      │
+│         [optional title text-2xl mb-2]               │
+│         [optional subtitle text-sm mb-6]             │
+│         (title without subtitle: mb-6 spacer added)  │
+│                                                      │
+│         ┌─────────────────────────────┐              │
+│         │  bg-surface-raised          │              │
+│         │  border-border rounded-lg   │              │
+│         │  p-6                        │              │
+│         │                             │              │
+│         │  { children }               │              │
+│         │                             │              │
+│         └─────────────────────────────┘              │
+│         w-full max-w-content (28rem/448px) mx-4      │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+**Layout tokens:**
+- Outer wrapper: `w-full flex items-center justify-center min-h-screen bg-bg`
+- Content wrapper: `w-full max-w-content mx-4` — `max-w-content` = 28rem (448px) from `@utility` in `index.css`. Never `min-w-[360px]` — the card is fluid within the max.
+- Title: `text-2xl font-semibold text-text-primary text-center mb-2`
+- Subtitle: `text-text-secondary text-sm text-center mb-6`
+- Spacing rule: Title present without subtitle → `<div className="mb-6" />` spacer before card. Title + subtitle → subtitle provides the `mb-6`. No title → no spacer.
+- Card: `bg-surface-raised border border-border rounded-lg p-6`
+
+All buttons inside `PublicPage` use the `Button` component (primary or secondary variant). No inline button styles.
+
+### 9.7 JoinHousehold Page [AUTH-005]
+
+Public page at `/join/:token`. Uses `PublicPage`. Accessible without authentication (invitation details fetched from public endpoint).
+
+```
+┌─────────────────────────────────────┐
+│  You've been invited to join        │
+│                                     │
+│  🏠 Smith Family Finances           │
+│  Invited by: Kim Smith              │
+│  Expires: 10 Jun 2026               │
+│                                     │
+│  [Accept Invitation]   [Decline]    │
+└─────────────────────────────────────┘
+```
+
+**States:**
+- **Valid, unauthenticated:** shows details + "Accept Invitation" (primary) which stores token and routes to OAuth; "Decline" (secondary) returns to `/login` (no API call — unauthenticated decline just drops the flow; user will create their own household on next login)
+- **Valid, authenticated, email matches:** "Accept Invitation" (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/dashboard`; on 403 shows email-mismatch `AlertBanner`. "Decline" (secondary) calls `POST /api/invitations/:token/decline`; on 200 updates `authStore` with new household data from response and navigates to `/dashboard` (the welcome toast fires there, see §9.8.3).
+- **Valid, authenticated, email mismatch:** `AlertBanner` (error) with instructions to sign in with correct account; both CTAs hidden until dismissed
+- **Expired / cancelled / declined / not found:** `AlertBanner` (warning) + "Back to Login" `Button` (secondary)
+
+Token is the invitation `id` (UUID). All `Button` instances use design-system `Button` component.
+
+### 9.8 Settings Page [AUTH-004, AUTH-006, SETTINGS-003]
+
+Settings lives at `/settings`. Uses the standard `AppShell`. Four tabs using the SegmentedControl-style tab bar pattern (§2.10):
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Settings                                                        │
+│                                                                  │
+│  ┌──────────┬──────────┬─────────────┬──────────┐               │
+│  │Household │ Members  │ Currencies  │ Profile  │  ← tab bar    │
+│  └──────────┴──────────┴─────────────┴──────────┘               │
+│                                                                  │
+│  { active tab content }                                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Tab bar: `bg-surface-raised border border-border rounded-lg p-1 w-fit`. Active pill: `bg-control-active text-primary font-medium`. Inactive: `text-text-secondary hover:text-text-primary hover:bg-surface-hover`. Same token pattern as SegmentedControl (§2.10).
+
+**Tab key → URL:** `?tab=household|members|currencies|profile`. On mount, read `useSearchParams` to activate the matching tab (default `household`). Stale or unknown `?tab` values fall back to `household` silently. Components navigating to a specific tab use `navigate('/settings?tab=members')` etc.
+
+---
+
+#### 9.8.1 Household Tab
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Household Settings                                  │
+│                                                      │
+│  Name        [________________________]  ← owner only; non-owners see read-only text
+│  Timezone    [Asia/Singapore ▾       ]  ← owner only Dropdown; non-owners read-only
+│                                                      │
+│                              [Save Changes]          │
+│                                                      │
+│ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
+│  Danger Zone                               (owner only — hidden for admin/member)
+│                                                      │
+│  [Delete Household]  ← Button destructive outline   │
+│                          (border-error text-error)   │
+└─────────────────────────────────────────────────────┘
+```
+
+- Non-owner users see all fields as read-only text; no Save button; Danger Zone section hidden.
+- Delete Household opens `ConfirmationDialog` with a text `Input` requiring the user to type the exact household name. Confirm button stays disabled until the typed value matches exactly (case-insensitive). On confirm calls `DELETE /api/household`. On success calls `logout()` and navigates to `/login?deleted=1`.
+
+---
+
+#### 9.8.2 Members Tab
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Members                            [Invite Member]  │  ← button visible to admin+
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ Avatar  Name / Email     Role    Joined  ⋯   │   │
+│  │ ──────  ────────────────  ──────  ──────  ─   │   │
+│  │ [img]   Ben Tan (You)    Owner   01 Jan  —   │   │
+│  │         ben@example.com                       │   │
+│  │ [img]   Kim Smith        Admin   14 Mar  [▾][🗑]│   │
+│  │         kim@example.com                       │   │
+│  │ [img]   Alex Lee         Member  02 Apr  [▾][🗑]│   │
+│  │         alex@example.com                      │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  Pending Invitations                                 │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ jane@example.com   Expires 11 Jun  [Copy] [✕]│   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  [Leave Household]   ← visible to member / admin ONLY (not owner)
+└─────────────────────────────────────────────────────┘
+```
+
+**Role dropdown visibility rules** (column `[▾]`):
+- Owner sees dropdown on every non-owner row (admin → member or member → admin)
+- Admin sees dropdown on member rows only (can promote members to admin, demote admins is NOT permitted — admin cannot manage peers of equal rank)
+- Member sees no dropdowns
+- Own row: never shows dropdown
+
+**Remove button visibility rules** (column `[🗑]`):
+- Owner: sees remove on every non-owner row
+- Admin: sees remove on member rows only
+- No one can remove themselves; owner cannot be removed
+
+**Invite Member flow:**
+Opens `Modal` with:
+```
+┌─────────────────────────────────────┐
+│  Invite Member                   ✕  │
+│                                     │
+│  Email address                      │
+│  [_________________________________]│
+│                    [Cancel] [Invite] │
+│                                     │
+│  ── after successful invite ────    │
+│  Share this link with [email]:      │
+│  [https://…/join/uuid    ] [Copy]   │
+│                          [Done]     │
+└─────────────────────────────────────┘
+```
+Two-phase modal: email entry → link reveal. `Input` with validation, `AlertBanner` on API error. The copy field is a read-only `Input` with a trailing copy `<span role="button">` icon (§5.4 Nested Button Rule).
+
+**Leave Household flow:**
+"Leave Household" `Button` (secondary, `text-error`) visible only to non-owner members (admin or member role). Opens `ConfirmationDialog` with message "You will leave [household name] and a new household will be created for you. This cannot be undone." Confirm calls `POST /api/persons/leave`. On 200: update `authStore` with the response's new household data, navigate to `/dashboard` (welcome toast fires, see §9.8.3).
+
+---
+
+#### 9.8.3 Welcome Toast [AUTH-006]
+
+A one-time `Toast` shown immediately after the first login of a new household owner. Triggered in `useAuth.ts` when `/auth/me` returns `isFirstLogin: true`.
+
+```
+┌────────────────────────────────────────────────────┐
+│ 🏠  Your household "[name]" has been created.      │
+│     Invite your household members to get started.  │
+│                           [Invite Members]  ✕      │
+└────────────────────────────────────────────────────┘
+```
+
+- Variant: `success` toast
+- "Invite Members" action button: navigates to `/settings?tab=members` and dismisses the toast
+- Dismissed by ✕ or by clicking "Invite Members"
+- `sessionStorage.setItem('hasSeenWelcome', '1')` set immediately when shown; `useAuth.ts` checks this flag and skips the toast on subsequent renders within the same browser session
+- `isFirstLogin` is `true` only when `person.role == "owner"` and `person.created_at` is within the last 2 minutes — only fires once per account creation window
+
+**Note:** The `Toast` component (§6.1) supports an optional `action: { label, onClick }` prop — this is the first use of that prop; ensure it is implemented if not already.
+
+---
+
+#### 9.8.4 Currencies Tab [SETTINGS-003]
+
+Manages the household's active currencies, FX rates, and conversion fees.
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  Currencies               [Refresh Rates]  [Add Currency]          │
+│                           ← both owner-only                        │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ Code  Name                  Symbol  Rate       Fee    Active  │  │
+│  │ ─────────────────────────────────────────────────────────    │  │
+│  │ SGD   Singapore Dollar      S$      BASE       —      ●      │  │
+│  │ NZD   New Zealand Dollar    NZ$     0.834 ⚠    1.5%   ●  [⋯] │  │
+│  │ USD   US Dollar             US$     1.345       2.0%   ●  [⋯] │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  Base: SGD  ·  Last refreshed: today 09:15                         │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Column definitions:**
+
+| Column | Source field | Notes |
+|---|---|---|
+| Code | `currency.code` | `font-medium text-text-primary` |
+| Name | `currency.name` | `text-text-secondary` |
+| Symbol | `currency.symbol` | |
+| Rate | `currency.rate_to_base` | Shows `"BASE"` for the base currency. Amber `⚠` icon if `last_rate_at` is null or older than 48 h (stale). |
+| Fee | `currency.fee_pct` | Formatted as `"1.5%"`. Dash `"—"` for base currency. |
+| Active | `currency.is_display_active` | `Toggle` (§3.4) — controls whether this currency appears in display currency selectors. Owner-only toggle; non-owners see state read-only. |
+| Actions | — | `⋯` ContextMenu. Base currency row has no actions column (cannot be deleted or reassigned). |
+
+**Actions ContextMenu (non-base currencies, owner-only):**
+- **Edit** → opens Edit Currency modal
+- **Set as Base** → opens ConfirmationDialog (see below)
+- **Delete** → enabled only if no `FinancialEvent` references this currency; otherwise disabled with `Tooltip`: "Used in [N] transactions — cannot be deleted"
+
+**Footer:** `"Base: [code] · Last refreshed: [time ago]"` — `text-xs text-text-muted`. If any currency's `last_rate_at` is stale (> 48 h) or null, footer becomes `"⚠ Some rates are outdated — click Refresh to update"` in amber (`text-warning`).
+
+---
+
+**Add / Edit Currency modal:**
+
+```
+┌───────────────────────────────────────────────┐
+│  Add Currency                              ✕  │
+│                                               │
+│  Currency code (ISO 4217)                     │
+│  [USD___________________________________]     │
+│                                               │
+│  Name                                         │
+│  [US Dollar_____________________________]     │
+│                                               │
+│  Symbol                                       │
+│  [US$___________________________________]     │
+│                                               │
+│  FX fee %                                     │
+│  [2.00__________________________________]     │
+│  Rate will be fetched automatically on save   │
+│                                               │
+│                   [Cancel]  [Add Currency]    │
+└───────────────────────────────────────────────┘
+```
+
+Edit mode: same modal pre-filled; Code field is read-only; confirm label is "Save Changes".
+
+Validation inline: Code must be 3 uppercase letters. Duplicate code returns `AlertBanner` "This currency is already in your household." Fee must be ≥ 0 and ≤ 100.
+
+---
+
+**Set as Base ConfirmationDialog:**
+
+```
+Title:   Change base currency to [CODE]?
+Message: All stored amounts will be recalculated using the
+         current [CODE] exchange rate. This may take a moment.
+Confirm: Change Base Currency   (primary — not danger variant)
+Cancel:  Cancel
+```
+
+On confirm: `POST /api/currencies/{id}/set-base`. While job runs, show full-width `AlertBanner` (info) at tab top: "Recalculating amounts… this may take a few seconds." Auto-dismiss when the subsequent `GET /api/currencies` poll returns with the updated base flag.
+
+---
+
+**Refresh Rates button:**
+`POST /api/currencies/rates/refresh`. Button shows `loading` state in-flight. On success: invalidate currencies query; enqueue success toast "Exchange rates updated."
+
+---
+
+#### 9.8.5 Profile Tab [SETTINGS-003]
+
+Personal preferences for the currently authenticated user. Saves via `PATCH /api/persons/{id}`.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  My Profile                                           │
+│                                                       │
+│  ┌─────────────────────────────────────────────┐     │
+│  │  [Avatar]   Display Name                    │     │
+│  │   56 px     [Ben Tan______________________] │     │
+│  │             Email                           │     │
+│  │             ben@gmail.com   (read-only)      │     │
+│  └─────────────────────────────────────────────┘     │
+│                                                       │
+│  Preferences                                          │
+│  ─────────────────────────────────────────────────   │
+│  Display Currency    [SGD (Base) ▾            ]       │
+│  Default View        [Household | My Finances ]       │
+│                                                       │
+│                                    [Save Changes]     │
+└──────────────────────────────────────────────────────┘
+```
+
+**Fields:**
+
+| Field | Component | Notes |
+|---|---|---|
+| Avatar | `Avatar` 56 px | Read-only; sourced from Google `pictureUrl`. No upload in MVP. |
+| Display Name | `Input` | Required; max 100 chars. |
+| Email | Read-only `text-text-secondary text-sm` | Bound to Google account; cannot be changed here. |
+| Display Currency | `Dropdown` | Lists only currencies where `is_display_active = true`. Base currency listed first, labelled "[CODE] (Base)". |
+| Default View | `SegmentedControl` | "Household" / "My Finances". Writes `person.default_view`. Identical visual to the Sidebar bottom toggle. |
+| Save Changes | `Button` primary | Enabled only when at least one field differs from loaded values. Loading state while mutation in-flight. |
+
+**Access from account menu:** §5.3 Topbar account menu gains a "My Profile" item (between the name/email header and Settings). Navigates to `/settings?tab=profile`. See the §5.3 revision note at the end of this section.
+
+**§5.3 account menu update (SETTINGS-003):** Add "My Profile" row between the header block and the Settings row:
+
+```
+┌──────────────────────────────┐
+│  Ben Tan                     │
+│  ben@example.com             │
+├──────────────────────────────┤
+│  👤  My Profile              │  ← new; navigates to /settings?tab=profile
+├──────────────────────────────┤
+│  ⚙   Settings                │
+├──────────────────────────────┤
+│  ↪   Log out                 │
+└──────────────────────────────┘
+```
+
+---
+
+### 9.9 Login Page — Not Invited Error [AUTH-006]
+
+The existing `Login.tsx` already renders the `?error` query param as an `AlertBanner`. Add copy for the `not_invited` error code:
+
+> **You need an invitation to sign in.** Contact an existing household member to receive an invitation link.
+
+No new components required — this is a copy addition to the existing error-message mapping in `Login.tsx`.
+
+### 9.10 Design System Page [FE-008]
+
+Route: `/design-system`. Accessible without authentication (outside AppShell). Used for visual regression testing — every story that touches a component must verify against this page before marking Done.
+
+**Section catalogue (in scroll order):**
+
+| Section | Components covered |
+|---|---|
+| Colors & Typography | Colour swatches for all token groups; typography scale |
+| Atoms | Spinner, Icon, Badge (all variants), Avatar (all sizes + stack), Divider, Label/HelperText, Tooltip |
+| Buttons & Controls | Button (all variants/sizes/states), SegmentedControl |
+| Inputs | Input (default, search, password, error, disabled), Label with helper text |
+| Form Controls | Checkbox, Toggle, Dropdown (single/multi), DatePicker, ColourPicker, EmojiIconPicker, TagInput, MonetaryValueInput, RecurringDateInput |
+| Cards | Card (default, stat, elevated, ghost) + entity accent colour variants |
+| Overlays | Modal (sizes + dirty guard), Drawer, ConfirmationDialog, Accordion |
+| Feedback | Toast (all variants + action prop), AlertBanner (all variants), Skeleton (4 shapes), EmptyState, ProgressBar |
+| Data | Table (full columns, sort, row selection, mobile card collapse) |
+| Actions | ContextMenu (all item types: default, icon, destructive, disabled, divider, header variant) |
+| Entity Components | EntityCard (4 variants), EntityPage action bar, Multi-select + BulkActionBar |
+| Public Pages | Inline card previews of Login, NotFound, Forbidden, JoinHousehold card content (§9.6, §9.7) |
+
+**Public Pages subsection note:** `PublicPage` uses `min-h-screen` — embedding full instances would push other sections far down the page. The design system page embeds only the inner card content (inside a `bg-bg p-8` container). Full-page render must be checked by navigating to `/login`, `/join/test-token` (with a mock), `/404`, `/forbidden` directly.
+
+### 9.11 DebtSummaryView
 
 Dashboard widget and standalone Debt section.
 
@@ -1493,3 +2153,9 @@ Visually smaller elements (e.g. 24px icons) have invisible padding to reach the 
 | 1.0 | 2026-05-23 | Ben + BMAD | Initial UX spec — partial component list |
 | 2.0 | 2026-05-26 | Ben + Claude | Full rewrite — all 11 layers. See Phase 5 completion note. |
 | 2.1 | 2026-05-26 | Ben + Claude | §2.8 Divider: 3 variants specified (horizontal, vertical, labelled section). §4.9 Drag and Drop: lift effect, ghost placeholder, drop zones, touch support, keyboard drag. §4.10 Multi-Select: selection methods, selected appearance, Bulk Action Bar. §5.2 Sidebar: full content inventory, no-detail-panel declaration. §5.3 Topbar: scrollable filter controls on overflow/mobile, collapse to drawer on < 480px. §5.7 Keyboard Shortcuts: copy (⌘C), paste (⌘V), archive (⌫), permanent delete (⌘⌫), duplicate (⌘D), select all (⌘A), module-specific shortcuts added. §7.0 Element Selection Pop: scale + glow + sibling dim effect on chart and list selection. §10.4 Chart Animations: 3D perspective tilt (rotateX 6°, rotateY -3°), gentle 6s floating idle loop, focus-to-flat on selection, return-to-float after interaction, reduced-motion override. |
+| 2.2 | 2026-05-29 | Ben + Claude | Post-Epic 2 tester review updates (rounds 1–3). Skeleton shimmer peak: surface-active not surface-hover. §2.10 Segmented Control pattern: border-state outer, border-state-subtle divider tokens. §3.7 ColourPicker trigger alignment with Dropdown/DatePicker. §4.1 Card entity accent bar cascade note. §0a Developer Process Standards added (visual verification, no magic values, CSS nuances). |
+| 2.3 | 2026-06-01 | Ben + Claude | §1.1 Surface tokens: corrected hex values to match index.css implementation; added --color-surface-active (#26264a) for small button hover inside panels; corrected --color-border values. §1.9 Token table: clarified bg-control-active (nav tabs only) vs bg-accent-active (picker panel tabs only). §3.7 ColourPicker: swatch ring changed from ring-white/80 (magic) to ring-accent ring-offset-surface-raised (tokens); panel tab corrected to bg-accent-active text-accent; inactive tab corrected to text-text-secondary. §3.8 EmojiIconPicker: grid hover changed from bg-surface-hover to bg-surface-active (surface-hover is near-invisible on raised panels); panel tab corrected to bg-accent-active text-accent; clear button added to trigger. |
+| 2.4 | 2026-06-04 | Ben + Claude | §5.3 Topbar account menu expanded: full visual layout (name/email header + Settings + Log out), panel tokens (bg-surface-overlay, border-border, shadow-xl, z-dropdown, min-w-context-menu), trigger pattern (avatar button replaces Link), close behaviours (Escape/click-outside/re-click), destructive Log out styling (text-error), deferred display currency selector, implementation note (ContextMenu with header item variant). |
+| 2.5 | 2026-06-04 | Ben + Claude | §9.7 JoinHousehold: added decline-for-authenticated-user flow (POST /api/invitations/:token/decline creates new household, triggers welcome toast); updated expired/declined/cancelled state list. §9.8 Settings Page: full specification — Household tab (owner-only edit, Danger Zone delete), Members tab (role visibility rules for owner/admin/member, invite flow, Leave Household button), Welcome Toast (§9.8.3, isFirstLogin flag, sessionStorage guard), Currencies placeholder. §9.9 Login not_invited error copy. §9.8 (former DebtSummaryView) renumbered to §9.10. |
+| 2.6 | 2026-06-04 | Ben + Claude | §9.8 Settings Page expanded to 4 tabs. §9.8 opening: full tab-bar visual + token spec. §9.8.4 Currencies tab: full spec — table columns (Code/Name/Symbol/Rate with stale ⚠/Fee/Active toggle/Actions ContextMenu), Add/Edit modal, Set as Base ConfirmationDialog, Refresh Rates button, stale footer. §9.8.5 Profile tab (new): Avatar/Display Name/Email(read-only)/Display Currency Dropdown/Default View SegmentedControl/Save Changes. §5.3 account menu update noted: "My Profile" item added (SETTINGS-003). |
+| 2.7 | 2026-06-04 | Ben + Claude | Comprehensive implementation alignment pass (from FE-001–FE-008 + AUTH-003–005 diff audit). §1.1: focus ring glow token table (ring-glow-primary/accent/error with per-component mapping); text-text-inverse semantics (white on coloured backgrounds only). §1.6 Z-Index Scale: portal escaping rule, toast top-[80px] placement, modal backdrop/panel both z-modal note, raw integer prohibition. §2.5 Avatar: exact initials algorithm (2-char, fallback "?"), alt text pattern, entity-person background. §2.7 Tooltip: whitespace-normal break-words wrapping; JS boundary clamping + vertical flip precise mechanism documented (no placement prop needed). §4.2 Modal: dirty-guard banner tokens (bg-warning-muted), size table (xs/sm/md/lg/fullscreen), mobile bottom-sheet (items-end + rounded-t-xl). §4.6a FloatingPosition: new section documenting useFloatingPosition hook, RAF-throttled tracking, portal escaping, single-hook rule. §4.7 Table: thead bg changed to bg-surface-raised + border-b-2 border-border-light for obvious header distinctness; sort icon opacity behaviour; mobile card-list collapse detail; ContextMenu-per-row rule. §9.1 EntityCard: inline style accent bar note (Tailwind border shorthand override); design system demo variants. §9.3 EntityPage: design system demo + BulkActionBar behaviour. §9.6 PublicPage: corrected max-w-content (28rem) not min-w-[360px]; full layout token documentation. §9.10 Design System Page (new): section catalogue, public pages subsection note. §9.11 DebtSummaryView renumbered. |

@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 interface ProgressBarProps {
   value: number;
   max?: number;
@@ -18,14 +20,19 @@ export const ProgressBar = ({
   height = 'md',
   showLabel = false,
 }: ProgressBarProps) => {
-  const percentage = Math.min((value / max) * 100, 100);
+  const [animatedPercentage, setAnimatedPercentage] = useState(0);
+  const targetPercentage = Math.min((value / max) * 100, 100);
+
+  // Set width after first paint so CSS transition animates from 0 → value (E65)
+  useEffect(() => {
+    setAnimatedPercentage(targetPercentage);
+  }, [targetPercentage]);
 
   let fillColor = 'bg-primary';
   if (variant === 'budget') {
-    const pct = (value / max) * 100;
-    if (pct >= 100) {
+    if (targetPercentage >= 100) {
       fillColor = 'bg-error';
-    } else if (pct >= 80) {
+    } else if (targetPercentage >= 80) {
       fillColor = 'bg-warning';
     } else {
       fillColor = 'bg-success';
@@ -37,12 +44,12 @@ export const ProgressBar = ({
       <div className="w-full bg-border rounded-full overflow-hidden">
         <div
           className={`${heightClasses[height]} ${fillColor} rounded-full transition-all duration-slow ease-out`}
-          style={{ width: `${percentage}%` }}
+          style={{ width: `${animatedPercentage}%` }}
         />
       </div>
       {showLabel && (
         <span className="text-xs text-text-secondary mt-1 block">
-          {Math.round((value / max) * 100)}%
+          {Math.round(animatedPercentage)}%
         </span>
       )}
     </div>

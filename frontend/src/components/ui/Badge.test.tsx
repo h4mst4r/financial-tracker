@@ -11,7 +11,7 @@ describe('Badge', () => {
 
 	it('applies variant classes', () => {
 		const { container } = render(<Badge variant="success">Success</Badge>);
-		expect(container.querySelector('span')).toHaveClass('bg-success-bg');
+		expect(container.querySelector('span')).toHaveClass('bg-success-muted');
 	});
 
 	it('renders all variants without error', () => {
@@ -23,10 +23,13 @@ describe('Badge', () => {
 		expect(screen.getAllByText('Warning')).toHaveLength(1);
 	});
 
-	it('applies entity accent inline style', () => {
+	it('applies entity accent via CSS variable and utility classes', () => {
 		const { container } = render(<Badge variant="entity" entityAccent="#6366f1">Tag</Badge>);
-		const badge = container.querySelector('span');
-		expect(badge).toHaveStyle('color: #6366f1');
+		const badge = container.querySelector('span') as HTMLElement;
+		// --entity-accent CSS var is set on the element; utility classes read it
+		expect(badge.style.getPropertyValue('--entity-accent')).toBe('#6366f1');
+		expect(badge).toHaveClass('bg-entity-accent-muted');
+		expect(badge).toHaveClass('text-entity-accent');
 	});
 
 	it('calls onDismiss when dismissible', async () => {

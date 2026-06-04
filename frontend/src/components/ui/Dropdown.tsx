@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronUp, Check, Search, X, Minus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Check, Search, X } from 'lucide-react';
 import { Badge } from './Badge';
 import { Spinner } from './Spinner';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 export type DropdownVariant = 'single' | 'searchable' | 'multi' | 'grouped';
 
@@ -61,8 +62,10 @@ export const Dropdown: React.FC<DropdownProps> = ({
 	const [searchQuery, setSearchQuery] = useState('');
 	const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 	const buttonRef = useRef<HTMLButtonElement>(null);
-	const listRef = useRef<HTMLUListElement>(null);
+	const listRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
+
+	const panelPos = useFloatingPosition(buttonRef, open);
 
 	// Flatten options for filtering/searching
 	const flattenedOptions: DropdownOption[] = options.flatMap((item) => {
@@ -102,12 +105,6 @@ export const Dropdown: React.FC<DropdownProps> = ({
 		setSearchQuery('');
 		setFocusedIndex(null);
 	}, [disabled, loading]);
-
-	const handleClose = useCallback(() => {
-		setOpen(false);
-		setSearchQuery('');
-		setFocusedIndex(null);
-	}, []);
 
 	const handleSelect = useCallback(
 		(optionValue: string) => {
@@ -175,9 +172,6 @@ export const Dropdown: React.FC<DropdownProps> = ({
 		[disabled, loading, open, filteredFlatOptions, focusedIndex, handleSelect]
 	);
 
-	// Track if dropdown was open (for multi-select to stay open)
-	const wasOpen = open;
-
 	const handleClear = useCallback(
 		(e: React.MouseEvent) => {
 			e.stopPropagation();
@@ -225,28 +219,23 @@ export const Dropdown: React.FC<DropdownProps> = ({
 			return <span className="text-text-secondary">{placeholder}</span>;
 		}
 
-		const maxChips = 3;
-		const showMore = selectedValues.length > maxChips;
-		const visibleValues = showMore ? selectedValues.slice(0, maxChips) : selectedValues;
+		const firstValue = selectedValues[0];
+		const overflowCount = selectedValues.length - 1;
+		const firstOpt = flattenedOptions.find((o) => o.value === firstValue);
 
 		return (
-			<div className="flex-1 flex flex-wrap gap-1">
-				{visibleValues.map((v) => {
-					const opt = flattenedOptions.find((o) => o.value === v);
-					return (
-						<Badge
-							key={v}
-							variant="secondary"
-							dismissible
-							onDismiss={() => handleSelect(v)}
-						>
-							{opt?.label ?? v}
-						</Badge>
-					);
-				})}
-				{showMore && (
-					<Badge variant="secondary">
-						+{selectedValues.length - maxChips} more
+			<div className="flex-1 flex items-center gap-1 overflow-hidden min-w-0">
+				<Badge
+					variant="neutral"
+					dismissible
+					onDismiss={() => handleSelect(firstValue)}
+					className="whitespace-nowrap shrink-0 max-w-dropdown-chip truncate"
+				>
+					{firstOpt?.label ?? firstValue}
+				</Badge>
+				{overflowCount > 0 && (
+					<Badge variant="neutral" className="whitespace-nowrap shrink-0">
+						+{overflowCount} more
 					</Badge>
 				)}
 			</div>
@@ -266,7 +255,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
 		if (loading) {
 			return (
 				<div className="flex items-center gap-2">
-					<Spinner size={16} />
+					<Spinner size="sm" />
 					<span className="text-text-secondary">{placeholder}</span>
 				</div>
 			);
@@ -292,10 +281,10 @@ export const Dropdown: React.FC<DropdownProps> = ({
 					transition-colors duration-150
 					flex items-center justify-between gap-2
 					${error
-						? 'border-error focus:ring-2 focus:ring-error/20 focus:border-error'
+						? 'border-error focus:ring-2 focus:ring-glow-error focus:border-error'
 						: open
-							? 'border-accent ring-2 ring-accent/20'
-							: 'border-border hover:border-border-light focus:ring-2 focus:ring-accent/20 focus:border-accent'
+							? 'border-accent ring-2 ring-glow-accent'
+							: 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-accent'
 					}
 				`}
 				style={disabled ? { opacity: 0.4 } : undefined}
@@ -310,16 +299,16 @@ export const Dropdown: React.FC<DropdownProps> = ({
 			>
 				{buttonContent()}
 				<div className="flex items-center gap-1 shrink-0">
-					{clearable && (variant === 'single' ? value : values?.length) && !open && (
-						<button
-							type="button"
+					{clearable && (variant === 'single' ? !!value : (values?.length ?? 0) > 0) && !open && (
+						<span
+							role="button"
 							tabIndex={-1}
 							aria-label="Clear"
 							className="text-text-muted hover:text-text-primary cursor-pointer transition-colors"
 							onClick={handleClear}
 						>
 							<X size={14} />
-						</button>
+						</span>
 					)}
 					{open ? (
 						<ChevronUp size={16} className="text-text-muted" aria-hidden="true" />
@@ -329,15 +318,11 @@ export const Dropdown: React.FC<DropdownProps> = ({
 				</div>
 			</button>
 
-			{/* Dropdown panel — rendered via portal to escape parent stacking context */}
-			{open && createPortal(
+			{/* Dropdown panel â€” portal-rendered, position tracked via useFloatingPosition */}
+			{open && panelPos && createPortal(
 				<div
 					className="fixed z-dropdown"
-					style={{
-						left: buttonRef.current?.getBoundingClientRect().left,
-						top: buttonRef.current?.getBoundingClientRect().bottom + 4,
-						width: buttonRef.current?.getBoundingClientRect().width,
-					}}
+					style={{ top: panelPos.top, left: panelPos.left, width: panelPos.width }}
 				>
 					<div
 						ref={listRef}
@@ -354,7 +339,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
 									<input
 										ref={searchInputRef}
 										type="text"
-										className="w-full h-8 pl-8 pr-3 rounded text-xs bg-surface border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/20 focus:border-accent"
+										className="w-full h-8 pl-8 pr-3 rounded text-xs bg-surface border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-accent"
 										placeholder="Search..."
 										value={searchQuery}
 										onChange={(e) => setSearchQuery(e.target.value)}
@@ -365,7 +350,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
 
 						{/* Options list */}
 						<ul
-							className="max-h-[280px] overflow-auto py-1"
+							className="max-h-dropdown-list overflow-auto py-1"
 							role="listbox"
 							aria-multiselectable={variant === 'multi'}
 						>

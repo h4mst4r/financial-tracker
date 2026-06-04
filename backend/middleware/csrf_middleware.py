@@ -15,18 +15,33 @@ from uuid import UUID
 from sqlalchemy import select
 from starlette.responses import JSONResponse
 
-from backend.database import async_session_factory
+import backend.database
 from backend.models.person import Session as SessionModel
 
-from .auth_middleware import _should_skip
+from .auth_middleware import SESSION_COOKIE_NAME, _extract_cookie, _should_skip
 
 
 # HTTP methods that are safe (idempotent read-only) per RFC 7231.
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
+def _extract_header(headers: list, name: str) -> str | None:
+    """Parse a single header value from raw ASGI headers."""
+    name_bytes = name.encode("latin-1")
+    for key, value in headers:
+        if key == name_bytes:
+            return value.decode("latin-1", errors="replace").strip()
+    return None
+
+
 class CSRFMiddleware:
-    """Validate CSRF token on mutating requests."""
+    """Validate CSRF token on mutating requests.
+
+    Reads the session from the session cookie (or X-Session-Token dev header)
+    and compares the request's X-CSRF-Token against the session's stored token.
+    Does NOT rely on scope["state"] — auth state is resolved by FastAPI
+    dependencies, not middleware.
+    """
 
     def __init__(self, app: Callable) -> None:
         self.app = app
@@ -49,10 +64,13 @@ class CSRFMiddleware:
             await self.app(scope, receive, send)
             return
 
-        person = getattr(scope.get("state"), "person", None)
+        # Mutating request: require a valid session + matching CSRF token.
+        # Primary: HttpOnly cookie. Fallback: X-Session-Token header (dev mode).
+        headers = scope.get("headers", [])
+        session_id = _extract_cookie(headers, SESSION_COOKIE_NAME) \
+            or _extract_header(headers, "x-session-token")
 
-        if person is None:
-            # AuthMiddleware should have already rejected; defensive fallback.
+        if not session_id:
             response = JSONResponse(
                 status_code=401,
                 content={
@@ -64,14 +82,8 @@ class CSRFMiddleware:
             await response(scope, receive, send)
             return
 
-        # Extract CSRF token from request headers
-        csrf_header = None
-        for key, value in scope.get("headers", []):
-            if key == b"x-csrf-token":
-                csrf_header = value.decode("latin-1", errors="replace").strip()
-                break
-
-        valid = await self._validate_csrf(person.id, csrf_header)
+        csrf_header = _extract_header(headers, "x-csrf-token")
+        valid = await self._validate_csrf(session_id, csrf_header)
 
         if not valid:
             response = JSONResponse(
@@ -87,25 +99,21 @@ class CSRFMiddleware:
 
         await self.app(scope, receive, send)
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    async def _validate_csrf(self, person_id: str, csrf_header: str | None) -> bool:
-        """Look up the session for this person and compare CSRF tokens."""
+    async def _validate_csrf(self, session_id: str, csrf_header: str | None) -> bool:
+        """Look up the session by ID and compare its CSRF token to the header."""
         if not csrf_header:
             return False
 
-        async with async_session_factory() as s:
-            # Find the active session belonging to this person
+        try:
+            session_uuid = UUID(session_id)
+        except (ValueError, AttributeError):
+            return False
+
+        async with backend.database.async_session_factory() as s:
             result = await s.execute(
-                __import__("sqlalchemy", fromlist=["select"]).select(SessionModel).where(
-                    SessionModel.person_id == person_id
-                )
+                select(SessionModel).where(SessionModel.id == session_uuid)
             )
             session_rec = result.scalar_one_or_none()
-
             if session_rec is None:
                 return False
-
             return session_rec.csrf_token == csrf_header

@@ -141,10 +141,10 @@ def test_account_recurring_config_uselist_false():
 
 
 def test_valuation_record_compound_index():
-    """ValuationRecord has compound index on (asset_id, valuation_date)."""
+    """ValuationRecord has compound index on (account_id, valuation_date)."""
     indexes = {idx.name for idx in ValuationRecord.__table__.indexes}
-    assert "ix_valuations_asset_date" in indexes, (
-        f"Missing compound index ix_valuations_asset_date. Found: {indexes}"
+    assert "ix_valuations_account_date" in indexes, (
+        f"Missing compound index ix_valuations_account_date. Found: {indexes}"
     )
 
 
@@ -191,7 +191,7 @@ def test_valuation_record_required_fields():
     from uuid import uuid4
 
     record = ValuationRecord(
-        asset_id=uuid4(),
+        account_id=uuid4(),
         valuation_date=date(2026, 5, 28),
         value=Decimal("500000.00"),
         value_currency="SGD",
@@ -213,7 +213,7 @@ def test_recurring_config_defaults():
         frequency_rule='{"freq": "monthly", "byweekday": 1}',
     )
     assert config.frequency_text == "1st of every month"
-    # Note: enabled defaults to None at Python level (server_default applies at INSERT time)
+    # Note: is_active defaults to None at Python level (server_default applies at INSERT time)
 
 
 def test_account_owner_fields():

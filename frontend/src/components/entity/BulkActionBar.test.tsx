@@ -10,10 +10,9 @@ describe('BulkActionBar', () => {
         selectedCount={0}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
     expect(screen.queryByText(/item.*selected/)).not.toBeInTheDocument();
   });
 
@@ -23,10 +22,9 @@ describe('BulkActionBar', () => {
         selectedCount={3}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
     expect(screen.getByText('3 items selected')).toBeInTheDocument();
   });
 
@@ -36,103 +34,112 @@ describe('BulkActionBar', () => {
         selectedCount={1}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
     expect(screen.getByText('1 item selected')).toBeInTheDocument();
   });
 
-  it('should render Archive button', () => {
+  it('should render Archive button when onArchive provided', () => {
     render(
       <BulkActionBar
         selectedCount={2}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
     expect(screen.getByText('Archive')).toBeInTheDocument();
   });
 
-  it('should render Delete button', () => {
+  it('should not render Archive button when onArchive not provided', () => {
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClear={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('Archive')).not.toBeInTheDocument();
+  });
+
+  it('should render Delete button when onDelete provided', () => {
     render(
       <BulkActionBar
         selectedCount={2}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
     expect(screen.getByText('Delete')).toBeInTheDocument();
   });
 
-  it('should render Clear button', () => {
+  it('should render Clear (×) button with aria-label', () => {
     render(
       <BulkActionBar
         selectedCount={2}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
-    expect(screen.getByText('Clear')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear selection' })).toBeInTheDocument();
   });
 
   it('should call onArchive when Archive button is clicked', async () => {
     const handleArchive = vi.fn();
-
-    await render(
+    render(
       <BulkActionBar
         selectedCount={2}
         onArchive={handleArchive}
         onDelete={vi.fn()}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
-    const archiveButton = screen.getByText('Archive');
-    await userEvent.click(archiveButton);
-
+    await userEvent.click(screen.getByText('Archive'));
     expect(handleArchive).toHaveBeenCalled();
   });
 
   it('should call onDelete when Delete button is clicked', async () => {
     const handleDelete = vi.fn();
-
-    await render(
+    render(
       <BulkActionBar
         selectedCount={2}
         onArchive={vi.fn()}
         onDelete={handleDelete}
-        onClearSelection={vi.fn()}
+        onClear={vi.fn()}
       />
     );
-
-    const deleteButton = screen.getByText('Delete');
-    await userEvent.click(deleteButton);
-
+    await userEvent.click(screen.getByText('Delete'));
     expect(handleDelete).toHaveBeenCalled();
   });
 
-  it('should call onClearSelection when Clear button is clicked', async () => {
+  it('should call onClear when × button is clicked', async () => {
     const handleClear = vi.fn();
-
-    await render(
+    render(
       <BulkActionBar
         selectedCount={2}
         onArchive={vi.fn()}
         onDelete={vi.fn()}
-        onClearSelection={handleClear}
+        onClear={handleClear}
       />
     );
-
-    const clearButton = screen.getByText('Clear');
-    await userEvent.click(clearButton);
-
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
     expect(handleClear).toHaveBeenCalled();
+  });
+
+  it('should disable all buttons when isLoading=true', () => {
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        onArchive={vi.fn()}
+        onDelete={vi.fn()}
+        onClear={vi.fn()}
+        isLoading
+      />
+    );
+    const buttons = screen.getAllByRole('button');
+    buttons.forEach((btn) => expect(btn).toBeDisabled());
   });
 });

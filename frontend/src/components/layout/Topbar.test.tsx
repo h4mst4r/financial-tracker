@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Topbar } from './Topbar';
@@ -11,6 +11,11 @@ vi.mock('../../store/alertStore', () => ({
 
 vi.mock('../../store/authStore', () => ({
   useAuthStore: vi.fn(),
+}));
+
+const mockLogout = vi.fn();
+vi.mock('../../hooks/useAuth', () => ({
+  useAuth: () => ({ currentPerson: null, isLoading: false, logout: mockLogout }),
 }));
 
 const renderWithRouter = (ui: React.ReactNode, route = '/dashboard') => {
@@ -70,10 +75,32 @@ describe('Topbar', () => {
     expect(indicator).toBeInTheDocument();
   });
 
-  it('renders avatar link to settings', () => {
+  it('renders user account menu button', () => {
     renderWithRouter(<Topbar pageTitle="Test" />);
-    // Avatar link navigates to /settings — displays the user's display name
-    const avatarLink = screen.getByRole('link', { name: /test user/i });
-    expect(avatarLink).toBeInTheDocument();
+    const menuButton = screen.getByRole('button', { name: /user account menu/i });
+    expect(menuButton).toBeInTheDocument();
+  });
+
+  it('opens account menu on avatar button click showing user name and email', () => {
+    renderWithRouter(<Topbar pageTitle="Test" />);
+    const menuButton = screen.getByRole('button', { name: /user account menu/i });
+    fireEvent.click(menuButton);
+    // Name appears in both trigger and header; email is only in the menu header
+    expect(screen.getAllByText('Test User').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('test@example.com')).toBeInTheDocument();
+  });
+
+  it('shows Settings and Log out items in account menu', () => {
+    renderWithRouter(<Topbar pageTitle="Test" />);
+    fireEvent.click(screen.getByRole('button', { name: /user account menu/i }));
+    expect(screen.getByRole('menuitem', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /log out/i })).toBeInTheDocument();
+  });
+
+  it('calls logout when Log out menu item is clicked', () => {
+    renderWithRouter(<Topbar pageTitle="Test" />);
+    fireEvent.click(screen.getByRole('button', { name: /user account menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /log out/i }));
+    expect(mockLogout).toHaveBeenCalledOnce();
   });
 });

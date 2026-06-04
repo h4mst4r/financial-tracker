@@ -87,9 +87,12 @@ This document does not repeat the brief. Summary only:
 ### FR-HH — EntityHousehold
 
 **FR-HH-001 — Household Creation**
-On first Google OAuth login, if no household exists for this user, the system creates
-a new household with the logged-in person as `owner`.
-*Acceptance:* A household record exists; the person has role `owner`; base currency
+On first Google OAuth login, the system first checks whether the verified email matches
+a pending household invitation. If a match is found, the person joins the invited household
+as `member` and the invitation is accepted. If no match is found, a new household is created
+with the logged-in person as `owner`.
+*Acceptance:* New user with pending invitation → joins invited household (no new household created).
+New user without invitation → new household created; person has role `owner`; base currency
 defaults to SGD; timezone defaults to Asia/Singapore.
 
 **FR-HH-002 — Household Configuration**
@@ -106,9 +109,18 @@ exact Google account matching the invited email; the system then links them to t
 is created with role `member` and joined to the household.
 
 **FR-HH-004 — Invitation Management**
-Admin or Owner may view pending invitations and cancel any of them.
-*Acceptance:* Cancelled invitations change status to `cancelled`; login attempt with
-cancelled invitation token is rejected with a clear message.
+Admin or Owner may view pending invitations and cancel any of them. Pending invitations
+display as a shareable join URL (`/join/<invitation_id>`) that invitees open to accept.
+*Acceptance:* Cancelled invitations change status to `cancelled`; visiting a cancelled
+or expired join URL shows a clear error message, not a blank screen.
+
+**FR-HH-005 — Household Permanent Deletion**
+The household owner may permanently and irreversibly delete the entire household and all
+associated data (persons, accounts, events, budgets, categories, invitations, sessions).
+The action requires typing the exact household name as confirmation.
+*Acceptance:* Household and all child records removed from the database; all active
+sessions for household members are invalidated; owner is logged out and redirected to
+the login page; action is owner-only (admin/member receives 403).
 
 ---
 

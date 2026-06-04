@@ -39,7 +39,8 @@ describe('Input', () => {
 
 	it('shows error state', () => {
 		render(<Input id="err" error="Error message" />);
-		expect(screen.getByRole('textbox')).toHaveClass('border-error');
+		// Error uses --color-border-error token class [G-09]
+		expect(screen.getByRole('textbox')).toHaveClass('border-border-error');
 	});
 
 	it('displays error text with AlertCircle icon', () => {

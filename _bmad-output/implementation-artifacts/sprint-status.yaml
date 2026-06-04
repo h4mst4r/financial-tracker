@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-28
-last_updated: 2026-05-29T00:00
+last_updated: 2026-06-03T23:15
 project: financial-tracker
 project_key: NOKEY
 tracking_system: file-system
@@ -63,14 +63,17 @@ development_status:
   fe-005-generic-entity-components: done
   fe-006-zustand-stores-and-tanstack-query-client: done
   fe-007-app-shell-routing-and-auth-guard: done
+  fe-008-test-page-design-system: done
   epic-2-retrospective: done
 
   # Epic 3 — Authentication & Household
-  epic-3: backlog
-  auth-001-google-oauth-backend-flow-callback-session: backlog
-  auth-002-household-member-management-backend: backlog
-  auth-003-auth-frontend-login-page-useauth-hook-route-hydration: backlog
-  auth-004-household-settings-and-member-management-frontend: backlog
+  epic-3: in-progress
+  auth-001-google-oauth-backend-flow-callback-session: done
+  auth-002-household-member-management-backend: done
+  auth-003-auth-frontend-login-page-useauth-hook-route-hydration: done
+  auth-004-household-settings-and-member-management-frontend: done
+  auth-005-public-layout-invitation-join-household-delete: done
+  auth-006-enhanced-member-management-invitation-flow: done
   epic-3-retrospective: optional
 
   # Epic 4 — Categories

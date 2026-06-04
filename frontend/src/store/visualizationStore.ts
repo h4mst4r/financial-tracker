@@ -8,6 +8,7 @@
  */
 
 import { create } from 'zustand';
+import { useNavigate } from 'react-router-dom';
 import type { VisualizationFilter } from '../types/visualization';
 import { defaultVisualizationFilter } from '../types/visualization';
 
@@ -65,8 +66,6 @@ export const useVisualizationStore = create<VisualizationStoreState>((set, get) 
   },
 
   drillDown: (entityType, entityId, label) => {
-    const { filter } = get();
-
     // Push current state to history
     set((state) => {
       const newHistory = [
@@ -140,6 +139,9 @@ export const useVisualizationStore = create<VisualizationStoreState>((set, get) 
 /**
  * Hook that provides the current visualization filter and common actions.
  * Wraps useVisualizationStore with a cleaner API for component consumption.
+ *
+ * navigateTo also persists the filter patch to React Router location.state
+ * so the browser back button can restore the prior filter state [G-15].
  */
 export function useVisualizationFilter() {
   const filter = useVisualizationStore((state) => state.filter);
@@ -147,7 +149,15 @@ export function useVisualizationFilter() {
   const drillDown = useVisualizationStore((state) => state.drillDown);
   const drillUp = useVisualizationStore((state) => state.drillUp);
   const resetFilter = useVisualizationStore((state) => state.resetFilter);
-  const navigateTo = useVisualizationStore((state) => state.navigateTo);
+  const _navigateTo = useVisualizationStore((state) => state.navigateTo);
+
+  const navigate = useNavigate();
+
+  const navigateTo = (module: string, filterPatch: Partial<VisualizationFilter>) => {
+    _navigateTo(module, filterPatch);
+    // Persist filter to Router state so back button restores it [G-15]
+    navigate?.(module, { state: { vizFilter: filterPatch } });
+  };
 
   return {
     filter,

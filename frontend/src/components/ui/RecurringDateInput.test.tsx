@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { RecurringDateInput } from './RecurringDateInput';
@@ -8,42 +8,39 @@ const mockParseRule = (text: string) => ({
 	valid: text.includes('monday'),
 });
 
+const user = userEvent.setup({ delay: null });
+
 describe('RecurringDateInput', () => {
 	it('renders with placeholder', () => {
 		render(<RecurringDateInput parseRule={mockParseRule} onChange={() => {}} />);
 		expect(screen.getByPlaceholderText(/every Monday/i)).toBeInTheDocument();
 	});
 
-	it('calls onChange when text changes', async () => {
-		const user = userEvent.setup();
+	it('calls onChange after the 500ms debounce (E34)', async () => {
 		const handleChange = vi.fn();
 		render(<RecurringDateInput parseRule={mockParseRule} onChange={handleChange} />);
-		const input = screen.getByPlaceholderText(/every Monday/i);
-		await user.type(input, 'every monday');
-		expect(handleChange).toHaveBeenCalled();
-	});
+		await user.type(screen.getByPlaceholderText(/every Monday/i), 'a');
+		// onChange is debounced at 500ms — should not fire synchronously
+		expect(handleChange).not.toHaveBeenCalled();
+		// Wait for debounce to fire
+		await waitFor(() => expect(handleChange).toHaveBeenCalled(), { timeout: 700 });
+	}, 1500);
 
 	it('shows confirm button for valid input', async () => {
-		const user = userEvent.setup();
 		render(<RecurringDateInput parseRule={mockParseRule} onChange={() => {}} />);
-		const input = screen.getByPlaceholderText(/every Monday/i);
-		await user.type(input, 'every monday');
+		await user.type(screen.getByPlaceholderText(/every Monday/i), 'every monday');
 		expect(screen.getByTitle('Confirm pattern')).toBeInTheDocument();
 	});
 
 	it('disables confirm button for invalid input', async () => {
-		const user = userEvent.setup();
 		render(<RecurringDateInput parseRule={mockParseRule} onChange={() => {}} />);
-		const input = screen.getByPlaceholderText(/every Monday/i);
-		await user.type(input, 'invalid text');
+		await user.type(screen.getByPlaceholderText(/every Monday/i), 'invalid text');
 		expect(screen.getByTitle('Confirm pattern')).toBeDisabled();
 	});
 
 	it('shows error for invalid pattern', async () => {
-		const user = userEvent.setup();
 		render(<RecurringDateInput parseRule={mockParseRule} onChange={() => {}} />);
-		const input = screen.getByPlaceholderText(/every Monday/i);
-		await user.type(input, 'invalid text');
+		await user.type(screen.getByPlaceholderText(/every Monday/i), 'invalid text');
 		expect(screen.getByText('Invalid pattern')).toBeInTheDocument();
 	});
 
@@ -62,5 +59,11 @@ describe('RecurringDateInput', () => {
 	it('disables when disabled', () => {
 		render(<RecurringDateInput parseRule={mockParseRule} onChange={() => {}} disabled />);
 		expect(screen.getByPlaceholderText(/every Monday/i)).toBeDisabled();
+	});
+
+	it('shows next occurrence preview for valid input', async () => {
+		render(<RecurringDateInput parseRule={mockParseRule} onChange={() => {}} />);
+		await user.type(screen.getByPlaceholderText(/every Monday/i), 'every monday');
+		await waitFor(() => expect(screen.getByText(/Next:/i)).toBeInTheDocument());
 	});
 });

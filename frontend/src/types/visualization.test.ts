@@ -99,9 +99,9 @@ describe('defaultVisualizationFilter', () => {
     expect(filter.display_currency).toBe('SGD');
   });
 
-  it('defaults to USD when no currency provided', () => {
+  it('defaults to SGD when no currency provided (household base currency, EDP §4)', () => {
     const filter = defaultVisualizationFilter();
-    expect(filter.display_currency).toBe('USD');
+    expect(filter.display_currency).toBe('SGD');
   });
 
   it('time_range.start is the first day of the month', () => {

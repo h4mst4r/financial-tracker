@@ -4,13 +4,14 @@ Provides reusable dependencies for authentication, authorization,
 and entity lookups that can be composed in route handlers.
 """
 
+from typing import AsyncGenerator
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database import get_db as _get_db_session
+from .database import async_session_factory
 from .models.person import Person
 
 
@@ -26,13 +27,15 @@ _ROLE_HIERARCHY = {
 # Database session
 # ---------------------------------------------------------------------------
 
-def get_db() -> AsyncSession:
-    """Alias for the async DB session dependency.
-
-    Returns:
-        AsyncSession yielding a transaction-scoped session.
-    """
-    return _get_db_session()
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Async generator dependency — yields a committed (or rolled-back) session."""
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -40,44 +43,44 @@ def get_db() -> AsyncSession:
 # ---------------------------------------------------------------------------
 
 async def get_current_person(
-    db: AsyncSession = Depends(get_db),
-) -> Person:
-    """Return the authenticated person from request state.
-
-    Raises:
-        HTTPException: 401 if no person is attached to the request.
-    """
-    # Import here to avoid circular imports at module load time.
-    from starlette.requests import Request
-
-    # This dependency is called inside a request context — we need access
-    # to request.state.person which was set by AuthMiddleware.
-    # FastAPI's Depends chain doesn't give us the Request directly, so we
-    # use a workaround: inject Request as a dependency.
-    raise NotImplementedError(
-        "Use get_current_person_with_request() instead."
-    )
-
-
-async def get_current_person_with_request(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Person:
-    """Return the authenticated person injected by AuthMiddleware.
+    """Validate the session cookie and return the authenticated person.
 
-    Args:
-        request: FastAPI request (provides access to request.state).
-        db: Database session (reserved for future use).
+    Performs the DB lookup directly rather than reading from request.state,
+    avoiding ASGI scope/state propagation issues across middleware layers.
 
     Raises:
-        HTTPException: 401 if person is missing from request state.
+        HTTPException: 401 if no session, invalid/expired session, or person archived.
     """
-    person = getattr(request.state, "person", None)
-    if person is None:
+    from .middleware.auth_middleware import validate_session, SESSION_COOKIE_NAME
+
+    # Primary: HttpOnly cookie. Fallback: X-Session-Token header (dev mode —
+    # Vite proxy strips Set-Cookie, so session is passed as header instead of cookie).
+    # Session UUIDs are 122-bit random values and effectively unguessable in production.
+    session_id = request.cookies.get(SESSION_COOKIE_NAME) \
+        or request.headers.get("X-Session-Token")
+    result = await validate_session(session_id)
+
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    person, session_obj = result
+
+    # Stash session on request.state so route handlers can read the CSRF token
+    if "state" not in request.scope:
+        request.scope["state"] = {}
+    request.scope["state"]["session"] = session_obj
+
+    if getattr(person, "archived", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is disabled",
         )
     return person
 
@@ -87,7 +90,7 @@ async def get_current_person_with_request(
 # ---------------------------------------------------------------------------
 
 async def get_household_id(
-    person: Person = Depends(get_current_person_with_request),
+    person: Person = Depends(get_current_person),
 ) -> UUID:
     """Return the household ID of the authenticated person.
 
@@ -121,7 +124,7 @@ def require_role(minimum_role: str):
     min_level = _ROLE_HIERARCHY.get(minimum_role, 1)
 
     async def _check_role(
-        person: Person = Depends(get_current_person_with_request),
+        person: Person = Depends(get_current_person),
     ) -> Person:
         person_level = _ROLE_HIERARCHY.get(person.role, 0)
         if person_level < min_level:
@@ -140,24 +143,29 @@ def require_role(minimum_role: str):
 
 async def _get_or_404(
     db: AsyncSession,
-    model_type: type,
+    household_id: UUID,
     entity_id: UUID,
+    model_type: type,
 ) -> object:
-    """Fetch an entity by primary key or raise 404.
+    """Fetch a household-scoped entity by primary key or raise 404.
 
     Args:
         db: Active database session.
-        model_type: SQLAlchemy ORM model class.
+        household_id: Owning household — entity must belong to this household.
         entity_id: Primary key UUID to look up.
+        model_type: SQLAlchemy ORM model class.
 
     Returns:
         The loaded model instance.
 
     Raises:
-        HTTPException: 404 if entity doesn't exist.
+        HTTPException: 404 if entity doesn't exist or belongs to another household.
     """
     result = await db.execute(
-        select(model_type).where(model_type.id == entity_id)
+        select(model_type).where(
+            model_type.id == entity_id,
+            model_type.household_id == household_id,
+        )
     )
     instance = result.scalar_one_or_none()
     if instance is None:

@@ -68,8 +68,9 @@ describe('ContextMenu', () => {
 
   it('renders divider items', async () => {
     const itemsWithDivider = [
-      ...items,
-      { label: 'Separator', divider: true, onClick: vi.fn() },
+      { label: 'Edit', onClick: vi.fn() },
+      { divider: true },
+      { label: 'Delete', onClick: vi.fn(), destructive: true },
     ];
     render(<ContextMenu items={itemsWithDivider} />);
     await userEvent.click(screen.getByRole('button'));

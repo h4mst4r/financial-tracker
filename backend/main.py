@@ -7,34 +7,48 @@ error handlers, and security headers.
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status  # Request kept for exception handlers
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from backend.dependencies import get_db
-from backend.middleware.auth_middleware import AuthMiddleware
 from backend.middleware.csrf_middleware import CSRFMiddleware
-from backend.middleware.household_middleware import HouseholdMiddleware
+from backend.routes import auth as auth_routes
+from backend.routes import household as household_routes
 
 
 # ---------------------------------------------------------------------------
 # Security Headers Middleware
 # ---------------------------------------------------------------------------
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add security-focused HTTP response headers to every response."""
+class SecurityHeadersMiddleware:
+    """Add security-focused HTTP response headers to every response.
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        response = await call_next(request)
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        return response
+    Implemented as a pure ASGI middleware (not BaseHTTPMiddleware) so that
+    scope["state"] set by inner ASGI middlewares (e.g. AuthMiddleware) is
+    visible to FastAPI route handlers without isolation issues.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"strict-transport-security"] = b"max-age=31536000; includeSubDomains"
+                headers[b"x-frame-options"] = b"DENY"
+                headers[b"x-content-type-options"] = b"nosniff"
+                headers[b"referrer-policy"] = b"strict-origin-when-cross-origin"
+                message = {**message, "headers": list(headers.items())}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 # ---------------------------------------------------------------------------
@@ -80,18 +94,20 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
-    # --- Security headers (runs on every response) ---
-    app.add_middleware(SecurityHeadersMiddleware)
-
-    # --- Middleware stack order: Auth → Household → CSRF ---
-    # Outer middleware runs first, so Auth validates session before
-    # Household can access request.state.person, and CSRF runs innermost.
-    app.add_middleware(AuthMiddleware)
-    app.add_middleware(HouseholdMiddleware)
-    app.add_middleware(CSRFMiddleware)
+    # --- Middleware stack (Starlette LIFO: last registered = outermost = runs first) ---
+    # Execution order: SecurityHeaders → CSRF → Route
+    # Auth and household context are resolved by FastAPI dependencies, not middleware.
+    app.add_middleware(CSRFMiddleware)           # innermost — runs last
+    app.add_middleware(SecurityHeadersMiddleware)  # outermost — runs first, wraps all responses
 
     # --- Exception handlers ---
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+    # --- Auth routes (public + protected) ---
+    app.include_router(auth_routes.router)
+
+    # --- Household and member management routes ---
+    app.include_router(household_routes.router, prefix="/api")
 
     # --- Health check ---
     @app.get("/health")

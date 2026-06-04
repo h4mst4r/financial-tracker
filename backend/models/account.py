@@ -210,7 +210,7 @@ class ValuationRecord(BaseEntity):
 
     __tablename__ = "valuation_records"
 
-    asset_id: Mapped[UUID] = mapped_column(
+    account_id: Mapped[UUID] = mapped_column(
         ForeignKey("accounts.id"), nullable=False, index=True
     )
     valuation_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -228,7 +228,7 @@ class ValuationRecord(BaseEntity):
 
     # --- Indexes ---
     __table_args__ = (
-        Index("ix_valuations_asset_date", "asset_id", "valuation_date"),
+        Index("ix_valuations_account_date", "account_id", "valuation_date"),
     )
 
 
@@ -261,10 +261,10 @@ class RecurringConfig(BaseEntity):
     account_id: Mapped[UUID] = mapped_column(
         ForeignKey("accounts.id"), nullable=False, unique=True
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     frequency_text: Mapped[str] = mapped_column(String(200), nullable=False)
     frequency_rule: Mapped[str] = mapped_column(Text, nullable=False)
-    next_occurrence: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    next_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     payee_person_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("persons.id"), nullable=True

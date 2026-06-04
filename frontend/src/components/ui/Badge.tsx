@@ -2,10 +2,10 @@ import React from 'react';
 import { X } from 'lucide-react';
 
 const variantMap = {
-	success: 'bg-success-bg text-success',
-	warning: 'bg-warning-bg text-warning',
-	error: 'bg-error-bg text-error',
-	info: 'bg-info-bg text-info',
+	success: 'bg-success-muted text-success',
+	warning: 'bg-warning-muted text-warning',
+	error: 'bg-error-muted text-error',
+	info: 'bg-info-muted text-info',
 	neutral: 'bg-surface-hover text-text-secondary',
 	entity: '',
 } as const;
@@ -36,16 +36,20 @@ export const Badge: React.FC<BadgeProps> = ({
 
 	const variantClasses = variantMap[variant];
 
+	// Entity variant: set --entity-accent CSS var; bg-entity-accent-muted and
+	// text-entity-accent utilities read it — no magic hex opacity needed.
 	const entityStyle: React.CSSProperties | undefined =
 		variant === 'entity' && entityAccent
-			? {
-					backgroundColor: `${entityAccent}26`, // ~15% opacity in hex
-					color: entityAccent,
-				}
+			? ({ '--entity-accent': entityAccent } as React.CSSProperties)
 			: undefined;
 
+	const entityClasses =
+		variant === 'entity' && entityAccent
+			? 'bg-entity-accent-muted text-entity-accent'
+			: '';
+
 	return (
-		<span className={`${baseClasses} ${variantClasses} ${className}`} style={entityStyle} onClick={onClick}>
+		<span className={`${baseClasses} ${variantClasses} ${entityClasses} ${className}`} style={entityStyle} onClick={onClick}>
 			{children}
 			{dismissible && (
 				<button

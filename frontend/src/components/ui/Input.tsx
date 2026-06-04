@@ -5,7 +5,7 @@ const variantMap = {
 	text: '',
 	number: 'text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
 	search: 'pl-9 pr-9',
-	password: 'pr-9',
+	password: 'pl-3 pr-9',
 } as const;
 
 export type InputVariant = keyof typeof variantMap;
@@ -35,10 +35,14 @@ export const Input: React.FC<InputProps> = ({
 }) => {
 	const [showPassword, setShowPassword] = useState(false);
 
+	// Compute inputType before any narrowing guards below
+	const inputType = variant === 'password' ? (showPassword ? 'text' : 'password') : variant === 'number' ? 'number' : 'text';
+
 	const paddingClasses = (() => {
 		if (variant === 'search' || variant === 'password') return '';
 		const left = leading ? 'pl-9' : 'pl-3';
-		const right = (trailing || (error && variant !== 'password')) ? 'pr-9' : 'pr-3';
+		// variant is already narrowed to 'text' | 'number' here; trailing check suffices
+		const right = (trailing || error) ? 'pr-9' : 'pr-3';
 		return `${left} ${right}`;
 	})();
 
@@ -55,11 +59,10 @@ export const Input: React.FC<InputProps> = ({
 	const stateClasses = (() => {
 		if (disabled) return 'opacity-50 cursor-not-allowed bg-surface';
 		if (readOnly) return 'bg-transparent border-dashed focus:ring-0 focus:border-border';
-		if (error) return 'border-error focus:ring-2 focus:ring-error/20 focus:border-error';
-		return 'hover:border-border-light focus:ring-2 focus:ring-accent/20 focus:border-accent';
+		if (error) return 'border-border-error focus:ring-2 focus:ring-glow-error focus:border-border-error';
+		// Focus ring: --color-glow-primary (indigo/20) per EDP §14.5 --color-border-focus [G-09]
+		return 'hover:border-border-strong focus:ring-2 focus:ring-glow-primary focus:border-border-focus';
 	})();
-
-	const inputType = variant === 'password' ? (showPassword ? 'text' : 'password') : variant === 'number' ? 'number' : 'text';
 
 	return (
 		<div className="relative w-full">
@@ -111,9 +114,9 @@ export const Input: React.FC<InputProps> = ({
 					</button>
 				)}
 				{trailing && variant !== 'password' && (
-					<div className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">
+					<span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted inline-flex items-center">
 						{trailing}
-					</div>
+					</span>
 				)}
 				{error && variant !== 'password' && (
 					<div className="absolute right-3 top-1/2 -translate-y-1/2 text-error pointer-events-none">

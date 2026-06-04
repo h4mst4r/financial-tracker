@@ -1,4 +1,5 @@
 import { Modal } from './Modal';
+import { Button } from './Button';
 import { Icon } from './Icon';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
 
@@ -50,7 +51,7 @@ export const ConfirmationDialog = ({
       isOpen={isOpen}
       onClose={onClose}
       title=""
-      size="sm"
+      size="xs"
     >
       <div className="flex flex-col items-start gap-4">
         {/* Icon + Title */}
@@ -59,7 +60,7 @@ export const ConfirmationDialog = ({
             <Icon icon={config.icon} size="lg" />
           </div>
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-text">{title}</h2>
+            <h2 id="modal-title" className="text-lg font-semibold text-text">{title}</h2>
             {message && (
               <p className="text-sm text-text-secondary mt-1">{message}</p>
             )}
@@ -68,25 +69,20 @@ export const ConfirmationDialog = ({
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-3 w-full pt-4 border-t border-border">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-border bg-surface hover:bg-surface-hover text-text transition-colors"
           >
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="danger"
             onClick={handleConfirm}
             disabled={isConfirming}
-            className={`px-4 py-2 text-sm rounded-lg font-medium text-white transition-colors ${
-              variant === 'danger'
-                ? 'bg-error hover:bg-error-hover disabled:bg-error/50'
-                : 'bg-warning hover:bg-warning-hover disabled:bg-warning/50'
-            }`}
+            loading={isConfirming}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

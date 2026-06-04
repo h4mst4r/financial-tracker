@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
 import {
 	format,
@@ -15,7 +16,6 @@ import {
 	isAfter,
 	isWithinInterval,
 	isToday,
-	parse,
 } from 'date-fns';
 
 interface DatePickerOwnProps {
@@ -49,16 +49,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
 	const [viewDate, setViewDate] = useState(value ?? new Date());
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const calendarRef = useRef<HTMLDivElement>(null);
+	const panelPos = useFloatingPosition(buttonRef, open);
 
 	const handleOpen = useCallback(() => {
 		if (disabled) return;
 		setOpen(true);
 		setViewDate(value ?? new Date());
 	}, [disabled, value]);
-
-	const handleClose = useCallback(() => {
-		setOpen(false);
-	}, []);
 
 	const handleSelect = useCallback(
 		(date: Date) => {
@@ -134,10 +131,10 @@ export const DatePicker: React.FC<DatePickerProps> = ({
 					flex items-center justify-between gap-2
 					${disabled ? 'opacity-50 cursor-not-allowed bg-surface' : ''}
 					${error
-						? 'border-error focus:ring-2 focus:ring-error/20 focus:border-error'
+						? 'border-error focus:ring-2 focus:ring-glow-error focus:border-error'
 						: open
-							? 'border-accent ring-2 ring-accent/20'
-							: 'border-border hover:border-border-light focus:ring-2 focus:ring-accent/20 focus:border-accent'
+							? 'border-accent ring-2 ring-glow-accent'
+							: 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-accent'
 					}
 				`}
 				onClick={handleOpen}
@@ -149,29 +146,26 @@ export const DatePicker: React.FC<DatePickerProps> = ({
 					{displayValue || placeholder}
 				</span>
 				{displayValue && !open && (
-					<button
-						type="button"
+					<span
+						role="button"
 						tabIndex={-1}
 						aria-label="Clear"
 						className="text-text-muted hover:text-text-primary cursor-pointer transition-colors"
 						onClick={handleClear}
 					>
 						<X size={14} />
-					</button>
+					</span>
 				)}
 			</button>
 
-{/* Calendar popover — rendered via portal to escape parent stacking context */}
-		{open && createPortal(
+{/* Calendar popover â€” rendered via portal to escape parent stacking context */}
+		{open && panelPos && createPortal(
 			<div
 				ref={calendarRef}
 				className="fixed z-dropdown"
-				style={{
-					left: buttonRef.current?.getBoundingClientRect().left,
-					top: buttonRef.current?.getBoundingClientRect().bottom + 4,
-				}}
+				style={{ top: panelPos.top, left: panelPos.left }}
 			>
-				<div className="w-[320px] bg-surface-raised border border-border rounded-md shadow-lg p-3">
+				<div className="w-date-picker bg-surface-raised border border-border rounded-md shadow-lg p-3">
 					{/* Month navigation */}
 					<div className="flex items-center justify-between mb-3">
 						<button

@@ -74,6 +74,11 @@ class FinancialEvent(MonetaryValueMixin, BaseEntity):
     event_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     # event_type: "transaction" | "recurring_payment" | "transfer"
 
+    account_id: Mapped[UUID] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True
+    )
+    payee: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
     transaction_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="completed"
     )

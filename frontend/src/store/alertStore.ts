@@ -6,6 +6,7 @@ export interface Toast {
   title: string;
   message?: string;
   duration?: number;
+  action?: { label: string; onClick: () => void };
 }
 
 interface AlertState {

@@ -49,8 +49,8 @@ export const Checkbox: React.FC<CheckboxProps> = ({
 				className={`
 					shrink-0 w-4 h-4 mt-0.5 rounded border flex items-center justify-center
 					transition-colors duration-150
-					${indeterminate ? 'bg-accent border-accent' : checked ? 'bg-accent border-accent' : 'bg-transparent border-border'}
-					${disabled ? '' : 'hover:border-accent'}
+					${indeterminate ? 'bg-primary border-primary' : checked ? 'bg-primary border-primary' : 'bg-transparent border-border'}
+					${disabled ? '' : 'hover:border-primary'}
 				`}
 			>
 				{indeterminate && (

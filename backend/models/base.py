@@ -85,7 +85,7 @@ class BaseEntity(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     household_id: Mapped[UUID] = mapped_column(
-        ForeignKey("households.id"), nullable=False
+        ForeignKey("households.id"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
@@ -95,12 +95,12 @@ class BaseEntity(Base):
     updated_by: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("persons.id"), nullable=True
     )
-    archived: Mapped[bool] = mapped_column(default=False)
+    archived: Mapped[bool] = mapped_column(default=False, index=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     archived_by: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("persons.id"), nullable=True
     )
-    status: Mapped[StatusEnum] = mapped_column(default=StatusEnum.active)
+    status: Mapped[StatusEnum] = mapped_column(default=StatusEnum.active, index=True)
 
 
 # ---------------------------------------------------------------------------

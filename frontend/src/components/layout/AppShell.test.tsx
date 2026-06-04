@@ -1,15 +1,57 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppShell } from './AppShell';
+import { useAuthStore } from '../../store/authStore';
+import { useAlertStore } from '../../store/alertStore';
 
-const renderWithRouter = (ui: React.ReactNode, route = '/dashboard') => {
-  return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>);
+vi.mock('../../store/authStore', () => ({
+  useAuthStore: vi.fn(),
+}));
+
+vi.mock('../../store/alertStore', () => ({
+  useAlertStore: vi.fn(),
+}));
+
+vi.mock('../../hooks/useAuth', () => ({
+  useAuth: () => ({ currentPerson: null, isLoading: false, logout: vi.fn() }),
+}));
+
+const renderWithProviders = (ui: React.ReactNode, route = '/dashboard') => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  (useAuthStore as jest.Mock).mockImplementation((selector) =>
+    selector({
+      currentPerson: {
+        personId: 'test-1',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        role: 'owner',
+        defaultView: 'household',
+        displayCurrency: 'SGD',
+        pictureUrl: null,
+      },
+      householdId: 'test-household',
+      csrfToken: 'test-token',
+      setAuth: vi.fn(),
+      setDefaultView: vi.fn(),
+    })
+  );
+  (useAlertStore as jest.Mock).mockImplementation((selector) =>
+    selector({ toasts: [], enqueue: vi.fn() })
+  );
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('AppShell', () => {
   it('renders children content', () => {
-    renderWithRouter(
+    renderWithProviders(
       <AppShell>
         <div data-testid="child-content">Test Content</div>
       </AppShell>
@@ -18,28 +60,25 @@ describe('AppShell', () => {
   });
 
   it('renders sidebar component', () => {
-    renderWithRouter(<AppShell><div>Content</div></AppShell>);
-    // Sidebar should be present in the DOM
+    renderWithProviders(<AppShell><div>Content</div></AppShell>);
     const sidebar = document.querySelector('aside');
     expect(sidebar).toBeInTheDocument();
   });
 
   it('renders topbar component', () => {
-    renderWithRouter(<AppShell><div>Content</div></AppShell>);
-    // Topbar should be present
+    renderWithProviders(<AppShell><div>Content</div></AppShell>);
     const topbar = document.querySelector('header');
     expect(topbar).toBeInTheDocument();
   });
 
   it('displays correct page title based on route', () => {
-    renderWithRouter(<AppShell><div>Content</div></AppShell>, '/transactions');
-    // Get the h1 element which is the page title in the topbar
+    renderWithProviders(<AppShell><div>Content</div></AppShell>, '/transactions');
     const pageTitle = document.querySelector('h1.text-lg');
     expect(pageTitle)?.toHaveTextContent('Transactions');
   });
 
   it('renders main content area with correct structure', () => {
-    renderWithRouter(<AppShell><div>Content</div></AppShell>);
+    renderWithProviders(<AppShell><div>Content</div></AppShell>);
     const main = document.querySelector('main');
     expect(main).toBeInTheDocument();
   });

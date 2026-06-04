@@ -113,8 +113,8 @@ describe('EntityPage', () => {
       </EntityPage>
     );
 
-    // Toggle uses label attribute, not accessible name
-    const toggle = container.querySelector('[label="Show Archived"]');
+    // Toggle renders with aria-label attribute
+    const toggle = container.querySelector('[aria-label="Show Archived"]');
     expect(toggle).toBeInTheDocument();
   });
 });

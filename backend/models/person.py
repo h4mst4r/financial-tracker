@@ -39,6 +39,14 @@ class Person(BaseEntity):
         Index("ix_persons_household_email", "household_id", "email"),
     )
 
+    # Override BaseEntity fields — Person can exist before Household (first login)
+    household_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("households.id"), nullable=True, index=True
+    )
+    created_by: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("persons.id"), nullable=True
+    )
+
     # Person-specific fields
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)

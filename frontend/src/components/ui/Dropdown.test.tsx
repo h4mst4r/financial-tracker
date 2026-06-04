@@ -115,7 +115,10 @@ describe('Dropdown', () => {
 				onMultiChange={() => {}}
 			/>
 		);
-		expect(screen.getByText('2 selected')).toBeInTheDocument();
+		// Only the first chip is shown; the rest collapse to "+N more"
+		expect(screen.getByText('Option A')).toBeInTheDocument();
+		expect(screen.getByText('+1 more')).toBeInTheDocument();
+		expect(screen.queryByText('Option B')).not.toBeInTheDocument();
 	});
 
 	it('handles grouped options', async () => {

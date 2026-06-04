@@ -22,11 +22,14 @@ class Settings(BaseSettings):
     # --- Google OAuth ---
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
 
     # --- Session / Security ---
     SESSION_SECRET: str = "dev-secret-change-me"
     SECRET_KEY: str = ""
+
+    # --- Frontend ---
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # --- Token Expiry ---
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30

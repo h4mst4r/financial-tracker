@@ -1,29 +1,25 @@
-"""AuthMiddleware — session cookie validation & person injection.
+"""auth_middleware — session validation helpers and path skip list.
 
-Reads the ``session_id`` cookie, looks up the ``Session`` record in the
-database, validates expiry and staleness (30-minute sliding window), then
-injects the authenticated ``Person`` into ``scope["state"].person``.
-
-Skips requests to auth endpoints, static assets, and API documentation paths.
+Auth enforcement is handled entirely by the get_current_person FastAPI
+dependency (dependencies.py). The functions and constants here are imported
+by csrf_middleware.py and dependencies.py.
 """
 
 from datetime import datetime, timezone
-from typing import Callable
 from uuid import UUID
 
 from sqlalchemy import select
-from starlette.datastructures import Headers
-from starlette.responses import JSONResponse
 
-from backend.database import async_session_factory
+import backend.database
 from backend.models.person import Person, Session as SessionModel
 
 
 # ---------------------------------------------------------------------------
 # Path skip list — these prefixes bypass ALL three middleware
 # ---------------------------------------------------------------------------
+# Note: /auth/ is NOT in the skip list anymore — only /auth/login and
+# /auth/callback are public. /auth/me and /auth/logout require auth.
 PATH_SKIP_PREFIXES = (
-    "/auth/",
     "/health",
     "/static/",
     "/assets/",
@@ -31,6 +27,9 @@ PATH_SKIP_PREFIXES = (
     "/redoc/",
     "/openapi.json",
 )
+
+# Public auth endpoints that don't require a valid session.
+PUBLIC_AUTH_PATHS = {"/auth/login", "/auth/callback"}
 
 SESSION_COOKIE_NAME = "session_id"
 
@@ -40,10 +39,71 @@ STALE_THRESHOLD_SECONDS = 30 * 60
 
 def _should_skip(path: str) -> bool:
     """Return True if the path should bypass middleware."""
+    if path in PUBLIC_AUTH_PATHS:
+        return True
     return any(path.startswith(prefix) for prefix in PATH_SKIP_PREFIXES)
 
 
-def _extract_cookie(headers: Headers, name: str) -> str | None:
+async def validate_session(session_id: str | None) -> "tuple[Person, SessionModel] | None":
+    """Module-level session validator — used by both AuthMiddleware and get_current_person.
+
+    Looks up session, validates expiry + staleness, slides the window, and
+    returns (Person, Session) or None.
+    """
+    if not session_id:
+        return None
+
+    try:
+        session_uuid = UUID(session_id)
+    except (ValueError, AttributeError):
+        return None
+
+    async with backend.database.async_session_factory() as s:
+        session_rec = await s.execute(
+            select(SessionModel).where(SessionModel.id == session_uuid)
+        )
+        session_rec = session_rec.scalar_one_or_none()
+
+        if session_rec is None:
+            return None
+
+        now = datetime.now(timezone.utc)
+
+        expires_at = session_rec.expires_at
+        last_activity = session_rec.last_activity_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=timezone.utc)
+
+        if expires_at < now:
+            return None
+
+        if (now - last_activity).total_seconds() > STALE_THRESHOLD_SECONDS:
+            return None
+
+        session_rec.last_activity_at = now
+        session_rec.expires_at = now + __import__("datetime").timedelta(minutes=30)
+        person_id = session_rec.person_id
+        await s.commit()
+
+    async with backend.database.async_session_factory() as s:
+        person_result = await s.execute(select(Person).where(Person.id == person_id))
+        person_obj = person_result.scalar_one_or_none()
+        if person_obj is None:
+            return None
+
+        session_result = await s.execute(
+            select(SessionModel).where(SessionModel.id == session_uuid)
+        )
+        session_obj = session_result.scalar_one_or_none()
+        if session_obj is None:
+            return None
+
+        return (person_obj, session_obj)
+
+
+def _extract_cookie(headers: list, name: str) -> str | None:
     """Parse a cookie value from raw ASGI headers."""
     for key, value in headers:
         if key == b"cookie":
@@ -54,105 +114,3 @@ def _extract_cookie(headers: Headers, name: str) -> str | None:
                     if k.strip() == name:
                         return v.strip()
     return None
-
-
-class AuthMiddleware:
-    """Validate session cookie and inject the authenticated person."""
-
-    def __init__(self, app: Callable) -> None:
-        self.app = app
-
-    async def __call__(self, scope: dict, receive: Callable, send: Callable) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        path = scope["path"]
-
-        # Skip auth / static / docs paths
-        if _should_skip(path):
-            await self.app(scope, receive, send)
-            return
-
-        session_id = _extract_cookie(Headers(scope.get("headers", [])), SESSION_COOKIE_NAME)
-
-        person = await self._validate_session(session_id)
-
-        if person is None:
-            response = JSONResponse(
-                status_code=401,
-                content={
-                    "error": "Authentication required",
-                    "code": "UNAUTHORIZED",
-                    "detail": {},
-                },
-            )
-            await response(scope, receive, send)
-            return
-
-        # Inject authenticated person into request state
-        scope["state"].person = person
-
-        await self.app(scope, receive, send)
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    async def _validate_session(self, session_id: str | None) -> "Person | None":
-        """Look up session, validate expiry + staleness, return Person or None."""
-        if not session_id:
-            return None
-
-        # Parse UUID — reject malformed IDs early
-        try:
-            session_uuid = UUID(session_id)
-        except (ValueError, AttributeError):
-            return None
-
-        async with async_session_factory() as s:
-            session_rec = await s.execute(
-                select(SessionModel).where(SessionModel.id == session_uuid)
-            )
-            session_rec = session_rec.scalar_one_or_none()
-
-            if session_rec is None:
-                return None
-
-            now = datetime.now(timezone.utc)
-
-            # Expiry check
-            if session_rec.expires_at < now:
-                return None
-
-            # Stale guard — session inactive for >30 minutes
-            if (now - session_rec.last_activity_at).total_seconds() > STALE_THRESHOLD_SECONDS:
-                return None
-
-            # Sliding window: refresh last_activity_at
-            session_rec.last_activity_at = now
-            await s.commit()
-
-        # Load the Person — need a fresh session since the previous one closed
-        async with async_session_factory() as s:
-            person = await s.execute(
-                select(Person).where(Person.id == session_rec.person_id)
-            )
-            return person.scalar_one_or_none()
-            if session_rec.expires_at < now:
-                return None
-
-            # Stale guard — session inactive for >30 minutes
-            if (now - session_rec.last_activity_at).total_seconds() > STALE_THRESHOLD_SECONDS:
-                return None
-
-            # Sliding window: refresh last_activity_at
-            session_rec.last_activity_at = now
-            await s.commit()
-
-        # Load the Person — need a fresh session since the previous one closed
-        async with async_session_factory() as s:
-            person = await s.execute(
-                select(Person).where(Person.id == session_rec.person_id)
-            )
-            return person.scalar_one_or_none()

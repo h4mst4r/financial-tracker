@@ -11,7 +11,7 @@ describe('Button', () => {
 
 	it('applies correct variant classes', () => {
 		const { container } = render(<Button variant="secondary">Secondary</Button>);
-		expect(container.querySelector('button')).toHaveClass('bg-surface');
+		expect(container.querySelector('button')).toHaveClass('bg-surface-raised');
 	});
 
 	it('renders small size', () => {
@@ -40,8 +40,10 @@ describe('Button', () => {
 
 	it('shows spinner when loading', async () => {
 		render(<Button loading>Loading</Button>);
-		const status = screen.getByRole('status');
-		expect(status).toBeInTheDocument();
+		// Spinner inside a button is decorative (aria-hidden) — detected via aria-busy on the button
+		expect(screen.getByRole('button')).toHaveAttribute('aria-busy', 'true');
+		// The spinner SVG is present in the DOM (just hidden from ARIA)
+		expect(document.querySelector('svg')).toBeInTheDocument();
 	});
 
 	it('renders with custom className', () => {
@@ -52,7 +54,7 @@ describe('Button', () => {
 
 	it('renders danger variant', () => {
 		const { container } = render(<Button variant="danger">Delete</Button>);
-		expect(container.querySelector('button')).toHaveClass('bg-error-bg');
+		expect(container.querySelector('button')).toHaveClass('bg-error-muted');
 	});
 
 	it('renders icon variant without text padding', () => {

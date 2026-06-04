@@ -64,11 +64,14 @@ describe('ColourPicker', () => {
 		expect(screen.getByRole('button')).toBeDisabled();
 	});
 
-	it('renders 32 swatches in palette mode', async () => {
+	it('renders swatches in palette mode', async () => {
 		const user = userEvent.setup();
 		render(<ColourPicker onChange={() => {}} />);
 		await user.click(screen.getByRole('button'));
-		const swatches = screen.getAllByRole('button').filter((b) => b.getAttribute('aria-label')?.startsWith('Select'));
-		expect(swatches).toHaveLength(32);
+		// 12 entity swatches (aria-label like "Account (indigo)") + 16 extended swatches (aria-label "Select #...")
+		const swatches = screen.getAllByRole('button').filter(
+			(b) => b.getAttribute('aria-label')?.startsWith('Select') || b.getAttribute('title')?.includes('(')
+		);
+		expect(swatches).toHaveLength(28);
 	});
 });

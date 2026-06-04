@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, NavLink } from 'react-router-dom';
+import { Icon } from '../ui/Icon';
+import { Home, Wallet, FileText, BarChart3, Settings } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -55,7 +57,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   return (
     <div className="flex h-screen bg-bg overflow-hidden">
       {/* Sidebar — hidden on mobile (<768px), shown as full/collapsed on larger screens */}
-      <div className="hidden md:block flex-shrink-0">
+      <div className="hidden md:flex flex-shrink-0 self-stretch">
         <Sidebar collapsed={sidebarCollapsed} />
       </div>
 
@@ -75,11 +77,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
         {/* Bottom Navigation — mobile only (<768px) */}
         <nav className="md:hidden flex items-center justify-around h-14 bg-surface border-t border-border px-2">
-          <BottomNavItem to="/dashboard" label="Home" icon="🏠" />
-          <BottomNavItem to="/accounts" label="Accounts" icon="💰" />
-          <BottomNavItem to="/transactions" label="Txns" icon="📄" />
-          <BottomNavItem to="/budgets" label="Budgets" icon="📊" />
-          <BottomNavItem to="/settings" label="Settings" icon="⚙️" />
+          <BottomNavItem to="/dashboard" label="Home" icon={Home} />
+          <BottomNavItem to="/accounts" label="Accounts" icon={Wallet} />
+          <BottomNavItem to="/transactions" label="Txns" icon={FileText} />
+          <BottomNavItem to="/budgets" label="Budgets" icon={BarChart3} />
+          <BottomNavItem to="/settings" label="Settings" icon={Settings} />
         </nav>
       </div>
     </div>
@@ -88,28 +90,30 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
 // --- Bottom Nav Item (Mobile) ---
 
+import type { LucideIcon } from 'lucide-react';
+
 interface BottomNavItemProps {
   to: string;
   label: string;
-  icon: string;
+  icon: LucideIcon;
 }
 
 const BottomNavItem: React.FC<BottomNavItemProps> = ({ to, label, icon }) => {
-  const location = useLocation();
-  const isActive = location.pathname === to;
-
   return (
-    <a
-      href={to}
-      className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-md transition-colors duration-fast min-w-0 ${
-        isActive
-          ? 'text-primary'
-          : 'text-text-muted hover:text-text-secondary'
-      }`}
+    <NavLink
+      to={to}
+      end
+      className={({ isActive }) =>
+        `flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-md transition-colors duration-fast min-w-0 ${
+          isActive
+            ? 'text-primary'
+            : 'text-text-muted hover:text-text-secondary'
+        }`
+      }
     >
-      <span className="text-lg leading-none">{icon}</span>
+      <Icon icon={icon} size="sm" />
       <span className="text-3xs font-medium truncate">{label}</span>
-    </a>
+    </NavLink>
   );
 };
 

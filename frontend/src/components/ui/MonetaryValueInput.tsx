@@ -3,11 +3,6 @@ import { Input } from './Input';
 import { Dropdown } from './Dropdown';
 import type { DropdownOption } from './Dropdown';
 
-interface Currency {
-	code: string;
-	symbol: string;
-}
-
 interface MonetaryValueInputOwnProps {
 	currencies: Array<{ code: string; symbol: string }>;
 	currency?: string;
@@ -44,8 +39,6 @@ export const MonetaryValueInput: React.FC<MonetaryValueInputProps> = ({
 		[currencies]
 	);
 
-	const selectedCurrency = currencies.find((c) => c.code === currency);
-
 	const hasFxDelta =
 		baseCurrency &&
 		currency &&
@@ -55,6 +48,7 @@ export const MonetaryValueInput: React.FC<MonetaryValueInputProps> = ({
 	const baseAmount = useMemo(() => {
 		if (!hasFxDelta || exchangeRate == null) return undefined;
 		const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+		if (numAmount == null) return undefined;
 		return isNaN(numAmount) ? undefined : (numAmount * exchangeRate).toFixed(2);
 	}, [amount, exchangeRate, hasFxDelta]);
 

@@ -1,12 +1,14 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { Bell as BellIcon, SlidersHorizontal, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Bell as BellIcon, SlidersHorizontal, X, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
+import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import { useAlertStore } from '../../store/alertStore';
 import { useAuthStore } from '../../store/authStore';
+import { useAuth } from '../../hooks/useAuth';
 
 // --- Topbar Props ---
 
@@ -32,9 +34,18 @@ export const Topbar: React.FC<TopbarProps> = ({
   const currentPerson = useAuthStore((state) => state.currentPerson);
   const toasts = useAlertStore((state) => state.toasts);
   const unreadCount = toasts.filter((t) => t.variant === 'error' || t.variant === 'warning').length;
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const accountMenuItems: ContextMenuItem[] = [
+    { header: true, displayName: currentPerson?.displayName ?? '', email: currentPerson?.email ?? '' },
+    { label: 'Settings', icon: SettingsIcon, onClick: () => navigate('/settings') },
+    { divider: true },
+    { label: 'Log out', icon: LogOut, onClick: logout, destructive: true },
+  ];
 
   return (
-    <header className="sticky top-0 z-sticky flex items-center h-16 bg-bg border-b border-border px-4 gap-4">
+    <header className="sticky top-0 z-sticky flex items-center h-16 bg-surface border-b border-border px-4 gap-4">
       {/* Page Title */}
       <h1 className="text-lg font-semibold text-text-primary flex-shrink-0">
         {pageTitle}
@@ -42,8 +53,8 @@ export const Topbar: React.FC<TopbarProps> = ({
 
       {/* Filter Slot — horizontal scroll on overflow */}
       <div className="flex-1 min-w-0">
-        {/* Desktop: inline filter slot with horizontal scroll */}
-        <div className="hidden sm:flex items-center gap-2 overflow-x-auto scrollbar-thin">
+        {/* Desktop: inline filter slot with horizontal scroll — visible ≥--breakpoint-xs per spec [G-14] */}
+        <div className="hidden xs:flex items-center gap-2 overflow-x-auto scrollbar-thin">
           {filterSlot}
           {filterSlot && onClearFilters && (
             <Button
@@ -59,13 +70,13 @@ export const Topbar: React.FC<TopbarProps> = ({
           )}
         </div>
 
-        {/* Mobile: "Filters" button */}
+        {/* Mobile: "Filters" button — visible <--breakpoint-xs per spec [G-14] */}
         {filterSlot && (
-          <div className="sm:hidden">
+          <div className="max-xs:block hidden">
             <Tooltip content="Open filters">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={onToggleFilterDrawer}
                 className="flex items-center gap-1.5"
@@ -88,7 +99,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     onClick={onToggleFilterDrawer}
                     aria-label="Close filters"
                   >
@@ -107,7 +118,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       {/* Right Section */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Alert Bell */}
-        <Tooltip content="Alerts" placement="bottom">
+        <Tooltip content="Alerts">
           <Link
             to="/alerts"
             aria-label="Alerts"
@@ -120,21 +131,26 @@ export const Topbar: React.FC<TopbarProps> = ({
           </Link>
         </Tooltip>
 
-        {/* User Avatar */}
-        <Tooltip content={currentPerson?.displayName ?? 'Profile'} placement="bottom">
-          <Link
-            to="/settings"
-            className="flex items-center gap-2 p-1.5 rounded-md hover:bg-surface-hover transition-colors duration-fast"
-          >
-            <Avatar
-              name={currentPerson?.displayName}
-              size="sm"
-            />
-            <span className="hidden lg:block text-sm font-medium text-text-primary max-w-avatar-name truncate">
-              {currentPerson?.displayName ?? 'User'}
-            </span>
-          </Link>
-        </Tooltip>
+        {/* User Avatar — opens account menu */}
+        <ContextMenu
+          items={accountMenuItems}
+          trigger={
+            <button
+              type="button"
+              className="flex items-center gap-2 p-1.5 rounded-md hover:bg-surface-hover transition-colors duration-fast"
+              aria-label="User account menu"
+            >
+              <Avatar
+                name={currentPerson?.displayName}
+                pictureUrl={currentPerson?.pictureUrl ?? undefined}
+                size="sm"
+              />
+              <span className="hidden lg:block text-sm font-medium text-text-primary max-w-avatar-name truncate">
+                {currentPerson?.displayName ?? 'User'}
+              </span>
+            </button>
+          }
+        />
       </div>
     </header>
   );

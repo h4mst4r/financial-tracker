@@ -45,17 +45,21 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('shows isDirty warning when provided', async () => {
-    vi.spyOn(window, 'confirm').mockImplementation(() => true);
+  it('shows inline dirty guard instead of window.confirm (E84)', async () => {
     const onClose = vi.fn();
     render(
       <Modal isOpen={true} onClose={onClose} title="Test" isDirty>
         Content
       </Modal>
     );
+    // Pressing Escape with isDirty should show the inline guard, NOT call onClose
     await userEvent.keyboard('{Escape}');
-    expect(window.confirm).toHaveBeenCalled();
-    vi.restoreAllMocks();
+    expect(onClose).not.toHaveBeenCalled();
+    // The inline guard should be visible
+    expect(screen.getByText('Discard changes?')).toBeInTheDocument();
+    // Clicking "Discard" should close
+    await userEvent.click(screen.getByRole('button', { name: /discard/i }));
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('applies size variants', () => {

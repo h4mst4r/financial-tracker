@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const sizeMap = {
 	sm: 24,
@@ -24,6 +24,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 	archived = false,
 	className = '',
 }) => {
+	const [imgError, setImgError] = useState(false);
 	const dimension = sizeMap[size];
 	const fontSize = size === 'sm' ? 8 : size === 'md' ? 10 : size === 'lg' ? 12 : 16;
 
@@ -39,7 +40,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
 	const stateClasses = archived ? 'grayscale opacity-50' : '';
 
-	if (pictureUrl) {
+	if (pictureUrl && !imgError) {
 		return (
 			<img
 				src={pictureUrl}
@@ -47,6 +48,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 				width={dimension}
 				height={dimension}
 				className={`rounded-full object-cover ${stateClasses} ${className}`}
+				onError={() => setImgError(true)}
 			/>
 		);
 	}
@@ -58,7 +60,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 				width: dimension,
 				height: dimension,
 				fontSize: `${fontSize}px`,
-				backgroundColor: 'var(--color-entity-person, var(--color-accent))',
+				backgroundColor: 'var(--color-entity-person, var(--color-primary))',
 				color: 'var(--color-text-inverse)',
 				fontWeight: 600,
 			}}

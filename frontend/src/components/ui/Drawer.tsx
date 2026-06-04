@@ -1,4 +1,4 @@
-import { useEffect, useRef, ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Icon } from './Icon';
 import { X } from 'lucide-react';
 
@@ -92,7 +92,7 @@ export const Drawer = ({
     <div className="fixed inset-0 z-modal" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-backdrop backdrop-blur-sm"
         onClick={onClose}
       />
 
@@ -100,7 +100,7 @@ export const Drawer = ({
       <div
         ref={drawerRef}
         tabIndex={-1}
-        className={`absolute right-0 top-0 h-full bg-surface border-l border-border shadow-xl flex flex-col ${sizeClasses[size]} transition-transform duration-slow ease-out translate-x-0`}
+        className={`absolute right-0 top-0 h-full bg-surface-overlay border-l border-border shadow-xl flex flex-col ${sizeClasses[size]} transition-transform duration-slow ease-out translate-x-0`}
       >
         {/* Header */}
         {title && (

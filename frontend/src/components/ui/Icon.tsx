@@ -31,7 +31,7 @@ export const Icon: React.FC<IconProps> = ({
 	return (
 		<IconComponent
 			size={dimension}
-			className={`inline-flex currentColor ${className}`}
+			className={`inline-flex ${className}`}
 			aria-hidden={decorative ? 'true' : undefined}
 			aria-label={decorative ? undefined : ariaLabel}
 			strokeWidth={1.5}

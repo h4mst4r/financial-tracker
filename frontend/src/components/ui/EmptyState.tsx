@@ -1,9 +1,8 @@
-import { ReactNode } from 'react';
-import { Icon } from './Icon';
 import { Button } from './Button';
+import type { LucideIcon } from 'lucide-react';
 
 interface EmptyStateProps {
-  icon?: typeof Icon extends { render: (props: infer P) => any } ? P : never;
+  icon?: LucideIcon;
   title: string;
   description?: string;
   actionLabel?: string;

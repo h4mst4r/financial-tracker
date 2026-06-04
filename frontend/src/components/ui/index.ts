@@ -55,7 +55,7 @@ export type { CardVariant } from './Card';
 export { Modal } from './Modal';
 export { Drawer } from './Drawer';
 export { Accordion } from './Accordion';
-export type { AccordionItemProps } from './Accordion';
+export type { AccordionItem } from './Accordion';
 export { Table } from './Table';
 export type { Column } from './Table';
 export { ContextMenu } from './ContextMenu';

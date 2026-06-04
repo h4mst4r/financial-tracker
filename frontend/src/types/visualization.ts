@@ -87,7 +87,8 @@ export interface VisualizationFilter {
 
 // --- Default Filter Factory ---
 
-export function defaultVisualizationFilter(displayCurrency = 'USD'): VisualizationFilter {
+// Default to SGD — household base currency per EDP §4 [G-10]
+export function defaultVisualizationFilter(displayCurrency = 'SGD'): VisualizationFilter {
   const now = new Date();
   return {
     time_range: {

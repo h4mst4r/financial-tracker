@@ -7,7 +7,7 @@ describe('Card', () => {
     render(<Card>Content</Card>);
     const card = screen.getByText('Content');
     expect(card).toBeInTheDocument();
-    expect(card.closest('.card-default')).toBeTruthy();
+    expect(card.closest('.bg-surface')).toBeTruthy();
   });
 
   it('renders stat variant with accent bar', () => {
@@ -28,16 +28,19 @@ describe('Card', () => {
     expect(card).toBeInTheDocument();
   });
 
-  it('applies entityAccent styling when provided', () => {
-    const { container } = render(<Card entityAccent="--accent-income">Accent</Card>);
-    const cardEl = container.firstChild;
-    expect(cardEl).toHaveStyle('--accent: var(--accent-income)');
+  it('applies entityAccent as inline border-left style with CSS variable for color', () => {
+    const { container } = render(<Card entityAccent="var(--color-entity-account)">Accent</Card>);
+    const cardEl = container.firstChild as HTMLElement;
+    // --entity-accent CSS var is set on the element so child utilities can read it
+    expect(cardEl.style.getPropertyValue('--entity-accent')).toBe('var(--color-entity-account)');
+    // border-left is an inline style (immune to cascade conflicts with Tailwind's border shorthand)
+    expect(cardEl.style.borderLeft).toBe('4px solid var(--entity-accent)');
   });
 
-  it('applies hover lift class on stat variant', () => {
+  it('applies hover shadow class on stat variant', () => {
     const { container } = render(<Card variant="stat">Hoverable</Card>);
     const cardEl = container.firstChild;
-    expect(cardEl).toHaveClass('hover:shadow-lg');
+    expect(cardEl).toHaveClass('hover:shadow-card');
   });
 
   it('applies custom className', () => {

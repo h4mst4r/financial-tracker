@@ -3,13 +3,13 @@ import { Spinner } from './Spinner';
 
 const variantMap = {
 	primary:
-		'bg-accent text-text-inverse hover:bg-accent-hover active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
+		'bg-primary text-text-inverse hover:bg-primary-hover active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
 	secondary:
-		'bg-surface border-border text-text-primary hover:bg-surface-hover active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
+		'bg-surface-raised border border-border text-text-primary hover:bg-surface-hover active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
 	ghost:
 		'text-text-secondary hover:bg-surface-hover active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
 	danger:
-		'bg-error-bg text-error border border-error/40 hover:bg-error/20 active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
+		'bg-error-muted text-error border border-error/40 hover:bg-error/20 active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
 	icon:
 		'text-text-secondary hover:bg-surface-hover active:scale-press focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2',
 } as const;
@@ -73,7 +73,12 @@ export const Button: React.FC<ButtonProps> = ({
 			aria-busy={loading}
 			{...rest}
 		>
-			{loading && <Spinner size={size === 'sm' ? 'sm' : size === 'lg' ? 'md' : 'sm'} />}
+			{loading && (
+				<Spinner
+					size={size === 'lg' ? 'md' : 'sm'}
+					className={variant === 'primary' ? 'text-white' : ''}
+				/>
+			)}
 			{children}
 		</button>
 	);

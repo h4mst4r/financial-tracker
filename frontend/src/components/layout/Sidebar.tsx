@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Wallet,
@@ -15,6 +15,8 @@ import {
   Bell,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useUpdatePersonProfile } from '../../api/usePersons';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import type { LucideIcon } from 'lucide-react';
 
 // --- Navigation Section Definitions ---
@@ -71,19 +73,34 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
-  const location = useLocation();
   const currentPerson = useAuthStore((state) => state.currentPerson);
-  const [viewMode, setViewMode] = useState<'household' | 'personal'>(
-    currentPerson?.defaultView ?? 'household'
-  );
+  const setDefaultView = useAuthStore((state) => state.setDefaultView);
+  // Read view mode from authStore — single source of truth [G-13]
+  const viewMode = currentPerson?.defaultView ?? 'household';
 
-  const toggleView = (): void => {
-    setViewMode((prev) => (prev === 'household' ? 'personal' : 'household'));
+  // AUTH-004: Wire view toggle to backend via PATCH /api/persons/{id}
+  const updateProfile = useUpdatePersonProfile();
+  const handleViewToggle = (mode: 'household' | 'personal') => {
+    // Capture previous value BEFORE optimistic update to avoid stale closure
+    const previous = currentPerson?.defaultView ?? 'household';
+    // 1. Optimistic local update
+    setDefaultView(mode);
+    // 2. Persist to backend
+    if (!currentPerson) return;
+    updateProfile.mutate(
+      { id: currentPerson.personId, update: { defaultView: mode } },
+      {
+        onError: () => {
+          // Revert on failure — use captured value, not closure-captured person
+          setDefaultView(previous);
+        },
+      },
+    );
   };
 
   return (
     <aside
-      className={`flex flex-col bg-surface border-r border-border transition-all duration-200 ease-default ${
+      className={`h-full flex flex-col bg-surface border-r border-border transition-all duration-200 ease-default ${
         collapsed ? 'w-16 min-w-16' : 'w-64 min-w-64'
       }`}
     >
@@ -163,23 +180,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
           ))}
         </ul>
 
-        {/* View Toggle */}
+        {/* View Toggle — Segmented Control (UX spec §2.10) */}
         <div className="px-2">
-          <button
-            type="button"
-            onClick={toggleView}
-            className={`w-full flex items-center rounded-md border border-border bg-surface-hover hover:bg-surface-active transition-colors duration-fast ${
-              collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'
-            }`}
-            title={`Switch to ${viewMode === 'household' ? 'Personal' : 'Household'} view`}
-          >
-            <ArrowLeftRight size={16} className={collapsed ? '' : 'mr-3 text-text-secondary'} />
-            {!collapsed && (
-              <span className="text-xs font-medium text-text-secondary">
-                {viewMode === 'household' ? 'Household' : 'My Finances'}
-              </span>
-            )}
-          </button>
+          <SegmentedControl
+            options={[
+              { value: 'household', label: 'Household' },
+              { value: 'personal', label: 'My Finances' },
+            ]}
+            value={viewMode}
+            onChange={handleViewToggle}
+            collapsed={collapsed}
+          />
         </div>
       </div>
     </aside>

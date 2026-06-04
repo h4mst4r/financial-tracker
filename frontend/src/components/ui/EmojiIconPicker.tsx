@@ -1,119 +1,309 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 
 const EMOJI_GROUPS: Array<{ name: string; emojis: Array<{ char: string; name: string }> }> = [
 	{
-		name: 'Smileys',
-		emojis: [
-			{ char: '😀', name: 'grinning' },
-			{ char: '😃', name: 'smiley' },
-			{ char: '😄', name: 'smile' },
-			{ char: '😁', name: 'grin' },
-			{ char: '😆', name: 'laughing' },
-			{ char: '😅', name: 'sweat smile' },
-			{ char: '🤣', name: 'rofl' },
-			{ char: '😂', name: 'joy' },
-			{ char: '🙂', name: 'slight smile' },
-			{ char: '😉', name: 'wink' },
-			{ char: '😊', name: 'blush' },
-			{ char: '😇', name: 'angel' },
-			{ char: '🥰', name: 'hearts' },
-			{ char: '😍', name: 'love' },
-			{ char: '🤩', name: 'star struck' },
-			{ char: '😘', name: 'kiss' },
-			{ char: '😗', name: 'kissing' },
-			{ char: '😚', name: 'kissing blush' },
-			{ char: '😙', name: 'kissing smile' },
-			{ char: '😋', name: 'yum' },
-			{ char: '😛', name: 'stuck out tongue' },
-			{ char: '😜', name: 'wink tongue' },
-			{ char: '🤪', name: 'zany' },
-			{ char: '😝', name: 'squint tongue' },
-			{ char: '🤑', name: 'money mouth' },
-			{ char: '🤗', name: 'hugs' },
-			{ char: '🤭', name: 'hand over mouth' },
-			{ char: '🤫', name: 'shh' },
-			{ char: '🤔', name: 'thinking' },
-			{ char: '🤐', name: 'zipper mouth' },
-		],
-	},
-	{
-		name: ' Gestures',
-		emojis: [
-			{ char: '👍', name: 'thumbs up' },
-			{ char: '👎', name: 'thumbs down' },
-			{ char: '👏', name: 'clap' },
-			{ char: '🙌', name: 'raised hands' },
-			{ char: '🤝', name: 'handshake' },
-			{ char: '👏', name: 'pray' },
-			{ char: '💪', name: 'muscle' },
-			{ char: '✌️', name: 'victory' },
-			{ char: '🤞', name: 'crossed fingers' },
-			{ char: '👌', name: 'ok hand' },
-		],
-	},
-	{
-		name: 'Objects',
+		name: 'Finance',
 		emojis: [
 			{ char: '💰', name: 'money bag' },
-			{ char: '💵', name: 'dollar' },
+			{ char: '💵', name: 'dollar bill' },
+			{ char: '💴', name: 'yen bill' },
+			{ char: '💶', name: 'euro bill' },
+			{ char: '💷', name: 'pound bill' },
 			{ char: '💳', name: 'credit card' },
-			{ char: '📊', name: 'chart increasing' },
-			{ char: '📈', name: 'chart' },
+			{ char: '🏦', name: 'bank' },
+			{ char: '🏧', name: 'atm' },
+			{ char: '💹', name: 'chart increasing with yen' },
+			{ char: '📈', name: 'chart increasing' },
+			{ char: '📉', name: 'chart decreasing' },
+			{ char: '📊', name: 'bar chart' },
+			{ char: '🪙', name: 'coin' },
+			{ char: '💸', name: 'money with wings' },
+			{ char: '🤑', name: 'money mouth' },
+			{ char: '🏆', name: 'trophy' },
 			{ char: '🎯', name: 'dart' },
-			{ char: '⚡', name: 'zap' },
-			{ char: '🔥', name: 'fire' },
-			{ char: '⭐', name: 'star' },
+			{ char: '📑', name: 'document' },
+			{ char: '🧾', name: 'receipt' },
+			{ char: '📋', name: 'clipboard' },
+		],
+	},
+	{
+		name: 'Food & Drink',
+		emojis: [
+			{ char: '🍕', name: 'pizza' },
+			{ char: '🍔', name: 'burger' },
+			{ char: '🍜', name: 'noodles' },
+			{ char: '🍱', name: 'bento box' },
+			{ char: '🥗', name: 'salad' },
+			{ char: '🍣', name: 'sushi' },
+			{ char: '🥩', name: 'steak' },
+			{ char: '🍳', name: 'cooking' },
+			{ char: '🥦', name: 'broccoli' },
+			{ char: '🍎', name: 'apple' },
+			{ char: '🍺', name: 'beer' },
+			{ char: '🍷', name: 'wine' },
+			{ char: '☕', name: 'coffee' },
+			{ char: '🧃', name: 'juice' },
+			{ char: '🧋', name: 'bubble tea' },
+			{ char: '🛒', name: 'shopping cart' },
+			{ char: '🏪', name: 'convenience store' },
+			{ char: '🍰', name: 'cake' },
+			{ char: '🍩', name: 'doughnut' },
+			{ char: '🍫', name: 'chocolate' },
+		],
+	},
+	{
+		name: 'Home & Utilities',
+		emojis: [
+			{ char: '🏠', name: 'house' },
+			{ char: '🏡', name: 'house with garden' },
+			{ char: '🏢', name: 'office building' },
+			{ char: '🏗️', name: 'construction' },
+			{ char: '🔑', name: 'key' },
+			{ char: '🪑', name: 'chair' },
+			{ char: '🛋️', name: 'couch' },
+			{ char: '🛏️', name: 'bed' },
+			{ char: '🚿', name: 'shower' },
+			{ char: '💡', name: 'lightbulb' },
+			{ char: '🔌', name: 'plug' },
+			{ char: '📱', name: 'phone' },
+			{ char: '💻', name: 'laptop' },
+			{ char: '📺', name: 'tv' },
+			{ char: '🌊', name: 'water wave' },
+			{ char: '♻️', name: 'recycle' },
+			{ char: '🧹', name: 'broom' },
+			{ char: '🧺', name: 'basket' },
+			{ char: '🪴', name: 'plant' },
+			{ char: '🌡️', name: 'thermometer' },
+		],
+	},
+	{
+		name: 'Transport',
+		emojis: [
+			{ char: '🚗', name: 'car' },
+			{ char: '🚕', name: 'taxi' },
+			{ char: '🚙', name: 'suv' },
+			{ char: '🚌', name: 'bus' },
+			{ char: '🚇', name: 'metro' },
+			{ char: '🚂', name: 'train' },
+			{ char: '✈️', name: 'airplane' },
+			{ char: '🚢', name: 'ship' },
+			{ char: '🚲', name: 'bicycle' },
+			{ char: '🛵', name: 'scooter' },
+			{ char: '⛽', name: 'fuel pump' },
+			{ char: '🅿️', name: 'parking' },
+			{ char: '🛣️', name: 'highway' },
+			{ char: '🗺️', name: 'map' },
+		],
+	},
+	{
+		name: 'Health & Fitness',
+		emojis: [
+			{ char: '🏥', name: 'hospital' },
+			{ char: '💊', name: 'pill' },
+			{ char: '🩺', name: 'stethoscope' },
+			{ char: '🩹', name: 'bandage' },
+			{ char: '🧬', name: 'dna' },
+			{ char: '🏋️', name: 'weightlifting' },
+			{ char: '🏃', name: 'running' },
+			{ char: '🧘', name: 'yoga' },
+			{ char: '🚴', name: 'cycling' },
+			{ char: '⚽', name: 'soccer' },
+			{ char: '🎾', name: 'tennis' },
+			{ char: '🏊', name: 'swimming' },
+			{ char: '💪', name: 'muscle' },
 			{ char: '❤️', name: 'heart' },
+			{ char: '🧠', name: 'brain' },
+		],
+	},
+	{
+		name: 'Shopping & Lifestyle',
+		emojis: [
+			{ char: '🛍️', name: 'shopping bags' },
+			{ char: '👗', name: 'dress' },
+			{ char: '👟', name: 'sneaker' },
+			{ char: '👔', name: 'shirt' },
+			{ char: '💄', name: 'lipstick' },
+			{ char: '💍', name: 'ring' },
+			{ char: '⌚', name: 'watch' },
+			{ char: '👜', name: 'handbag' },
+			{ char: '🧴', name: 'lotion' },
+			{ char: '💈', name: 'barber' },
+			{ char: '✂️', name: 'scissors' },
+			{ char: '📦', name: 'package' },
+			{ char: '🎁', name: 'gift' },
+			{ char: '🏷️', name: 'tag' },
+			{ char: '💎', name: 'gem' },
+		],
+	},
+	{
+		name: 'Entertainment',
+		emojis: [
+			{ char: '🎬', name: 'film' },
+			{ char: '🎮', name: 'game controller' },
+			{ char: '🎵', name: 'music note' },
+			{ char: '🎸', name: 'guitar' },
+			{ char: '🎤', name: 'microphone' },
+			{ char: '🎭', name: 'theater' },
+			{ char: '📚', name: 'books' },
+			{ char: '🎨', name: 'art' },
+			{ char: '🎪', name: 'circus' },
+			{ char: '🏖️', name: 'beach' },
+			{ char: '🏕️', name: 'camping' },
+			{ char: '🎲', name: 'dice' },
+			{ char: '🎡', name: 'ferris wheel' },
+			{ char: '🎟️', name: 'ticket' },
+			{ char: '🎰', name: 'slot machine' },
+		],
+	},
+	{
+		name: 'Education & Work',
+		emojis: [
+			{ char: '🎓', name: 'graduation cap' },
+			{ char: '📖', name: 'open book' },
+			{ char: '✏️', name: 'pencil' },
+			{ char: '📝', name: 'memo' },
+			{ char: '🖊️', name: 'pen' },
+			{ char: '💼', name: 'briefcase' },
+			{ char: '🗂️', name: 'file folder' },
+			{ char: '📌', name: 'pin' },
+			{ char: '🔬', name: 'microscope' },
+			{ char: '🔭', name: 'telescope' },
+			{ char: '🖥️', name: 'desktop' },
+			{ char: '⌨️', name: 'keyboard' },
+			{ char: '🖨️', name: 'printer' },
+			{ char: '📡', name: 'satellite' },
+			{ char: '🏫', name: 'school' },
 		],
 	},
 ];
 
-// Curated subset of commonly used Lucide icons for the picker
-const LUCIDE_SUBSET: Array<{ name: string; icon: LucideIcon }> = [
-	{ name: 'Home', icon: LucideIcons.Home },
-	{ name: 'User', icon: LucideIcons.User },
-	{ name: 'Settings', icon: LucideIcons.Settings },
-	{ name: 'Search', icon: LucideIcons.Search },
-	{ name: 'Heart', icon: LucideIcons.Heart },
-	{ name: 'Star', icon: LucideIcons.Star },
-	{ name: 'Bell', icon: LucideIcons.Bell },
-	{ name: 'Mail', icon: LucideIcons.Mail },
-	{ name: 'Calendar', icon: LucideIcons.Calendar },
-	{ name: 'Camera', icon: LucideIcons.Camera },
-	{ name: 'Image', icon: LucideIcons.Image },
-	{ name: 'Video', icon: LucideIcons.Video },
-	{ name: 'Music', icon: LucideIcons.Music },
-	{ name: 'Book', icon: LucideIcons.Book },
-	{ name: 'Gift', icon: LucideIcons.Gift },
-	{ name: 'Flag', icon: LucideIcons.Flag },
-	{ name: 'Map', icon: LucideIcons.Map },
-	{ name: 'Clock', icon: LucideIcons.Clock },
-	{ name: 'Check', icon: LucideIcons.Check },
-	{ name: 'X', icon: LucideIcons.X },
-	{ name: 'Plus', icon: LucideIcons.Plus },
-	{ name: 'Minus', icon: LucideIcons.Minus },
-	{ name: 'ArrowUp', icon: LucideIcons.ArrowUp },
-	{ name: 'ArrowDown', icon: LucideIcons.ArrowDown },
-	{ name: 'ChevronRight', icon: LucideIcons.ChevronRight },
-	{ name: 'ChevronLeft', icon: LucideIcons.ChevronLeft },
-	{ name: 'Download', icon: LucideIcons.Download },
-	{ name: 'Upload', icon: LucideIcons.Upload },
-	{ name: 'Trash', icon: LucideIcons.Trash },
-	{ name: 'Edit', icon: LucideIcons.Edit },
-	{ name: 'Eye', icon: LucideIcons.Eye },
-	{ name: 'Lock', icon: LucideIcons.Lock },
-	{ name: 'Unlock', icon: LucideIcons.Unlock },
-	{ name: 'AlertCircle', icon: LucideIcons.AlertCircle },
-	{ name: 'AlertTriangle', icon: LucideIcons.AlertTriangle },
-	{ name: 'Info', icon: LucideIcons.Info },
-	{ name: 'HelpCircle', icon: LucideIcons.HelpCircle },
-	{ name: 'Shield', icon: LucideIcons.Shield },
-	{ name: 'Zap', icon: LucideIcons.Zap },
+// Curated Lucide icon groups — finance/lifestyle focused for category usage
+const LUCIDE_ICON_GROUPS: Array<{ name: string; icons: Array<{ name: string; icon: LucideIcon }> }> = [
+	{
+		name: 'Finance',
+		icons: [
+			{ name: 'Wallet', icon: LucideIcons.Wallet },
+			{ name: 'CreditCard', icon: LucideIcons.CreditCard },
+			{ name: 'Banknote', icon: LucideIcons.Banknote },
+			{ name: 'PiggyBank', icon: LucideIcons.PiggyBank },
+			{ name: 'DollarSign', icon: LucideIcons.DollarSign },
+			{ name: 'TrendingUp', icon: LucideIcons.TrendingUp },
+			{ name: 'TrendingDown', icon: LucideIcons.TrendingDown },
+			{ name: 'BarChart2', icon: LucideIcons.BarChart2 },
+			{ name: 'LineChart', icon: LucideIcons.LineChart },
+			{ name: 'PieChart', icon: LucideIcons.PieChart },
+			{ name: 'Receipt', icon: LucideIcons.Receipt },
+			{ name: 'Calculator', icon: LucideIcons.Calculator },
+			{ name: 'Percent', icon: LucideIcons.Percent },
+			{ name: 'Landmark', icon: LucideIcons.Landmark },
+			{ name: 'Building2', icon: LucideIcons.Building2 },
+			{ name: 'Briefcase', icon: LucideIcons.Briefcase },
+		],
+	},
+	{
+		name: 'Home & Utilities',
+		icons: [
+			{ name: 'Home', icon: LucideIcons.Home },
+			{ name: 'Lightbulb', icon: LucideIcons.Lightbulb },
+			{ name: 'Wifi', icon: LucideIcons.Wifi },
+			{ name: 'Phone', icon: LucideIcons.Phone },
+			{ name: 'Tv', icon: LucideIcons.Tv },
+			{ name: 'Thermometer', icon: LucideIcons.Thermometer },
+			{ name: 'Droplets', icon: LucideIcons.Droplets },
+			{ name: 'Flame', icon: LucideIcons.Flame },
+			{ name: 'Printer', icon: LucideIcons.Printer },
+		],
+	},
+	{
+		name: 'Food & Drink',
+		icons: [
+			{ name: 'Utensils', icon: LucideIcons.Utensils },
+			{ name: 'UtensilsCrossed', icon: LucideIcons.UtensilsCrossed },
+			{ name: 'Coffee', icon: LucideIcons.Coffee },
+			{ name: 'Wine', icon: LucideIcons.Wine },
+			{ name: 'ChefHat', icon: LucideIcons.ChefHat },
+			{ name: 'Pizza', icon: LucideIcons.Pizza },
+			{ name: 'Apple', icon: LucideIcons.Apple },
+			{ name: 'ShoppingCart', icon: LucideIcons.ShoppingCart },
+		],
+	},
+	{
+		name: 'Transport',
+		icons: [
+			{ name: 'Car', icon: LucideIcons.Car },
+			{ name: 'Bus', icon: LucideIcons.Bus },
+			{ name: 'Train', icon: LucideIcons.Train },
+			{ name: 'Plane', icon: LucideIcons.Plane },
+			{ name: 'Bike', icon: LucideIcons.Bike },
+			{ name: 'Fuel', icon: LucideIcons.Fuel },
+		],
+	},
+	{
+		name: 'Health',
+		icons: [
+			{ name: 'Activity', icon: LucideIcons.Activity },
+			{ name: 'Heart', icon: LucideIcons.Heart },
+			{ name: 'HeartPulse', icon: LucideIcons.HeartPulse },
+			{ name: 'Stethoscope', icon: LucideIcons.Stethoscope },
+			{ name: 'Pill', icon: LucideIcons.Pill },
+			{ name: 'Dumbbell', icon: LucideIcons.Dumbbell },
+		],
+	},
+	{
+		name: 'Shopping',
+		icons: [
+			{ name: 'ShoppingBag', icon: LucideIcons.ShoppingBag },
+			{ name: 'Package', icon: LucideIcons.Package },
+			{ name: 'Tag', icon: LucideIcons.Tag },
+			{ name: 'Store', icon: LucideIcons.Store },
+			{ name: 'Gift', icon: LucideIcons.Gift },
+		],
+	},
+	{
+		name: 'Entertainment',
+		icons: [
+			{ name: 'Gamepad2', icon: LucideIcons.Gamepad2 },
+			{ name: 'Headphones', icon: LucideIcons.Headphones },
+			{ name: 'Music', icon: LucideIcons.Music },
+			{ name: 'Film', icon: LucideIcons.Film },
+			{ name: 'BookOpen', icon: LucideIcons.BookOpen },
+			{ name: 'GraduationCap', icon: LucideIcons.GraduationCap },
+		],
+	},
+	{
+		name: 'Work',
+		icons: [
+			{ name: 'Laptop', icon: LucideIcons.Laptop },
+			{ name: 'Monitor', icon: LucideIcons.Monitor },
+			{ name: 'Globe', icon: LucideIcons.Globe },
+			{ name: 'Mail', icon: LucideIcons.Mail },
+			{ name: 'Bell', icon: LucideIcons.Bell },
+		],
+	},
+	{
+		name: 'General',
+		icons: [
+			{ name: 'Star', icon: LucideIcons.Star },
+			{ name: 'Flag', icon: LucideIcons.Flag },
+			{ name: 'Map', icon: LucideIcons.Map },
+			{ name: 'Clock', icon: LucideIcons.Clock },
+			{ name: 'Calendar', icon: LucideIcons.Calendar },
+			{ name: 'User', icon: LucideIcons.User },
+			{ name: 'Users', icon: LucideIcons.Users },
+			{ name: 'Settings', icon: LucideIcons.Settings },
+			{ name: 'Lock', icon: LucideIcons.Lock },
+			{ name: 'Shield', icon: LucideIcons.Shield },
+		],
+	},
 ];
+
+// Flat list derived from groups — used for icon lookup and search
+const LUCIDE_SUBSET = LUCIDE_ICON_GROUPS.flatMap((g) => g.icons);
 
 interface EmojiIconPickerOwnProps {
 	value?: string;
@@ -138,16 +328,12 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 	const [recentlyUsed, setRecentlyUsed] = useState<Array<{ value: string; type: 'emoji' | 'icon' }>>([]);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
+	const panelPos = useFloatingPosition(buttonRef, open);
 
 	const handleOpen = useCallback(() => {
 		if (disabled) return;
 		setOpen(true);
 	}, [disabled]);
-
-	const handleClose = useCallback(() => {
-		setOpen(false);
-		setSearchQuery('');
-	}, []);
 
 	const handleSelect = useCallback(
 		(selectedValue: string, type: 'emoji' | 'icon') => {
@@ -183,16 +369,19 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 	}, [open]);
 
 	// Filter based on search
-	const filteredGroups = EMOJI_GROUPS.map((group) => ({
+	const filteredEmojiGroups = EMOJI_GROUPS.map((group) => ({
 		...group,
 		emojis: group.emojis.filter(
 			(e) => !searchQuery || e.name.toLowerCase().includes(searchQuery.toLowerCase())
 		),
 	})).filter((g) => g.emojis.length > 0);
 
-	const filteredIcons = LUCIDE_SUBSET.filter(
-		(i) => !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase())
-	);
+	const filteredIconGroups = LUCIDE_ICON_GROUPS.map((group) => ({
+		...group,
+		icons: group.icons.filter(
+			(i) => !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase())
+		),
+	})).filter((g) => g.icons.length > 0);
 
 	const getDisplayContent = () => {
 		if (!value) return null;
@@ -211,6 +400,14 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 		return value;
 	};
 
+	const handleClear = useCallback(
+		(e: React.MouseEvent) => {
+			e.stopPropagation();
+			onChange('', 'emoji');
+		},
+		[onChange]
+	);
+
 	return (
 		<div className={`relative w-full ${className}`}>
 			{/* Trigger button */}
@@ -219,28 +416,35 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 				type="button"
 				className={`
 					h-10 px-3 rounded-md text-sm
-					bg-surface-raised border border-border text-text-primary
+					bg-surface-raised border text-text-primary
 					transition-colors duration-150
 					inline-flex items-center gap-2 min-w-emoji-btn
-					${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-border-light'}
-					${open ? 'border-accent ring-2 ring-accent/20' : ''}
+					${disabled ? 'opacity-50 cursor-not-allowed' : open ? 'border-accent ring-2 ring-glow-accent' : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-accent'}
 				`}
 				onClick={handleOpen}
 				disabled={disabled}
 				{...rest}
 			>
-				{getDisplayContent() || <span className="text-text-muted">Select</span>}
+				{getDisplayContent() || <span className="text-text-muted text-sm">Pick emoji or icon…</span>}
+				{value && !open && !disabled && (
+					<span
+						role="button"
+						tabIndex={-1}
+						aria-label="Clear"
+						className="ml-auto text-text-muted hover:text-text-primary cursor-pointer transition-colors"
+						onClick={handleClear}
+					>
+						<X size={14} />
+					</span>
+				)}
 			</button>
 
 			{/* Picker panel */}
-			{open && createPortal(
+			{open && panelPos && createPortal(
 				<div
 					ref={panelRef}
 					className="fixed z-dropdown"
-					style={{
-						left: buttonRef.current?.getBoundingClientRect().left,
-						top: buttonRef.current?.getBoundingClientRect().bottom + 4,
-					}}
+					style={{ top: panelPos.top, left: panelPos.left }}
 				>
 					<div className="w-emoji-picker bg-surface-raised border border-border rounded-md shadow-lg p-3">
 						{/* Search */}
@@ -251,8 +455,8 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 						/>
 						<input
 							type="text"
-							className="w-full h-8 pl-8 pr-3 rounded text-xs bg-surface border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/20 focus:border-accent"
-							placeholder="Search..."
+							className="w-full h-8 pl-8 pr-3 rounded text-xs bg-surface border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-accent"
+							placeholder="Search…"
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
 						/>
@@ -263,10 +467,10 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 						<button
 							type="button"
 							className={`
-								flex-1 text-xs py-1.5 rounded transition-colors
+								flex-1 text-xs py-1.5 rounded transition-colors focus:outline-none
 								${mode === 'emoji'
-									? 'bg-accent/20 text-accent font-medium'
-									: 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
+									? 'bg-accent-active text-accent font-medium'
+									: 'text-text-secondary hover:text-text-primary hover:bg-surface-active'
 								}
 							`}
 							onClick={() => setMode('emoji')}
@@ -276,10 +480,10 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 						<button
 							type="button"
 							className={`
-								flex-1 text-xs py-1.5 rounded transition-colors
+								flex-1 text-xs py-1.5 rounded transition-colors focus:outline-none
 								${mode === 'icon'
-									? 'bg-accent/20 text-accent font-medium'
-									: 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
+									? 'bg-accent-active text-accent font-medium'
+									: 'text-text-secondary hover:text-text-primary hover:bg-surface-active'
 								}
 							`}
 							onClick={() => setMode('icon')}
@@ -299,7 +503,7 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 										<button
 											key={item.value}
 											type="button"
-											className="w-8 h-8 rounded hover:bg-surface-hover flex items-center justify-center transition-colors text-lg"
+											className="w-8 h-8 rounded hover:bg-surface-active flex items-center justify-center transition-colors text-lg focus:outline-none"
 											onClick={() => handleSelect(item.value, item.type)}
 										>
 											{isEmoji ? (
@@ -317,17 +521,19 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 					)}
 
 					{/* Content grid */}
-					<div className="max-h-48 overflow-auto">
+					<div className="max-h-56 overflow-auto">
 						{mode === 'emoji' ? (
-							filteredGroups.map((group) => (
-								<div key={group.name} className="mb-2">
-									<div className="text-xs font-medium text-text-muted mb-1">{group.name}</div>
+							filteredEmojiGroups.map((group) => (
+								<div key={group.name} className="mb-3">
+									<div className="text-xs font-medium text-text-muted mb-1 sticky top-0 bg-surface-raised py-0.5">
+										{group.name}
+									</div>
 									<div className="grid grid-cols-10 gap-0">
 										{group.emojis.map((emoji) => (
 											<button
-												key={emoji.char}
+												key={`${emoji.char}-${emoji.name}`}
 												type="button"
-												className="w-10 h-10 rounded hover:bg-surface-hover flex items-center justify-center transition-colors text-lg"
+												className="w-10 h-10 rounded hover:bg-surface-active flex items-center justify-center transition-colors text-lg focus:outline-none"
 												title={emoji.name}
 												onClick={() => handleSelect(emoji.char, 'emoji')}
 											>
@@ -338,21 +544,28 @@ export const EmojiIconPicker: React.FC<EmojiIconPickerProps> = ({
 								</div>
 							))
 						) : (
-						<div className="grid grid-cols-8 gap-0">
-								{filteredIcons.map((item) => (
-									<button
-										key={item.name}
-										type="button"
-										className="w-10 h-10 rounded hover:bg-surface-hover flex items-center justify-center transition-colors text-text-primary"
-										title={item.name}
-										onClick={() => handleSelect(item.name, 'icon')}
-									>
-										<item.icon size={16} />
-									</button>
-								))}
-							</div>
+							filteredIconGroups.map((group) => (
+								<div key={group.name} className="mb-3">
+									<div className="text-xs font-medium text-text-muted mb-1 sticky top-0 bg-surface-raised py-0.5">
+										{group.name}
+									</div>
+									<div className="grid grid-cols-8 gap-0">
+										{group.icons.map((item) => (
+											<button
+												key={item.name}
+												type="button"
+												className="w-10 h-10 rounded hover:bg-surface-active flex items-center justify-center transition-colors text-text-primary focus:outline-none"
+												title={item.name}
+												onClick={() => handleSelect(item.name, 'icon')}
+											>
+												<item.icon size={16} />
+											</button>
+										))}
+									</div>
+								</div>
+							))
 						)}
-						</div>
+					</div>
 					</div>
 				</div>,
 				document.body

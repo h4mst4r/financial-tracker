@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 export const SkeletonShapes = {
   card: 'card',
@@ -35,8 +35,8 @@ const TableRowSkeleton = () => (
 );
 
 const ChartSkeleton = () => (
-  <div className="w-full space-y-2">
-    <div className={`h-48 rounded-lg w-full ${shimmerBase}`} />
+  <div className="w-full rounded-lg border border-border bg-surface p-3 space-y-2">
+    <div className={`h-48 rounded w-full ${shimmerBase}`} />
     <div className="flex justify-between">
       <div className={`h-3 rounded w-1/5 ${shimmerBase}`} />
       <div className={`h-3 rounded w-1/5 ${shimmerBase}`} />
@@ -46,7 +46,7 @@ const ChartSkeleton = () => (
 );
 
 const StatSkeleton = () => (
-  <div className="w-full space-y-2">
+  <div className="w-full rounded-lg border border-border bg-surface p-4 space-y-2">
     <div className={`h-10 rounded w-1/2 ${shimmerBase}`} />
     <div className={`h-4 rounded w-2/3 ${shimmerBase}`} />
   </div>

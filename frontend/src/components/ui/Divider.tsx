@@ -13,47 +13,29 @@ export const Divider: React.FC<DividerProps> = ({
 	label,
 	className = '',
 }) => {
+	const borderClass = variant === 'light' ? 'border-surface-hover' : 'border-border';
+
 	if (label) {
 		return (
 			<div className={`flex items-center my-4 ${className}`}>
-				<div
-					className="flex-grow border-t"
-					style={{
-						borderColor: variant === 'light' ? 'var(--color-surface-hover)' : 'var(--color-border)',
-					}}
-				/>
+				<div className={`flex-grow border-t ${borderClass}`} />
 				<span className="mx-3 text-xs tracking-widest font-medium text-text-muted">
 					{label}
 				</span>
-				<div
-					className="flex-grow border-t"
-					style={{
-						borderColor: variant === 'light' ? 'var(--color-surface-hover)' : 'var(--color-border)',
-					}}
-				/>
+				<div className={`flex-grow border-t ${borderClass}`} />
 			</div>
 		);
 	}
 
 	if (orientation === 'vertical') {
 		return (
-			<div
-				className="inline-block mx-3 align-middle"
-				style={{
-					width: '1px',
-					height: '1.25em',
-					backgroundColor: variant === 'light' ? 'var(--color-border-light)' : 'var(--color-border-light)',
-				}}
-			/>
+			<div className="inline-block mx-3 align-middle w-px h-[1.25em] bg-border" />
 		);
 	}
 
 	return (
 		<hr
-			className={`my-4 border-t ${variant === 'light' ? 'my-3' : ''} ${className}`}
-			style={{
-				borderColor: variant === 'light' ? 'var(--color-surface-hover)' : 'var(--color-border)',
-			}}
+			className={`my-4 border-t ${borderClass} ${variant === 'light' ? 'my-3' : ''} ${className}`}
 		/>
 	);
 };

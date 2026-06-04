@@ -31,7 +31,8 @@ describe('Checkbox', () => {
 
 	it('disables when disabled', () => {
 		render(<Checkbox disabled />);
-		expect(screen.getByRole('checkbox')).toBeDisabled();
+		// Checkbox is a div with role="checkbox" — disabled state exposed via aria-disabled
+		expect(screen.getByRole('checkbox')).toHaveAttribute('aria-disabled', 'true');
 	});
 
 	it('renders with label text', () => {
@@ -41,7 +42,7 @@ describe('Checkbox', () => {
 
 	it('applies custom className', () => {
 		render(<Checkbox className="custom-class" />);
-		const label = screen.getByRole('checkbox').closest('label');
-		expect(label).toHaveClass('custom-class');
+		// Checkbox root element is a div, not a label
+		expect(screen.getByRole('checkbox')).toHaveClass('custom-class');
 	});
 });

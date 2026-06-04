@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — Architecture
-version: 2.0
+version: 2.3
 status: living
 created: 2026-05-26
 authority: Technical architecture specification. Derives from entity-design-philosophy.md.
@@ -220,7 +220,6 @@ backend/
 frontend/
 ├── index.html
 ├── vite.config.ts
-├── tailwind.config.ts
 ├── tsconfig.json
 │
 └── src/
@@ -925,15 +924,23 @@ AUTH
 HOUSEHOLD
   GET    /api/household              → Get household details
   PATCH  /api/household              → Update (owner only)
+  DELETE /api/household              → Permanent delete (owner only); body: { confirm_name }; cascade-deletes all child entities
 
 PERSONS
   GET    /api/persons                → List household members
   GET    /api/persons/{id}           → Get person
   PATCH  /api/persons/{id}           → Update (self or admin)
-  DELETE /api/persons/{id}           → Archive / hard delete if empty
+  DELETE /api/persons/{id}           → Remove member (owner removes any non-owner; admin removes members only)
+  PATCH  /api/persons/{id}/role      → Change role (owner: admin↔member; admin: member→admin only; requester rank > target rank enforced)
   POST   /api/persons/invite         → Create invitation (admin+)
-  GET    /api/persons/invitations    → List pending invitations
-  DELETE /api/persons/invitations/{id} → Cancel invitation
+  GET    /api/persons/invitations    → List pending invitations (admin+)
+  DELETE /api/persons/invitations/{id} → Cancel invitation (admin+)
+  POST   /api/persons/leave          → Leave household (non-owner only); creates new household for the person; returns { person, household, csrfToken, isFirstLogin: true }
+
+INVITATIONS (public — no auth required for GET; auth required for POST)
+  GET    /api/invitations/{token}    → Fetch invitation details (returns 404 / 410 for expired|accepted|cancelled|declined)
+  POST   /api/invitations/{token}/accept → Accept invitation; email must match; idempotent if already in household
+  POST   /api/invitations/{token}/decline → Decline invitation (authenticated); email must match; if person is in invited household creates new household and reassigns; returns { person, household, csrfToken, isFirstLogin: true }
 
 ACCOUNTS
   GET    /api/accounts               → List (filter: ?type=bank|credit_card|capital|asset|insurance)
@@ -1157,10 +1164,39 @@ Browser                     Backend                      Google
    │                            │◄── id_token + access_token ─│
    │                            │── Decode id_token          │
    │                            │── Lookup/create Person     │
+   │                            │   (if NEW person:          │
+   │                            │    check pending invitation │
+   │                            │    by email before creating │
+   │                            │    new household — see      │
+   │                            │    AUTH-005 fix)            │
    │                            │── Create server session    │
    │◄── Set-Cookie: session ────│── Update last_active_at    │
-   │── Redirect to app ─────────►│                            │
+   │── Redirect to /app ────────►│                            │
 ```
+
+**Invitation-aware new-user flow (AUTH-005 + AUTH-006 revision):** When `google_sub` is not found (first-time login):
+
+1. `auth_service.seed_household_if_needed()` checks for a pending `HouseholdInvitation` matching the verified email.
+2. **If matching invitation found:** assign `person.household_id` and `person.role = "member"` — do NOT mark invitation accepted yet. Acceptance is explicit: the person must visit `/join/:token` and click "Accept". The `accept_invitation` service is idempotent when the person is already in the target household.
+3. **If no matching invitation and at least one Household exists in DB:** this is an uninvited signup — raise `NotInvitedError`. Callback rolls back the new Person record and redirects to `{FRONTEND_URL}/login?error=not_invited`.
+4. **If no matching invitation and no Household exists:** this is the first user — create a new household, seed defaults, person is `owner`.
+
+`/auth/me` returns `pendingInvitationToken: str | null` (UUID of the still-pending invitation for this email/household combination, if any) so `useAuth.ts` can redirect the person to `/join/:token` regardless of whether they arrived via the join link or via direct login. It also returns `isFirstLogin: bool` (true when `person.role == "owner"` and `person.created_at` is within 2 minutes) so the frontend can show the welcome toast.
+
+**Frontend continuation (AUTH-003):**
+```
+Browser (React app)                              Backend
+   │── GET /auth/me ──────────────────────────────►│
+   │                                               │── Read session cookie
+   │                                               │── Validate via AuthMiddleware
+   │◄── { person, household } ─────────────────────│
+   │                                               │
+   │   authStore.setAuth(person, householdId, csrfToken)
+   │   AuthGuard reads authStore.currentPerson
+   │   Protected routes unlock — App shell renders
+```
+
+**The complete session pipeline** (AUTH-001 backend → AUTH-003 frontend) is treated as a single end-to-end contract. The `/auth/me` response shape must match `authStore`'s `PersonInfo` interface exactly. Verifying this contract is part of AUTH-001's Definition of Done — see epics.md AUTH-001 pipeline AC.
 
 **Test isolation:** Unit and integration tests never contact Google. A `MockOAuthServer`
 fixture intercepts all `httpx` calls to Google endpoints and returns signed mock tokens.
@@ -1176,12 +1212,51 @@ and requires a dedicated test Google account (credentials in Secret Manager, `te
 - On expiry: session record deleted; client receives 401.
 - Concurrent sessions allowed (one per browser/device).
 
+### 7.2a Frontend Session Contract (`/auth/me` ↔ `authStore`)
+
+`/auth/me` is the bridge between backend session state and frontend auth state. Its response must be treated as a versioned contract — any shape change requires updating both the endpoint and `authStore`'s `PersonInfo` interface simultaneously.
+
+**Required response shape (v2 — AUTH-006):**
+```json
+{
+  "person": {
+    "personId": "uuid",
+    "displayName": "string",
+    "email": "string",
+    "defaultView": "household | personal",
+    "displayCurrency": "SGD",
+    "role": "owner | admin | member",
+    "pictureUrl": "string | null"
+  },
+  "household": {
+    "householdId": "uuid",
+    "name": "string",
+    "baseCurrency": "SGD",
+    "timezone": "Asia/Singapore"
+  },
+  "csrfToken": "string",
+  "pendingInvitationToken": "uuid | null",
+  "isFirstLogin": "bool"
+}
+```
+
+**Frontend consumption** (`useAuth` hook in AUTH-003):
+```typescript
+const { data } = await api.get('/auth/me')
+authStore.setAuth(
+  { personId: data.person.id, displayName: data.person.displayName, ... },
+  data.household.id,
+  data.csrfToken
+)
+```
+
+**AuthGuard dependency:** `AuthGuard` (FE-007, `App.tsx`) reads `authStore.currentPerson`. If `/auth/me` returns a different shape than `PersonInfo`, the AuthGuard silently fails to populate and all protected routes redirect to `/login`. This is the most common first-time integration failure in AUTH-001 → AUTH-003 handoff.
+
 ### 7.3 CSRF Protection
 
 - CSRF token generated per session, stored in `sessions.csrf_token`.
 - Required on all `POST`, `PATCH`, `PUT`, `DELETE` requests as `X-CSRF-Token` header.
-- Single-use rotation: token is rotated after each successful mutation (new token returned
-  in response header `X-New-CSRF-Token`).
+- **Session-lifetime token:** one token per session, valid until session expires or logout. It is NOT rotated after each mutation — the same token is used for the lifetime of the session.
 - Exempt: `/auth/*` endpoints (pre-authentication) and `GET` requests.
 
 ### 7.4 Household Scoping Middleware
@@ -1848,3 +1923,4 @@ async def compute_budget_actuals(
 | 2.0 | 2026-05-26 | Ben + Claude | Full rewrite — entity hierarchy applied to all models, STI for accounts and events, MonetaryValueMixin, VisualizationFilter architecture, aggregation API endpoints, four-source recurring payment processor, EntityDebt computation queries, hard-delete logic, security patterns, comprehensive test strategy |
 | 2.1 | 2026-05-26 | Ben + Claude | Date format: ISO 8601 wire + DD-MM-YYYY display. Visualization endpoints: budget history, capital history, person comparison, category comparison. Error contract updated to RFC 7807 Problem Details (IETF standard). Mock OAuth strategy for tests — real credentials required only for one E2E smoke test. Multi-currency breadth: all ISO 4217 supported (SGD, NZD, USD, PHP, etc.) |
 | 2.2 | 2026-05-29 | Ben + Claude | Frontend architecture section updated to reflect Epic 2 completion: §8.0 Design Token System (Tailwind v4 @theme/@utility pattern, component layer map); §8.2 Auth Store (mock Dev User for pre-OAuth development); §8.1 routing updated with /design-system route; §8.3 VisualizationFilter and §8.4 component architecture renumbered. |
+| 2.3 | 2026-06-01 | Ben + Claude | §3.2 Frontend directory tree: removed tailwind.config.ts (Tailwind v4 is config-in-CSS; no config file exists). §7.3 CSRF: corrected "single-use rotation" claim — token is session-lifetime, not rotated per mutation. Frontmatter version corrected to match revision history. |

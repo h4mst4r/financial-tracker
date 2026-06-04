@@ -39,10 +39,9 @@ export const Toggle: React.FC<ToggleProps> = ({
 			onClick={handleClick}
 			onKeyDown={handleKeyDown}
 			className={`
-				w-10 h-6 rounded-full transition-colors duration-200 relative
-				${checked ? 'bg-accent' : 'bg-surface-hover'}
-				${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-				hover:${checked ? 'bg-accent-hover' : 'bg-surface'}
+				w-11 h-6 rounded-full transition-colors duration-200 relative
+				${checked ? 'bg-primary' : 'bg-surface-raised'}
+				${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
 				focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2
 				${className}
 			`}
@@ -50,9 +49,9 @@ export const Toggle: React.FC<ToggleProps> = ({
 		>
 			<span
 				className={`
-					absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-text-inverse
+					absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white
 					transition-transform duration-200 ease-out
-					${checked ? 'translate-x-4' : 'translate-x-0'}
+					${checked ? 'translate-x-5' : 'translate-x-0'}
 				`}
 			/>
 		</button>

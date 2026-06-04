@@ -80,11 +80,11 @@ starts without errors. All models importable. Middleware stack wired. No feature
 ```
 
 **AC:**
-- [ ] `requirements.txt` pins all versions from ARCH §1.1 (FastAPI, SQLAlchemy 2.0, Pydantic 2, Alembic, Authlib, httpx, APScheduler, pytest)
-- [ ] `config.py` uses `pydantic-settings`; reads `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `EXCHANGERATE_API_KEY`, `GCS_BUCKET`; all required in prod, have defaults for dev
-- [ ] `database.py` creates async SQLAlchemy engine; sets `PRAGMA journal_mode=WAL` and `PRAGMA foreign_keys=ON` via `connect_args`; exports `async_session_factory` and `get_db` async generator
-- [ ] `main.py` is a FastAPI app factory (`create_app()`); returns app without starting it; `uvicorn backend.main:app --reload` starts without error
-- [ ] `Dockerfile` builds a single container serving both API and (future) static frontend; `docker-compose.yml` provides a working local dev environment
+- [x] `requirements.txt` pins all versions from ARCH §1.1 (FastAPI, SQLAlchemy 2.0, Pydantic 2, Alembic, Authlib, httpx, APScheduler, pytest)
+- [x] `config.py` uses `pydantic-settings`; reads `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `EXCHANGERATE_API_KEY`, `GCS_BUCKET`; all required in prod, have defaults for dev
+- [x] `database.py` creates async SQLAlchemy engine; sets `PRAGMA journal_mode=WAL` and `PRAGMA foreign_keys=ON` via event listener on `engine.sync_engine`; exports `async_session_factory` and `get_db` async generator
+- [x] `main.py` is a FastAPI app factory (`create_app()`); returns app without starting it; `uvicorn backend.main:app --reload` starts without error
+- [x] `Dockerfile` builds a single container serving both API and (future) static frontend; `docker-compose.yml` provides a working local dev environment
 
 ---
 
@@ -99,11 +99,11 @@ starts without errors. All models importable. Middleware stack wired. No feature
 ```
 
 **AC:**
-- [ ] `BaseEntity` abstract SQLAlchemy 2.0 class with all 10 fields from EDP §3.1: `id` (UUID PK), `household_id` (FK households, indexed), `created_at`, `updated_at`, `created_by` (FK persons), `updated_by` (FK persons, nullable), `archived` (bool, indexed), `archived_at` (nullable), `archived_by` (FK persons, nullable), `status` (str, indexed, default `"active"`)
-- [ ] `MonetaryValueMixin` adds all 7 fields from EDP §3.2 as inline columns; `@validates("amount_base")` auto-recomputes `fx_delta = amount_base_calculated - amount_base`
-- [ ] `StatusEnum` string values: `"active"`, `"inactive"`, `"archived"`
-- [ ] `Household` uses `Base` (not `BaseEntity`) — it is a bootstrap entity with no `household_id` FK
-- [ ] `pytest` imports `backend.models.base` without error; `MonetaryValueMixin` unit test: setting `amount_base` triggers correct `fx_delta` recomputation
+- [x] `BaseEntity` abstract SQLAlchemy 2.0 class with all 10 fields from EDP §3.1: `id` (UUID PK), `household_id` (FK households, indexed), `created_at`, `updated_at`, `created_by` (FK persons), `updated_by` (FK persons, nullable), `archived` (bool, indexed), `archived_at` (nullable), `archived_by` (FK persons, nullable), `status` (str, indexed, default `"active"`)
+- [x] `MonetaryValueMixin` adds all 7 fields from EDP §3.2 as inline columns; `@validates("amount_base")` auto-recomputes `fx_delta = amount_base_calculated - amount_base`
+- [x] `StatusEnum` string values: `"active"`, `"inactive"`, `"archived"`
+- [x] `Household` uses `Base` (not `BaseEntity`) — it is a bootstrap entity with no `household_id` FK
+- [x] `pytest` imports `backend.models.base` without error; `MonetaryValueMixin` unit test: setting `amount_base` triggers correct `fx_delta` recomputation
 
 ---
 
@@ -161,14 +161,14 @@ starts without errors. All models importable. Middleware stack wired. No feature
 ```
 
 **AC:**
-- [ ] `FinancialEvent` combines `MonetaryValueMixin` + `BaseEntity`; STI with `event_type` discriminator; `event_type` values: `"transaction"`, `"recurring_payment"`, `"transfer"`
-- [ ] Base event fields: `name`, `event_date` (Date), `payee` (str, nullable), `payee_person_id` (FK persons, nullable), `category_id` (FK categories, nullable), `account_id` (FK accounts), `notes` (nullable), `transaction_type` (str; `"inflow"` / `"outflow"` / `"transfer"`), `transaction_status` (str; `"pending"` / `"completed"` / `"cancelled"` / `"reconciled"`), `reconciled_at` (datetime, nullable)
-- [ ] Transaction-specific fields: `is_shared_expense` (bool, default False)
-- [ ] RecurringPayment-specific fields: `frequency_text` (str, nullable), `frequency_rule` (JSON text, nullable), `source_account_id` (FK accounts, nullable — for capital/asset/insurance sourced payments)
-- [ ] Transfer-specific fields: `destination_account_id` (FK accounts, nullable), `dest_currency` (nullable), `dest_amount` (Decimal, nullable), `dest_amount_base` (Decimal, nullable), `is_debt_repayment` (bool, default False), `debt_cleared_amount` (Decimal, nullable)
-- [ ] `CheckConstraint("(is_shared_expense = 0) OR (transaction_type = 'outflow')")` present
-- [ ] All 4 compound indexes from ARCH §4.5 present
-- [ ] `OccurrenceRecord`: `recurring_event_id` (FK, indexed), `expected_date` (Date), `occurrence_status` (`"upcoming"` / `"processed"` / `"skipped"` / `"missed"` / `"failed"`), `generated_event_id` (FK events, nullable), `processed_at` (datetime, nullable); compound index `(recurring_event_id, expected_date)`
+- [x] `FinancialEvent` combines `MonetaryValueMixin` + `BaseEntity`; STI with `event_type` discriminator; `event_type` values: `"transaction"`, `"recurring_payment"`, `"transfer"`
+- [x] Base event fields: `name`, `event_date` (Date), `account_id` (FK accounts, non-nullable — primary account for this event), `payee` (str, nullable), `payee_person_id` (FK persons, nullable), `category_id` (FK categories, nullable), `notes` (nullable), `transaction_type` (str; `"inflow"` / `"outflow"` / `"transfer"`), `transaction_status` (str; `"pending"` / `"completed"` / `"cancelled"` / `"reconciled"`), `reconciled_at` (datetime, nullable)
+- [x] Transaction-specific fields: `is_shared_expense` (bool, default False)
+- [x] RecurringPayment-specific fields: `frequency_text` (str, nullable), `frequency_rule` (JSON text, nullable), `source_account_id` (FK accounts, nullable — for capital/asset/insurance sourced payments, distinct from base `account_id`)
+- [x] Transfer-specific fields: `destination_account_id` (FK accounts, nullable), `dest_currency` (nullable), `dest_amount` (Decimal, nullable), `dest_amount_base` (Decimal, nullable), `is_debt_repayment` (bool, default False), `debt_cleared_amount` (Decimal, nullable)
+- [x] `CheckConstraint("(is_shared_expense = 0) OR (transaction_type = 'outflow')")` present
+- [x] All 4 compound indexes from ARCH §4.5 present
+- [x] `OccurrenceRecord`: `recurring_event_id` (FK, indexed), `expected_date` (Date), `occurrence_status` (`"upcoming"` / `"processed"` / `"skipped"` / `"missed"` / `"failed"`), `generated_event_id` (FK events, nullable), `processed_at` (datetime, nullable); compound index `(recurring_event_id, expected_date)`
 
 ---
 
@@ -188,12 +188,12 @@ starts without errors. All models importable. Middleware stack wired. No feature
 ```
 
 **AC:**
-- [ ] `Budget` extends `BaseEntity`: `name`, `category_id` (FK), `owner_person_id` (FK persons, nullable — null = household-wide), `period_type` (`"monthly"` / `"yearly"`), `limit_currency`, `limit_amount`, `limit_amount_base`, `period_start` (Date), `period_end` (Date), `alert_threshold_pct` (int, default 80), `rollover` (bool, default False); no `actual_spent` column (computed at query time); indexes on `(household_id, period_start, period_end)` and `(category_id, period_start)`
-- [ ] `Category` extends `BaseEntity`: `name`, `color` (str, nullable, hex), `icon` (str, nullable), `category_type` (`"income"` / `"expense"` / `"both"`, default `"expense"`), `parent_id` (FK self, nullable, indexed), `depth` (int, default 0); `CheckConstraint("depth <= 1")`; index `(household_id, parent_id)`
-- [ ] `Currency`: `id`, `household_id` (FK, indexed), `code` (str 3), `name`, `symbol`, `is_base` (bool), `is_display_active` (bool), `rate_to_base` (Decimal, default 1.0), `fee_pct` (Decimal, default 0), `last_rate_at` (datetime, nullable), `rate_source` (nullable); unique `(household_id, code)`; `FxRateHistory` child table with unique `(currency_id, rate_date)`
-- [ ] `Formula` extends `BaseEntity`: `name`, `expression` (Text), `applies_to` (str — entity type), `is_system` (bool, default False), `description` (nullable)
-- [ ] `AuditLog` has **no FK constraints** on `entity_id` or `actor_id`; stores UUIDs as plain columns; fields: `id`, `household_id` (UUID, indexed), `actor_id` (UUID, indexed), `action` (`"create"` / `"update"` / `"archive"` / `"restore"` / `"delete"`), `entity_type`, `entity_id` (UUID, indexed), `before_state` (Text JSON, nullable), `after_state` (Text JSON, nullable), `occurred_at` (indexed), `ip_address` (nullable), `user_agent` (nullable)
-- [ ] `Alert` extends `BaseEntity`: `alert_type` (str; `"missed_payment"` / `"budget_threshold"` / `"budget_exceeded"` / `"fx_fetch_failed"` / `"duplicate_detected"` / `"system_error"`), `title`, `body` (Text), `entity_type` (nullable), `entity_id` (UUID, nullable), `is_read` (bool, default False), `read_at` (datetime, nullable)
+- [x] `Budget` extends `BaseEntity`: `name`, `category_id` (FK), `owner_person_id` (FK persons, nullable — null = household-wide), `period_type` (`"monthly"` / `"yearly"`), `limit_currency`, `limit_amount`, `limit_amount_base`, `period_start` (Date), `period_end` (Date), `alert_threshold_pct` (int, default 80), `rollover` (bool, default False); no `actual_spent` column (computed at query time); indexes on `(household_id, period_start, period_end)` and `(category_id, period_start)`
+- [x] `Category` extends `BaseEntity`: `name`, `color` (str, nullable, hex), `icon` (str, nullable), `category_type` (`"income"` / `"expense"` / `"both"`, default `"expense"`), `parent_id` (FK self, nullable, indexed), `depth` (int, default 0); `CheckConstraint("depth <= 1")`; index `(household_id, parent_id)`
+- [x] `Currency` inherits `Base` (not `BaseEntity` — no `created_by` / `archived` / `status`): `id`, `household_id` (FK, indexed), `code` (str 3), `name`, `symbol`, `is_base` (bool), `is_display_active` (bool), `rate_to_base` (Decimal, default 1.0), `fee_pct` (Decimal, default 0), `last_rate_at` (datetime, nullable), `rate_source` (nullable); unique `(household_id, code)`; `FxRateHistory` child table with unique `(currency_id, rate_date)`
+- [x] `Formula` extends `BaseEntity`: `name`, `expression` (Text), `applies_to` (str — entity type), `is_system` (bool, default False), `description` (nullable)
+- [x] `AuditLog` has **no FK constraints** on `entity_id` or `actor_id`; stores UUIDs as plain columns; fields: `id`, `household_id` (UUID, indexed), `actor_id` (UUID, indexed), `action` (`"create"` / `"update"` / `"archive"` / `"restore"` / `"delete"`), `entity_type`, `entity_id` (UUID, indexed), `before_state` (Text JSON, nullable), `after_state` (Text JSON, nullable), `occurred_at` (indexed), `ip_address` (nullable), `user_agent` (nullable)
+- [x] `Alert` extends `BaseEntity`: `alert_type` (str; `"missed_payment"` / `"budget_threshold"` / `"budget_exceeded"` / `"fx_fetch_failed"` / `"duplicate_detected"` / `"system_error"`), `title`, `body` (Text), `entity_type` (nullable), `entity_id` (UUID, nullable), `is_read` (bool, default False), `read_at` (datetime, nullable)
 
 ---
 
@@ -210,11 +210,12 @@ starts without errors. All models importable. Middleware stack wired. No feature
 ```
 
 **AC:**
-- [ ] `alembic upgrade head` on a fresh SQLite file creates all tables, all indexes, and all constraints with zero errors
-- [ ] `alembic downgrade base` removes all tables cleanly
-- [ ] WAL pragma is applied in `env.py` via `connect_args={"check_same_thread": False}` and event listener
-- [ ] All compound indexes from ARCH §4.5 are present in the migration (not just the models)
-- [ ] The `CheckConstraint` on `financial_events.is_shared_expense` and `categories.depth` are both present in the migration
+- [x] `alembic upgrade head` on a fresh SQLite file creates all tables, all indexes, and all constraints with zero errors
+- [x] `alembic downgrade base` removes all tables cleanly
+- [x] WAL pragma (`PRAGMA journal_mode=WAL` + `PRAGMA foreign_keys=ON`) applied via `@event.listens_for(engine.sync_engine, "connect")` listener in both `database.py` and `env.py`
+- [x] All compound indexes from ARCH §4.5 are present in the migration (not just the models)
+- [x] The `CheckConstraint` on `financial_events.is_shared_expense` and `categories.depth` are both present in the migration
+- [x] `render_as_batch=True` set in both `context.configure()` calls in `env.py` (required for SQLite batch ALTER TABLE operations in future migrations)
 
 ---
 
@@ -234,15 +235,15 @@ starts without errors. All models importable. Middleware stack wired. No feature
 ```
 
 **AC:**
-- [ ] Middleware registered in order: `AuthMiddleware` → `HouseholdMiddleware` → `CSRFMiddleware`; auth/static paths skipped by all three
-- [ ] `AuthMiddleware` validates session cookie against `Session` table; rejects with 401 if absent, expired (`expires_at` < now), or `last_activity_at` > 30 min ago; updates `last_activity_at` on every valid request
-- [ ] `HouseholdMiddleware` sets `request.state.household_id` from `request.state.person.household_id`
-- [ ] `CSRFMiddleware` validates `X-CSRF-Token` header on all non-GET requests that are not under `/auth/`; returns 403 if missing or not found in `Session.csrf_token`; does NOT single-use invalidate (token valid for session lifetime)
-- [ ] Security headers applied globally: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
-- [ ] All API errors return structured JSON: `{"error": "Human-readable", "code": "SNAKE_CASE_CODE", "detail": {}}`; `RequestValidationError` caught and reformatted
-- [ ] `dependencies.py`: `get_db()` async generator (commit on success, rollback on exception); `get_current_person()` (raises 401 if no session or person archived); `get_household_id()`; `require_role(minimum_role: str)` decorator factory; `_get_or_404(db, household_id, entity_id, Model)` helper
-- [ ] `audit_service.log(db, household_id, actor_id, action, entity_type, entity_id, before, after)` writes `AuditLog` record; `before`/`after` serialised to JSON; called before `flush()` in every service mutator
-- [ ] `pytest` smoke test: app starts, middleware loads, `/health` returns 200
+- [x] Middleware **execution** order: `SecurityHeaders` → `Auth` → `Household` → `CSRF` → Route; Starlette processes `add_middleware` LIFO so registration order is reversed (CSRF added first, SecurityHeaders added last); `SecurityHeaders` is outermost so all responses carry security headers; auth/static paths skipped by Auth/Household/CSRF
+- [x] `AuthMiddleware` validates session cookie against `Session` table; rejects with 401 if absent, expired (`expires_at` < now), or `last_activity_at` > 30 min ago; updates `last_activity_at` on every valid request
+- [x] `HouseholdMiddleware` sets `request.state.household_id` from `request.state.person.household_id`
+- [x] `CSRFMiddleware` validates `X-CSRF-Token` header on all non-GET requests that are not under `/auth/`; returns 403 if missing or not found in `Session.csrf_token`; does NOT single-use invalidate (token valid for session lifetime)
+- [x] Security headers applied globally: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
+- [x] All API errors return structured JSON: `{"error": "Human-readable", "code": "SNAKE_CASE_CODE", "detail": {}}`; `RequestValidationError` caught and reformatted
+- [x] `dependencies.py`: `get_db()` async generator (commit on success, rollback on exception); `get_current_person(request)` raises 401 if no session or person archived; `get_household_id()`; `require_role(minimum_role: str)` decorator factory; `_get_or_404(db, household_id, entity_id, Model)` helper (household-scoped — 404 if entity belongs to a different household)
+- [x] `audit_service.log(db, household_id, actor_id, action, entity_type, entity_id, before, after)` writes `AuditLog` record; `before`/`after` serialised to JSON; called before `flush()` in every service mutator
+- [x] `pytest` smoke test: app starts, middleware loads, `/health` returns 200
 
 ---
 
@@ -256,16 +257,20 @@ and app shell before any feature-specific UI is written.
 **Post-conditions:** `npm run dev` starts. Design system components render. App shell
 renders with placeholder routes. All generic entity components available for feature epics.
 
-**Completed:** 2026-05-29 · All 7 stories done · Retrospective complete
+**Completed:** 2026-05-29 · All 8 stories done · Retrospective pending
 
 **Delivered:**
-- Tailwind v4 `@theme` + `@utility` design tokens in `index.css`
-- Full UI component library: Button, Input, Checkbox, Toggle, Dropdown (single/multi/searchable), DatePicker, ColourPicker, EmojiIconPicker, TagInput, MonetaryValueInput, RecurringDateInput, Card, Modal, Drawer, ConfirmationDialog, Accordion, Table, ContextMenu, AlertBanner, ProgressBar, Skeleton, EmptyState, Toast/ToastContainer
-- Generic entity layer: `useEntityManager`, `EntityCard`, `EntityModal`, `EntityPage`
-- Zustand stores: `authStore` (with mock Dev User for pre-OAuth development), `alertStore`, `visualizationStore`
-- AppShell with responsive sidebar, topbar, and React Router v6 routing
+- Tailwind v4 `@theme` + `@utility` design tokens in `index.css` — full token set including state-holding borders (`--color-border-state`, `--color-border-state-subtle`), focus ring glows (`--color-glow-primary`, `--color-glow-error`), modal overlay (`--color-backdrop`), and all 14 entity accent colours; component size utilities for every named panel width/height
+- Full UI component library: Button, Input, Checkbox, Toggle, Dropdown (single/multi/searchable), DatePicker, ColourPicker, EmojiIconPicker (8 emoji groups + 9 Lucide icon groups, finance-led), TagInput, MonetaryValueInput, RecurringDateInput, Card, Modal, Drawer, ConfirmationDialog, Accordion, Table, ContextMenu, AlertBanner, ProgressBar, Skeleton, EmptyState, Toast/ToastContainer
+- Tooltip rewritten CSS-primary (group-hover/group-focus-within — no JS show/hide handlers)
+- Segmented control pattern established (`--color-border-state` outer border, `--color-border-state-subtle` divider) — first instance: Sidebar view toggle
+- Generic entity layer: `useEntityManager`, `EntityCard`, `EntityModal`, `EntityPage`, `BulkActionBar`
+- Entity accent pattern: `--entity-accent` CSS var + inline `borderLeft` on Card (cascade-safe); `bg-entity-accent-muted` / `text-entity-accent` utilities for Badge
+- Zustand stores: `authStore` (with `setDefaultView`; mock Dev User for pre-OAuth development), `alertStore`, `visualizationStore` (with `setDisplayCurrency`, `navigateTo`, 20-entry drill history)
+- `api/client.ts`: typed `ApiError`, `skipCsrf`, `api` convenience methods (`get/post/put/patch/delete`), `setAuthStoreGetter` for test DI
+- AppShell with responsive sidebar, topbar, React Router v6 routing; `/design-system` always standalone (no AppShell wrapper)
 - Auth guard implemented; all module routes wired with `EmptyState` placeholders
-- `/design-system` route: live component catalogue for the full UI library
+- `/design-system` route: live component catalogue covering all layers including token swatches (border tokens, glow rings, entity accent utilities, segmented control reference states)
 
 ---
 
@@ -288,7 +293,7 @@ renders with placeholder routes. All generic entity components available for fea
 
 **AC:**
 - [x] `npm run dev` starts dev server; `npm run build` produces a dist bundle; no TypeScript errors
-- [x] `index.css` has Tailwind v4 `@theme {}` block with **all** colour, typography, spacing, shadow, z-index, and motion tokens from UX §1 (including all `--color-entity-*` tokens); `@utility` blocks for shared component utilities
+- [x] `index.css` has Tailwind v4 `@theme {}` block with all colour, typography, spacing, shadow, z-index, motion, and breakpoint tokens from UX §1 — including all 14 `--color-entity-*` tokens, `--color-border-state`/`--color-border-state-subtle`, `--color-glow-primary`/`--color-glow-error`, `--color-backdrop`, and `--breakpoint-xs`; `@utility` blocks for all named component sizes and entity accent pattern (`bg-entity-accent-muted`, `text-entity-accent`, `border-entity-accent`)
 - [x] `types/entities.ts` exports TypeScript interfaces: `BaseEntity`, `MonetaryValue`, `PersonRef`, `StatusEnum`; field names in `camelCase` per EDP §15.2
 - [x] React Router v6 configured; `/login` renders a placeholder; `/` redirects to `/login` (auth guard placeholder); `/design-system` route exposes live component catalogue
 - [x] All monetary values formatted via a shared `formatMoney(value, currency, displayCurrency)` utility in `utils/currency.ts`; dates formatted via `utils/date.ts` (stored ISO → displayed `DD-MM-YYYY`)
@@ -315,11 +320,12 @@ renders with placeholder routes. All generic entity components available for fea
 ```
 
 **AC:**
-- [x] `Button`: 5 variants (`primary`, `secondary`, `ghost`, `danger`, `link`); 3 sizes; all states (hover, active, focus-visible, disabled, loading spinner); loading state disables and shows `Spinner`
+- [x] `Button`: 5 variants (`primary`, `secondary`, `ghost`, `danger`, `icon`); 3 sizes; all states (hover, active, focus-visible, disabled, loading spinner); loading state disables and shows `Spinner`
 - [x] `Input`: 4 variants; leading/trailing slot; all states (default, focus, error, disabled); error message slot; `aria-invalid` on error
-- [x] `Badge`: 6 variants including `entity` which uses CSS var `--entity-accent` passed as prop
+- [x] `Badge`: 6 variants; `entity` variant sets `--entity-accent` CSS var via inline style and applies `bg-entity-accent-muted` + `text-entity-accent` utilities — no hardcoded hex opacity
 - [x] `Avatar`: 4 sizes; `picture_url` with initials fallback; greyscale when `archived=true`
-- [x] `Tooltip`: 200 ms hover delay; max-width 280px; keyboard accessible; dismisses on Escape
+- [x] `Tooltip`: **CSS-primary** — visibility via `group-hover/tooltip:opacity-100` and `group-focus-within/tooltip:opacity-100`; 200ms via CSS `transition-delay`; `max-w-tooltip` (280px); `z-tooltip`; Escape key JS dismiss only; no JS show/hide handlers
+- [x] `Input` focus ring: `ring-glow-primary` (`--color-glow-primary`) for standard; `ring-glow-error` (`--color-glow-error`) for error state — named tokens, not inline rgb values
 - [x] All components: `focus-visible` ring uses `--color-border-focus`; Vitest: each component renders without throwing
 
 ---
@@ -347,7 +353,8 @@ renders with placeholder routes. All generic entity components available for fea
 - [x] `Dropdown`: single, searchable, multi, and grouped variants; keyboard nav (arrows, Enter, Escape); `aria-expanded` and `aria-activedescendant`
 - [x] `DatePicker`: calendar popover; **accepts and displays** `DD-MM-YYYY`; **stores as ISO**; keyboard nav; clears on Backspace
 - [x] `ColourPicker`: 32-swatch palette tab + hex input tab; selected colour shown in trigger button
-- [x] `EmojiIconPicker`: emoji groups; search; Lucide icon tab; recently used row (persists in component state)
+- [x] `EmojiIconPicker`: **8 grouped emoji sections** (~160 emojis, Finance-led): Finance, Food & Drink, Home & Utilities, Transport, Health & Fitness, Shopping & Lifestyle, Entertainment, Education & Work; **9 grouped Lucide icon sections** (~86 icons, Finance-led) with sticky section headers; search filters across all groups; recently used row; `max-h-56` scroll area; `LUCIDE_SUBSET` derived from groups via `flatMap`
+- [x] `Dropdown`: `max-h-dropdown-list` (280px) for scrollable list; `max-w-dropdown-chip` (10rem) for multi-select chip truncation
 - [x] `MonetaryValueInput`: currency `Dropdown` + amount `Input`; auto-fills `amount_base_calculated` from parent-provided rates; shows `amount_base` override field and `fx_delta` chip when `currency ≠ base_currency`
 - [x] `RecurringDateInput`: free-text input with 500 ms debounce; calls parent-provided `parseRule(text)` and shows next computed date; **Confirm button required** before parent form can save; resets to unconfirmed if text changes after confirmation
 - [x] `TagInput`: Enter or comma to add tag; Backspace removes last tag; duplicate tags rejected
@@ -382,9 +389,15 @@ renders with placeholder routes. All generic entity components available for fea
 - [x] `Drawer`: slides from right; full-width on mobile; focus trap
 - [x] `Table`: sticky `thead`; sortable columns (sort icon state); row hover; responsive card-collapse at `<768px`
 - [x] `ContextMenu`: `⋯` trigger; standard items: Edit, Duplicate, separator, Archive, Delete; item-level `disabled` and `destructive` props
-- [x] `Card`: hover lift animation per UX §4.1; left accent bar uses CSS var `--entity-accent` passed as prop
+- [x] `Card`: hover lift animation per UX §4.1; left accent bar uses **inline style** `borderLeft: '4px solid var(--entity-accent)'` with `--entity-accent` CSS var (inline style used to avoid cascade conflict with Tailwind's `border-width: 1px` shorthand in the Card variant class)
+- [x] `Modal` / `Drawer`: backdrop uses `bg-backdrop` token (`--color-backdrop: rgb(0 0 0 / 0.7)`) — not hardcoded `bg-black/70`
 - [x] `Toast` / `ToastContainer`: 4 variants; auto-dismiss 4 s (success/info) / 8 s (error/warning); max 3 stacked; slide-in animation; `alertStore` Zustand store with `enqueue` and `dismiss` actions
 - [x] `Skeleton`: 4 shapes — `card`, `table-row`, `chart`, `stat`; `ConfirmationDialog` wraps `Modal` with warning/danger variant and Cancel + Confirm; `ProgressBar` implemented
+
+**Patches (2026-06-04):**
+- `Tooltip`: Viewport boundary clamping — tooltip no longer overflows left/right edges when trigger is near viewport boundary
+- `ContextMenu` / `useFloatingPosition`: Panel width-aware horizontal clamping — menu no longer overflows right viewport edge
+- `Toast`: Position shifted from `top-4` to `top-[80px]` — toasts no longer obscure the sticky topbar
 
 ---
 
@@ -425,11 +438,11 @@ renders with placeholder routes. All generic entity components available for fea
 ```
 
 **AC:**
-- [x] `client.ts`: base fetch wrapper; automatically includes `X-CSRF-Token` from `authStore`; on 401 response calls `authStore.clearAuth()` and redirects to `/login`; all errors throw a typed `ApiError`
-- [x] `authStore`: `{ currentPerson, householdId, csrfToken, setAuth, clearAuth }`; populated from `/auth/me` on app mount; mock Dev User injected in development mode so app shell is navigable without backend OAuth
-- [x] `visualizationStore`: `VisualizationFilter` shape per EDP §13.5: `{ dateRange, categoryIds, personIds, accountIds, currency, comparisonMode, comparisonIds }`; actions: `setFilter`, `drillDown`, `drillUp`, `resetFilter`, `navigateTo(module, filterPatch)`
-- [x] `useVisualizationFilter` hook: reads/writes `visualizationStore`; `navigateTo` persists filter across route changes via React Router state
-- [x] `types/visualization.ts` exports `VisualizationFilter`, aggregation response types
+- [x] `client.ts`: base fetch wrapper; automatically includes `X-CSRF-Token` from `authStore`; `skipCsrf` option for auth routes; on 401 calls `authStore.clearAuth()` and redirects to `/login`; typed `ApiError` with `status`, `endpoint`, `details`; `api` convenience object (`api.get/post/put/patch/delete`); `setAuthStoreGetter` for test DI; handles non-JSON error bodies
+- [x] `authStore`: `{ currentPerson, householdId, csrfToken, setAuth, clearAuth, setDefaultView }`; mock Dev User injected in development mode; `setDefaultView` updates `currentPerson.defaultView` for the Sidebar view toggle
+- [x] `visualizationStore`: full `VisualizationFilter` shape per EDP §13.5; actions: `setFilter`, `drillDown(entityType, entityId, label)`, `drillUp`, `resetFilter` (preserves `display_currency`), `navigateTo(module, filterPatch)`, `setDisplayCurrency`; `currentModule` state; `filterHistory` capped at 20 entries
+- [x] `useVisualizationFilter` hook reads/writes `visualizationStore`
+- [x] `types/visualization.ts` exports `VisualizationFilter`, `TimePreset`, `CurrencyMode`, `TransactionType` const objects (no native enums), aggregation response types, `defaultVisualizationFilter` factory
 
 ---
 
@@ -448,91 +461,195 @@ renders with placeholder routes. All generic entity components available for fea
 
 **AC:**
 - [x] `AppShell`: full sidebar layout at `≥1024px`; icon-only collapsed sidebar at `768–1024px`; bottom nav bar at `<768px`
-- [x] `Sidebar`: all navigation sections per UX §5.2; Household ⇌ My Finances view toggle at bottom (reads `authStore.currentPerson.default_view`); active route highlighted
-- [x] `Topbar`: page title; `VisualizationFilterBar` slot with horizontal scroll on overflow; collapses to `Filters` button at `<480px`; alert bell (reads `alertStore` count); `Avatar` linking to profile/settings
-- [x] `App.tsx`: all routes defined; protected routes wrapped in `AuthGuard` component that checks `authStore.currentPerson` and redirects to `/login` if absent; each module route renders its page within `AppShell`; `/design-system` route exposes the full UI component catalogue
+- [x] `Sidebar`: all navigation sections per UX §5.2; **segmented control** at bottom for Household / My Finances view toggle — outer border `border-border-state`, pills `text-sm font-medium py-2`, active `bg-primary text-text-inverse`, inactive `text-text-secondary hover:bg-surface-hover`, divider `border-border-state-subtle`; collapsed: stacked H/M with same tokens; reads/writes `authStore.currentPerson.defaultView`; active route highlighted
+- [x] `Topbar`: page title; `VisualizationFilterBar` slot with horizontal scroll on overflow; collapses to `Filters` button below `--breakpoint-xs` (480px, `xs:` / `max-xs:` Tailwind variants); alert bell (reads `alertStore` count); `Avatar` linking to profile/settings
+- [x] `App.tsx`: all routes defined; protected routes wrapped in `AuthGuard`; `/design-system` **always renders standalone** (outside AppShell, whether authenticated or not) — prevents double scrollbar from AppShell's `overflow-auto` container
 - [x] Placeholder pages created for all modules: `Dashboard`, `Accounts`, `Capital`, `Assets`, `Insurance`, `Transactions`, `RecurringPayments`, `Transfers`, `Budgets`, `Categories`, `Settings` — each renders an `EmptyState` until its epic is complete
 
+### FE-008 — Design System Test Page ✅ DONE
+
+**Size:** M · **Depends on:** FE-001–FE-007 · **FRs:** — · **Ref:** UX §1–9, EDP §14
+**Completed:** 2026-06-01
+
+**Files:**
+```
+~ frontend/src/pages/DesignSystem.tsx
++ frontend/src/components/entity/BulkActionBar.tsx
+~ frontend/src/index.css
+~ frontend/src/components/ui/Divider.tsx
+~ frontend/src/components/ui/Tooltip.tsx
+~ frontend/src/components/ui/Badge.tsx
+~ frontend/src/components/ui/Card.tsx
+~ frontend/src/components/ui/Input.tsx
+~ frontend/src/components/ui/Modal.tsx
+~ frontend/src/components/ui/Drawer.tsx
+~ frontend/src/components/ui/ColourPicker.tsx
+~ frontend/src/components/ui/DatePicker.tsx
+~ frontend/src/components/ui/Dropdown.tsx
+~ frontend/src/components/ui/ErrorBoundary.tsx
+~ frontend/src/components/entity/EntityModal.tsx
+~ frontend/src/components/layout/Sidebar.tsx
+~ frontend/src/components/layout/Topbar.tsx
+~ frontend/src/App.tsx
+```
+
+**AC:**
+- [x] `/design-system` page always accessible standalone (no AppShell wrapper regardless of auth state)
+- [x] Covers all component layers 1–9; sticky TOC sidebar with hidden scrollbar
+- [x] Token swatch sections: Surface tokens, Semantic fill tokens (incl. `bg-backdrop`, `bg-accent-subtle`, `bg-control-active`), **Border tokens** (all 6 including `border-border-state` / `border-border-state-subtle`), **Focus ring glows** (`ring-glow-primary`, `ring-glow-error`), **Entity accent utilities** (`border-entity-accent`, `bg-entity-accent-muted`, `text-entity-accent`)
+- [x] Entity accent colours sub-section: all 14 families in `grid-cols-2 → md:grid-cols-7`; each swatch uses `style={{ backgroundColor: 'var(--color-entity-${key})' }}`
+- [x] Entity Components section: `EntityCard` (4 variants with correct accent bars), `EntityPage` action bar, multi-select + `BulkActionBar` demo
+- [x] **Buttons & Controls** section (renamed): standard button variants + **segmented control** demo with interactive expanded/collapsed states wired to `demoViewMode`; frozen reference states for both active modes; uses `border-border-state` and `border-border-state-subtle` tokens
+- [x] Bug annotation chips on remaining E-code items; E20, E28, E56, E68, E74 resolved and annotations removed or marked fixed
+- [x] `BulkActionBar.tsx` created (E74 fix)
+- [x] `Divider.tsx` vertical branch JSX fixed; `<hr>` uses Tailwind border classes not inline style (E23)
+- [x] `AlertBanner.tsx` uses `border-l-*` utilities from `index.css` (E56)
+- [x] `EntityCard` uses `variant="default"` on inner `Card` (E68)
+- [x] `Tooltip` fully rewritten CSS-primary; E20 annotation removed
+- [x] Spinner-in-primary-button test case and responsiveness notes present
+- [x] All magic values swept: `z-[600]` → `z-tooltip`; `duration-[100ms]` → `duration-fast`; `ring-[rgb(...)]` → `ring-glow-*`; `bg-black/70` → `bg-backdrop`; `w-[320px]` → `w-date-picker`; `max-h-[280px]` → `max-h-dropdown-list`; `min-[480px]:` → `xs:` etc.
+
 ---
+
+---
+
+
 
 ## Epic 3 — Authentication & Household
 
 **Purpose:** Google OAuth login, server-side sessions, CSRF, household creation, and
 member management. After this epic both Ben and Kim can log in and are in the same household.
 
-**Pre-conditions:** Epics 1 and 2 complete. Google OAuth credentials configured.
+**Pre-conditions:** Epics 1 and 2 complete. Google OAuth credentials configured in Google Cloud Console.
 
 **Post-conditions:** Full auth flow working end-to-end. Household created on first login.
 Second user can be invited and accept. All auth tests passing.
 
 ---
 
-### AUTH-001 — Google OAuth backend: flow, callback, session
+### AUTH-001 — Google OAuth backend: flow, callback, session ✅ DONE
 
 **Size:** M · **Depends on:** BE-008 · **FRs:** FR-P-001, FR-HH-001 · **Ref:** ARCH §7.1, §7.2, EDP §16.3
+**Completed:** 2026-06-03 · **Reviewed:** 2026-06-03 · **Tests:** 8/8 passing
 
 **Files:**
 ```
 + backend/services/auth_service.py
 + backend/routes/auth.py
++ backend/routes/__init__.py
++ backend/tests/test_auth_flow.py
 ~ backend/main.py
+~ backend/middleware/auth_middleware.py
+~ backend/middleware/csrf_middleware.py
+~ backend/models/person.py
+~ backend/config.py
+~ backend/dependencies.py
+~ requirements.txt
 ```
 
 **AC:**
-- [ ] `GET /auth/login`: generates OAuth state (UUID stored in short-lived DB table or signed cookie), redirects to Google authorization endpoint with `scope=openid email profile`, `prompt=select_account`
-- [ ] `GET /auth/callback`: exchanges code for tokens via `httpx`; validates ID token (signature, expiry, audience) using `google-auth`; extracts `email`, `name`, `picture`, `sub` from claims; creates or fetches `Person` by `google_sub` with fallback email match
-- [ ] On first login (no `household_id`): creates `Household` with default name, SGD base currency, seeds 12 default categories (per CAT seeding list), adds SGD currency record, assigns person as `owner`
-- [ ] `Session` created with `expires_at = now + 30min`, `last_activity_at = now`, `csrf_token = secrets.token_urlsafe(32)`; response sets `HttpOnly`, `Secure`, `SameSite=Lax` session cookie; also returns `X-Session-Id` header for dev cross-port use
-- [ ] `GET /auth/me`: returns `{ person: PersonResponse, household: HouseholdResponse }` or 401; used by frontend to rehydrate `authStore`
-- [ ] `POST /auth/logout`: deletes `Session` record; clears session cookie; returns 200
-- [ ] Integration test: full mock OAuth flow — state → callback → session created → `/auth/me` returns person
+- [x] `GET /auth/login`: generates OAuth state (HMAC-signed cookie, 10-min TTL), redirects to Google authorization endpoint with `scope=openid email profile`, `prompt=select_account`
+- [x] `GET /auth/callback`: exchanges code for tokens via `httpx`; validates ID token (signature, expiry, audience) using `google-auth`; extracts `email`, `name`, `picture`, `sub` from claims; creates or fetches `Person` by `google_sub` with fallback email match
+- [x] On first login (no `household_id`): creates `Household` with default name, SGD base currency, seeds 12 default categories (see CAT seeding list below), adds SGD currency record, assigns person as `owner`
+- [x] `Session` created with `expires_at = now + 30min`, `last_activity_at = now`, `csrf_token = secrets.token_urlsafe(32)`; response sets `HttpOnly`, `Secure` (derived from `not settings.DEBUG`), `SameSite=Lax` session cookie; also returns `X-Session-Id` header for dev cross-port use
+- [x] `GET /auth/me`: returns `{ person: PersonResponse, household: HouseholdResponse }` or 401; used by frontend to rehydrate `authStore`
+- [x] `POST /auth/logout`: deletes `Session` record; clears session cookie; returns 200
+- [x] Integration test: full mock OAuth flow — state → callback → session created → `/auth/me` returns person
+
+**End-to-end session pipeline (ARCH §7.1 + §7.2a — treat as a single pipeline, not just backend code):**
+The session cookie produced by this story is the first link in a chain that must be verified to work completely before AUTH-001 is marked Done:
+```
+/auth/callback sets session cookie
+    → browser sends cookie on all subsequent requests
+    → AuthMiddleware (BE-008) validates session, injects person into request.state
+    → GET /auth/me returns PersonResponse + HouseholdResponse
+    → AUTH-003's useAuth hook calls /auth/me → populates authStore.setAuth(person, householdId, csrfToken)
+    → AuthGuard (FE-007) reads authStore.currentPerson → unlocks protected routes
+    → App shell renders with correct Sidebar view mode (default_view from Person)
+```
+The `/auth/me` endpoint is the bridge between the backend session (this story) and the frontend auth state (AUTH-003). Its response shape must match what `authStore.setAuth()` expects. Verify this contract before closing AUTH-001 — it prevents AUTH-003 from being blocked.
+- [x] `/auth/me` response shape verified against `authStore`'s `PersonInfo` interface; returns `{ personId, displayName, email, role, pictureUrl, defaultView, displayCurrency }` and household `{ householdId, name, baseCurrency, timezone }` per ARCH §7.2a
+
+**CAT seeding list — 12 default categories with colour and icon (informed by v1 colour scheme):**
+
+| Name | Type | Colour | Icon |
+|---|---|---|---|
+| Food & Drink | expense | `#ef4444` (red) | `🍕` |
+| Shopping | expense | `#6366f1` (indigo) | `🛍️` |
+| Housing | expense | `#f59e0b` (amber) | `🏠` |
+| Transport | expense | `#64748b` (slate) | `🚗` |
+| Vehicle | expense | `#14b8a6` (teal) | `⛽` |
+| Life & Entertainment | expense | `#10b981` (green) | `🎬` |
+| Health & Fitness | expense | `#ec4899` (pink) | `🏥` |
+| Communication | expense | `#06b6d4` (cyan) | `📱` |
+| Financial Expenses | expense | `#8b5cf6` (purple) | `💳` |
+| Income | income | `#84cc16` (lime) | `💰` |
+| Savings & Investments | income | `#10b981` (green) | `🏦` |
+| Other | both | `#94a3b8` (grey) | `📦` |
+
+Colours map to the v1 financial tracker colour scheme. All values are from the ColourPicker entity/extended palette so users can later customise them to match.
 
 ---
 
-### AUTH-002 — Household member management backend
+### AUTH-002 — Household member management backend ✅ DONE
 
 **Size:** S · **Depends on:** AUTH-001 · **FRs:** FR-HH-003, FR-HH-004, FR-P-002, FR-P-005 · **Ref:** ARCH §6.2, PRD §2
+**Completed:** 2026-06-03 · **Reviewed:** 2026-06-03 · **Tests:** 21/21 passing
 
 **Files:**
 ```
 + backend/services/household_service.py
 + backend/routes/household.py
++ backend/schemas/household.py
++ backend/schemas/person.py
++ backend/schemas/__init__.py
++ backend/tests/test_household_api.py
 ~ backend/main.py
 ```
 
 **AC:**
-- [ ] `GET /api/household`: returns household details; `PATCH /api/household`: owner-only; updates `name`, `timezone`; audit log entry
-- [ ] `GET /api/persons`: lists all household members with roles; `PATCH /api/persons/{id}`: self or admin+ only; updates `display_name`, `display_currency`, `default_view`; `DELETE /api/persons/{id}`: admin+ only; hard-delete if no events, archive otherwise
-- [ ] `POST /api/persons/invite`: admin+ only; validates email not already in household; creates `HouseholdInvitation` with 7-day expiry; returns invitation record; no email sent
-- [ ] `GET /api/persons/invitations`: admin+ only; returns pending invitations; `DELETE /api/persons/invitations/{id}`: admin+ cancels invitation (sets `status = "cancelled"`)
-- [ ] `POST /api/invitations/{id}/accept`: validates session person's email matches `invited_email` via `func.lower()`; creates `Person` with `member` role; sets invitation `status = "accepted"`, `accepted_at = now`; integration test: mismatched email returns 403
-- [ ] `PATCH /api/persons/{id}/role`: owner-only; values: `"admin"` / `"member"`; owner cannot demote themselves; audit log
+- [x] `GET /api/household`: returns household details; `PATCH /api/household`: owner-only; updates `name`, `timezone`; audit log entry
+- [x] `GET /api/persons`: lists all household members with roles; `PATCH /api/persons/{id}`: self or admin+ only; updates `display_name`, `display_currency`, `default_view`; `DELETE /api/persons/{id}`: admin+ only; hard-delete if no events, archive otherwise
+- [x] `POST /api/persons/invite`: admin+ only; validates email not already in household; creates `HouseholdInvitation` with 7-day expiry; returns invitation record; no email sent
+- [x] `GET /api/persons/invitations`: admin+ only; returns active (non-expired) pending invitations; `DELETE /api/persons/invitations/{id}`: admin+ cancels invitation (sets `status = "cancelled"`)
+- [x] `POST /api/invitations/{id}/accept`: validates session person's email matches `invited_email` (Python `.lower()` on loaded strings); assigns person to household with `member` role; sets invitation `status = "accepted"`, `accepted_at = now`; integration test: mismatched email returns 403
+- [x] `PATCH /api/persons/{id}/role`: owner-only; values: `"admin"` / `"member"`; owner cannot demote themselves; audit log
+
+**Implementation notes:**
+- Route ordering critical: `/persons/invite` and `/persons/invitations` declared before `/{person_id}` to prevent FastAPI matching static segments as UUIDs
+- `accept_invitation` re-fetches Person in the route's DB session (middleware-injected Person is detached)
+- `list_invitations` filters expired invitations (`expires_at > now`) — not just by status
+- Person hard-delete checks all FinancialEvent references (`created_by`, `updated_by`, `payee_person_id`)
 
 ---
 
-### AUTH-003 — Auth frontend: login page, useAuth hook, route hydration
+### AUTH-003 — Auth frontend: login page, useAuth hook, route hydration ✅ DONE
 
-**Size:** M · **Depends on:** FE-007, AUTH-001 · **FRs:** FR-P-001 · **Ref:** UX §9.5
+**Size:** M · **Depends on:** FE-007, AUTH-001 · **FRs:** FR-P-001 · **Ref:** UX §9.6
 
 **Files:**
 ```
++ frontend/src/components/layout/PublicPage.tsx   ← parallel to EntityPage; shell-less centered layout
 + frontend/src/pages/Login.tsx
 + frontend/src/hooks/useAuth.ts
 + frontend/src/api/usePersons.ts
 ```
 
 **AC:**
-- [ ] `Login.tsx`: centred card on dark background using design tokens; single "Sign in with Google" button; displays `?error` query param as `AlertBanner`; no other inputs
-- [ ] `useAuth` hook: calls `GET /auth/me` on mount; populates `authStore`; exposes `{ currentPerson, isLoading, logout }`; `logout()` calls `POST /auth/logout` then clears store and navigates to `/login`
-- [ ] `App.tsx` `AuthGuard` calls `useAuth` on mount; shows `Skeleton` while loading; redirects to `/login` if unauthenticated; redirects to `/dashboard` if authenticated and on `/login`
-- [ ] On successful callback, app shell loads in the person's `default_view` (household or personal)
-- [ ] Vitest: `Login.tsx` renders button; renders error banner when `?error` present
+- [x] `PublicPage.tsx`: full-screen `bg-bg` wrapper; content centred vertically and horizontally; inner card uses `bg-surface-raised border border-border rounded-lg`; accepts optional `title?: string` (rendered as `text-text-primary` above the card) and `children`; all colours via design tokens — no raw hex values
+- [x] `Login.tsx`: uses `PublicPage` with `title="Financial Tracker"`; single "Sign in with Google" `Button` (primary variant from FE-002 design system); Google logo `<img>` alongside button label; displays `?error` query param as `AlertBanner` (including `?error=invitation_expired` and `?error=invitation_not_found` with descriptive copy); no other inputs
+- [x] `useAuth` hook: calls `GET /auth/me` on mount; populates `authStore`; exposes `{ currentPerson, isLoading, logout }`; `logout()` calls `POST /auth/logout` then clears store and navigates to `/login`
+- [x] `App.tsx` `AuthGuard` calls `useAuth` on mount; shows `Skeleton` while loading; redirects to `/login` if unauthenticated; redirects to `/dashboard` if authenticated and on `/login`
+- [x] On successful callback, app shell loads in the person's `default_view` (household or personal)
+- [x] Vitest: `Login.tsx` renders button; renders error banner when `?error` present; `PublicPage` renders children with `bg-bg` container
 
 ---
 
-### AUTH-004 — Household settings and member management frontend
+### AUTH-004 — Household settings and member management frontend ✅ DONE
 
-**Size:** M · **Depends on:** FE-007, AUTH-002 · **FRs:** FR-HH-002 through FR-HH-004, FR-P-003, FR-P-005 · **Ref:** UX §9.5
+**Size:** M · **Depends on:** FE-007, AUTH-002 · **FRs:** FR-HH-002 through FR-HH-004, FR-P-003, FR-P-005 · **Ref:** UX §9.8
+
+**Pre-condition (from Epic 2 retro, partially resolved 2026-06-01):** Topbar must be changed from `bg-bg` → `bg-surface` (one line in `Topbar.tsx:37`) to match Sidebar and UX spec §5.3 before this story starts. The card/content hierarchy (`bg-bg` page, `bg-surface` cards) was confirmed correct from screenshots and the skeleton demo was fixed to reflect this accurately. The only remaining shell-chrome inconsistency is the Topbar token — fix it at AUTH-004 start so the UIUX tester sees a consistent chrome across the first real feature page.
 
 **Files:**
 ```
@@ -541,12 +658,165 @@ Second user can be invited and accept. All auth tests passing.
 ```
 
 **AC:**
-- [ ] Settings page has tabbed layout: `Household` / `Members` / `Currencies` (currencies tab is placeholder until SETTINGS epic)
-- [ ] Household tab: name + timezone fields; Save button; owner-only fields locked for non-owners with `Tooltip`
-- [ ] Members tab: `Table` of persons with name, email, role `Badge`, joined date, actions; Invite button (admin+) opens `Modal` with email input
-- [ ] Role change dropdown in table row (owner-only); owner cannot change their own role
-- [ ] Remove member action (owner-only): `ConfirmationDialog` before delete
-- [ ] Pending invitations section: list with cancel action; shows invite link for manual sharing
+- [x] Settings page has tabbed layout: `Household` / `Members` / `Currencies` (currencies tab is placeholder until SETTINGS epic)
+- [x] Household tab: name + timezone fields; Save button; owner-only fields locked for non-owners with `Tooltip`
+- [x] Members tab: `Table` of persons with name, email, role `Badge`, joined date, actions; Invite button (admin+) opens `Modal` with email input
+- [x] Role change dropdown in table row (owner-only); owner cannot change their own role
+- [x] Remove member action (owner-only): `ConfirmationDialog` before delete
+- [x] Pending invitations section: list with cancel action; shows shareable join URL (`/join/<invitation_id>`) as a copyable text field with a "Copy link" `Button` (secondary); link leads to the `JoinHousehold` page implemented in AUTH-005
+- [x] Household tab — Danger Zone section (owner-only, visually separated with `border-error` divider): "Delete Household" `Button` (destructive variant — `border-error text-error` outline style); opens `ConfirmationDialog` with a text input requiring the user to type the exact household name before the confirm button enables; on confirm calls `DELETE /api/household` (implemented in AUTH-005); on success calls `logout()` and redirects to `/login`
+
+**Implemented in AUTH-005** (was deferred): Danger Zone / Delete Household AC with backend `DELETE /api/household` endpoint and frontend integration
+
+---
+
+### AUTH-005 — Public layout, invitation join flow, and household delete
+
+**Size:** L · **Depends on:** AUTH-002, AUTH-003 · **FRs:** FR-HH-003, FR-HH-004, FR-P-001 · **Ref:** ARCH §7.1, §7.2, §6.2
+
+**Context:** Three gaps identified after AUTH-001 and AUTH-002 completed:
+1. Login and error pages served outside the app shell need `PublicPage` (created in AUTH-003); error pages (404, 403) and the `JoinHousehold` page have not yet been built.
+2. A bug exists in the OAuth callback: when an invited user signs in for the first time, the callback creates a new household for them instead of accepting the pending invitation. Fix: before creating a new household, check for a matching pending invitation by email.
+3. The household owner has no way to permanently delete the household — `DELETE /api/household` route and backend service method do not exist.
+
+**Files:**
+```
++ frontend/src/pages/NotFound.tsx
++ frontend/src/pages/Forbidden.tsx
++ frontend/src/pages/JoinHousehold.tsx
+~ frontend/src/App.tsx                          ← register NotFound catch-all route + JoinHousehold route
+~ backend/services/auth_service.py              ← fix: check pending invitation before creating household
+~ backend/services/household_service.py         ← add: delete_household
+~ backend/routes/household.py                   ← add: DELETE /api/household (owner-only)
+~ backend/routes/auth.py                        ← add: GET /api/invitations/:token (public — fetch invitation details)
+~ backend/tests/test_household_api.py           ← add: delete household integration tests
+~ backend/tests/test_auth_api.py                ← add: new-user-with-invitation flow test
+```
+
+**AC — Error pages:**
+- [ ] `NotFound.tsx`: uses `PublicPage`; "404 — Page Not Found" heading; brief copy; "Go to Dashboard" `Button` (secondary, navigates to `/app`); card width matches Login card
+- [ ] `Forbidden.tsx`: uses `PublicPage`; "403 — Not Authorized" heading; brief copy; "Sign In" `Button` (secondary, navigates to `/login`)
+- [ ] `App.tsx` has `path="*"` catch-all route rendering `NotFound`
+
+**AC — JoinHousehold page:**
+- [ ] `JoinHousehold.tsx` at `/join/:token`: fetches `GET /api/invitations/:token` (public endpoint) on mount; renders using `PublicPage`; shows "You've been invited to join **[Household Name]**" with invited-by display name and expiry date
+- [ ] If invitation is expired or not found: `AlertBanner` with message + "Back to Login" `Button` (secondary)
+- [ ] If user is **not** authenticated: page still fetches and shows invitation details; "Accept Invitation" `Button` (primary) stores token in `sessionStorage` as `pendingInviteToken` then navigates to `/auth/login`; after OAuth, `OAuthCallback.tsx` checks `sessionStorage` for `pendingInviteToken` and redirects to `/join/:token` before clearing it
+- [ ] If user **is** authenticated: "Accept Invitation" `Button` (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/app/dashboard`; on 403 (email mismatch) shows `AlertBanner` "This invitation was sent to a different email address — sign in with the correct account"
+- [ ] "Decline" `Button` (secondary): navigates to `/login` without calling any endpoint
+- [ ] Vitest: renders invitation card; shows error `AlertBanner` when invitation expired; renders unauthenticated CTA correctly
+
+**AC — Backend: invitation OAuth fix:**
+- [ ] `auth_service.py` `handle_oauth_callback()`: after lookup/create Person by `google_sub`, if Person was **newly created** (no prior `household_id`), query for pending `HouseholdInvitation` where `func.lower(invited_email) == func.lower(person.email)` and `status == "pending"` and `expires_at > utcnow()`
+- [ ] If matching invitation found: set `person.household_id = invitation.household_id`, `person.role = "member"`, `invitation.status = "accepted"`, `invitation.accepted_at = utcnow()` — **do not** create a new household
+- [ ] If no matching invitation: create new household as before; person is owner
+- [ ] Integration test (`test_auth_api.py`): new user whose email matches a pending invitation gets assigned to the invited household; `GET /auth/me` returns invited household details
+
+**AC — Backend: household delete:**
+- [ ] `GET /api/invitations/:token` (public, no auth required): returns `{ household_name, invited_by_display_name, invited_email, expires_at, status }`; returns 404 if invitation does not exist; returns 410 Gone if expired or already accepted/cancelled
+- [ ] `household_service.py` `delete_household(db, household_id, actor_id)`: owner-only (raises 403 if actor is not owner); hard-deletes household row — SQLAlchemy cascade must cover persons, accounts, financial_events, categories, budgets, sessions associated with household members; writes one final audit log entry (type `"delete"`, entity `"household"`) before deletion; audit log entry uses `TEXT` UUID storage so it survives the cascade
+- [ ] `DELETE /api/household`: body `{ "confirm_name": str }`; validates `func.lower(confirm_name) == func.lower(household.name)` — returns 422 with RFC 7807 detail if mismatch; calls `delete_household`; returns 204 on success
+- [ ] Integration tests: owner deletes household → 204; non-owner → 403; wrong `confirm_name` → 422; after deletion all persons' sessions are invalidated (sessions table rows deleted by cascade)
+
+---
+
+### AUTH-006 — Enhanced member management & invitation flow
+
+**Size:** L · **Depends on:** AUTH-005 · **FRs:** FR-HH-001, FR-HH-002, FR-HH-003, FR-P-001, FR-P-002 · **Ref:** UX §9.7, §9.8, §9.9, ARCH §7.1, §7.2a, §6.2
+
+**Context:** AUTH-005 delivered the invitation join page and household delete, but several member-management flows are incomplete or missing:
+1. **Uninvited logins** can create households freely — the app needs invitation-only access for new users (first user is still allowed).
+2. **New household owners** see no onboarding signal — need a welcome toast.
+3. **Invited users who decline** are left in the invited household with no path to create their own.
+4. **Members cannot leave** their household.
+5. **Role management** is owner-only — admins should be able to manage members.
+6. **JoinHousehold `decline`** (for authenticated users) only navigates away — it needs to create the person's own household.
+
+**Files:**
+```
+~ backend/services/auth_service.py        ← NotInvitedError guard + isFirstLogin in /auth/me
+~ backend/routes/auth.py                  ← catch NotInvitedError → /login?error=not_invited; add isFirstLogin + pendingInvitationToken to /auth/me
+~ backend/services/household_service.py   ← decline_invitation; leave_household; update_role admin expansion
+~ backend/routes/household.py             ← POST /api/invitations/{token}/decline; POST /api/persons/leave; relax role-change to admin+
+~ backend/migrations/versions/            ← add "declined" to HouseholdInvitation.status CHECK constraint
+~ backend/tests/test_auth_flow.py         ← uninvited signup → forbidden redirect test
+~ backend/tests/test_household_api.py     ← decline, leave, admin-role-change tests
+~ frontend/src/api/useAuthApi.ts          ← add isFirstLogin to AuthMeResponse (pendingInvitationToken already added in AUTH-005 bugfix)
+~ frontend/src/api/usePersons.ts          ← add useDeclineInvitation; useLeaveHousehold
+~ frontend/src/hooks/useAuth.ts           ← welcome toast on isFirstLogin; sessionStorage guard
+~ frontend/src/pages/JoinHousehold.tsx    ← authenticated decline → POST decline; update authStore; welcome toast
+~ frontend/src/pages/Settings.tsx         ← Leave Household button; admin role-dropdown visibility
+~ frontend/src/pages/Login.tsx            ← not_invited error copy
+```
+
+**AC — Backend: invitation-only access (ARCH §7.1 step 3):**
+- [ ] `auth_service.py`: define `NotInvitedError(Exception)` — raised inside `seed_household_if_needed` when person is new (no `household_id`), no matching pending invitation exists, **and** at least one `Household` row already exists in the DB
+- [ ] `auth.py` callback: catch `NotInvitedError`, rollback the DB transaction (so the new `Person` row is not persisted), redirect to `{FRONTEND_URL}/login?error=not_invited`
+- [ ] Integration test: new Google sub with no invitation → callback returns redirect to `/login?error=not_invited`; no `Person` row created in DB
+
+**AC — Backend: `isFirstLogin` in `/auth/me`:**
+- [ ] `auth.py` `/auth/me`: add `isFirstLogin: bool` — `True` when `person.role == "owner"` and `utcnow() - person.created_at < timedelta(minutes=2)`; `False` otherwise
+- [ ] `useAuthApi.ts` `AuthMeResponse`: add `isFirstLogin: boolean` field (already has `pendingInvitationToken` from bugfix PR)
+
+**AC — Backend: `POST /api/invitations/{token}/decline`:**
+- [ ] Route declared **before** `/{token}/accept` to avoid ambiguity
+- [ ] Requires authentication (`get_current_person` dependency)
+- [ ] `household_service.py` `decline_invitation(db, token, person)`:
+  - Fetches invitation by `id = token`; 404 if not found
+  - 409 if `status != "pending"`
+  - 403 if `person.email.lower() != inv.invited_email.lower()`
+  - Sets `inv.status = "declined"`
+  - If `person.household_id == inv.household_id` (person was pre-assigned by OAuth seed): detach person from invited household, create and seed a brand-new household for them (owner role), return `(person, new_household)`
+  - If `person.household_id != inv.household_id` (edge case): just mark declined, return `(person, current_household)`
+- [ ] Route response shape mirrors `/auth/me`: `{ person, household, csrfToken, isFirstLogin: true }` — frontend uses this to update `authStore` directly without a round-trip to `/auth/me`
+- [ ] Integration tests: decline with correct email → 200 + new household created; wrong email → 403; already accepted → 409
+
+**AC — Backend: `POST /api/persons/leave`:**
+- [ ] Route at `/api/persons/leave` — declared before `/{person_id}` to avoid UUID match
+- [ ] Requires auth; returns 403 if `person.role == "owner"` (owner must delete household instead)
+- [ ] `household_service.py` `leave_household(db, person)`:
+  - Creates and seeds a new household for the person (same seeding as first-login household creation)
+  - Updates `person.household_id`, `person.role = "owner"` of new household
+  - Returns `(person, new_household)`
+- [ ] Response shape: `{ person, household, csrfToken, isFirstLogin: true }`
+- [ ] Integration tests: member leaves → 200 + own household; admin leaves → 200; owner leaves → 403
+
+**AC — Backend: `PATCH /api/persons/{id}/role` — admin expansion:**
+- [ ] Route dependency changed from `require_role("owner")` to `require_role("admin")`
+- [ ] `household_service.py` `update_role(db, household_id, actor_id, target_id, data)`:
+  - Existing owner-cannot-demote-self guard unchanged
+  - New guard: `_ROLE_HIERARCHY[actor.role] > _ROLE_HIERARCHY[target.role]` — if actor's rank ≤ target's rank, raise 403 "Insufficient rank to change this member's role"
+  - New guard: target cannot be promoted above actor's own rank (admin cannot promote to owner)
+- [ ] Integration tests: admin promotes member → 200; admin tries to demote another admin → 403; member tries → 403 (require_role catches it)
+
+**AC — Backend: migration — `declined` status:**
+- [ ] New Alembic migration: extend the `CHECK` constraint on `household_invitations.status` to include `"declined"`. Migration is `batch_alter_table` to work with SQLite's limited ALTER TABLE support.
+
+**AC — Frontend: welcome toast:**
+- [ ] `useAuth.ts`: after `setAuth(...)` resolves, if `response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')`:
+  - `sessionStorage.setItem('hasSeenWelcome', '1')`
+  - `alertStore.enqueue({ variant: 'success', title: 'Household created', description: 'Your household "…" has been created. Invite your members to get started.', action: { label: 'Invite Members', onClick: () => navigate('/settings?tab=members') } })`
+- [ ] `Toast` component (`frontend/src/components/ui/Toast.tsx`): add support for optional `action: { label: string; onClick: () => void }` prop on `ToastItem`. Renders as a small `Button` (secondary, xs) inside the toast alongside the dismiss ✕.
+- [ ] Settings page: reads `?tab` query param on mount and activates the matching tab (default `household` if absent or unknown)
+
+**AC — Frontend: `JoinHousehold.tsx` — authenticated decline:**
+- [ ] "Decline" button for authenticated user (email-match state only): calls `POST /api/invitations/:token/decline` via new `useDeclineInvitation` mutation hook
+- [ ] On 200: extract `{ person, household, csrfToken }` from response; call `authStore.setAuth(person, household.householdId, csrfToken)`; navigate to `/dashboard`; welcome toast fires via `useAuth`'s `isFirstLogin` logic OR call `alertStore.enqueue` directly with the same copy (response includes `isFirstLogin: true`)
+- [ ] On error (409/403): show `AlertBanner` with appropriate copy
+- [ ] Unauthenticated "Decline" unchanged (navigates to `/login`)
+- [ ] `useDeclineInvitation` in `usePersons.ts`: `useMutation` calling `POST /api/invitations/:token/decline`
+
+**AC — Frontend: `Settings.tsx` — Leave Household + admin roles:**
+- [ ] Members tab: "Leave Household" `Button` (variant `ghost`, `text-error`, full-width or left-aligned) rendered **below** the members table, visible only when `currentPerson.role !== 'owner'`
+- [ ] Leave Household opens `ConfirmationDialog` (variant `danger`): title "Leave Household?", message "You will be removed from [household name] and a new household will be created for you.", confirm label "Leave Household", cancel label "Cancel"
+- [ ] On confirm: call `useLeaveHousehold` mutation (`POST /api/persons/leave`); on success call `authStore.setAuth(...)` with response data and `navigate('/dashboard')`; show welcome toast via `alertStore.enqueue`
+- [ ] `useLeaveHousehold` in `usePersons.ts`: `useMutation` calling `POST /api/persons/leave`; returns `AuthMeResponse`-shaped data
+- [ ] Role dropdown column: change visibility guard from `isOwner` to `isAdminOrOwner && _roleRank(currentPerson.role) > _roleRank(member.role)` where `_roleRank = { owner: 3, admin: 2, member: 1 }` — prevents admins from touching other admins or owners
+- [ ] Role dropdown options for admin: only `[{ value: 'admin', label: 'Admin' }, { value: 'member', label: 'Member' }]` — same as owner; rank guard above prevents illegal promotions at UI level
+
+**AC — Frontend: `Login.tsx` — not_invited copy:**
+- [ ] In the `errorMessage` mapping (or the existing `useMemo` that decodes the `?error` param): add case for `error === 'not_invited'` → return `"You need an invitation to sign in. Contact an existing household member to receive an invitation link."`
+- [ ] No new components; uses existing `AlertBanner` error variant
 
 ---
 
@@ -556,6 +826,8 @@ Second user can be invited and accept. All auth tests passing.
 and import-time category mapping. After this epic categories are fully operational.
 
 **Pre-conditions:** Epics 1, 2, 3 complete.
+
+**Design note:** Each category has a `colour` (hex string) and `icon` (emoji char or Lucide icon name) field. All category create/edit forms must use `ColourPicker` and `EmojiIconPicker` components for these fields. The 12 default categories seeded in AUTH-001 arrive with pre-set colours and icons from the CAT seeding list — these are editable by users in this epic.
 
 **Post-conditions:** 12 default categories exist in every new household. Full CRUD working.
 Tree view, spending rollup, merge, and import mapping all operational.
@@ -837,13 +1109,19 @@ CSV imports can map categories using CAT-004 service.
 + frontend/src/components/categories/CategorySelect.tsx
 ```
 
+**Table rendering notes (added 2026-06-04):**
+The ledger uses **offset-based pagination** — `?page=1&per_page=50` default, `event_date DESC` default sort. Each page renders ≤ 50 rows; no virtual scrolling is needed or warranted at this scale. Row actions are surfaced via a single `⋯` `ContextMenu` trigger (§4.6) per row — not inline buttons — keeping DOM node count per row minimal. The `(household_id, event_date)` compound DB index (confirm in migration) ensures the default sort query is O(log n).
+
 **AC:**
 - [ ] `CategorySelect`: hierarchical `<optgroup>` view (parent as non-selectable group label; subcategories as options); flat-list toggle; "No category" option; fetches from `/api/categories/tree`
 - [ ] `Transactions` page uses `EntityPage<Event>` in Table layout (not card grid)
-- [ ] Table columns: Date (`DD-MM-YYYY`), Name, Category, Payee, Amount (`MonetaryValue`), Status `Badge`, Actions
+- [ ] Table columns: Date (`DD-MM-YYYY`), Name, Category, Payee, Amount (`MonetaryValue`), Status `Badge`, Actions (`⋯` ContextMenu per row — not inline buttons)
+- [ ] Default fetch: `?page=1&per_page=50&sort=event_date&order=desc`
+- [ ] Rows-per-page `Dropdown` in filter bar (options: 25 / 50 / 100; default 50)
+- [ ] `Pagination` component (§5.6) below table: prev / next / page numbers / total count
 - [ ] Create/edit `EntityModal`: all transaction fields; `MonetaryValueInput` for amount; `CategorySelect`; `is_shared_expense` checkbox shown only when `transaction_type == "outflow"`
 - [ ] Duplicate detection: modal shows 409 warning with candidate transaction details; user chooses Proceed / Cancel
-- [ ] Reconcile action in context menu and keyboard shortcut `R`; reconciled rows show muted styling
+- [ ] Reconcile action in ContextMenu and keyboard shortcut `R`; reconciled rows show muted styling (`text-text-muted`, strikethrough on name)
 - [ ] Filter bar: date range `DatePicker`, `CategorySelect` (multi), account `Dropdown`, status, type, shared expense toggle
 
 ---
@@ -1348,7 +1626,7 @@ base currency change with recalculation, and GCS backup.
 
 ### SETTINGS-003 — Settings page frontend (currencies and profile)
 
-**Size:** M · **Depends on:** FE-007, AUTH-004, SETTINGS-001 · **FRs:** FR-CU-001 through FR-CU-008, FR-P-003, FR-P-004 · **Ref:** UX §9.5
+**Size:** M · **Depends on:** FE-007, AUTH-004, SETTINGS-001 · **FRs:** FR-CU-001 through FR-CU-008, FR-P-003, FR-P-004 · **Ref:** UX §9.8.4, §9.8.5
 
 **Files:**
 ```
@@ -1357,10 +1635,15 @@ base currency change with recalculation, and GCS backup.
 ```
 
 **AC:**
-- [ ] Currencies tab: table with code, name, symbol, rate, freshness indicator, fee %, display-active toggle; "Add Currency" opens modal with code/name/symbol/fee fields
-- [ ] Set Base Currency button (owner-only): `ConfirmationDialog` warning about recalculation; calls `POST /api/currencies/set-base`; shows progress banner while job runs
-- [ ] "Refresh Rates" button: calls `POST /api/currencies/rates/refresh`; shows spinner; updates table on completion
-- [ ] Profile section accessible from Topbar Avatar menu: display name input, display currency `Dropdown` (household currencies only), default view toggle (Household / Personal); saves via `PATCH /api/persons/{id}`
+- [ ] `Settings.tsx` tab type expands from `'household' | 'members' | 'currencies'` to include `'profile'`; four-tab bar now visible
+- [ ] **Currencies tab** per UX §9.8.4: `Table` with columns Code, Name, Symbol, Rate (stale `⚠` when `last_rate_at > 48h`), Fee %, Active `Toggle` (owner-only), Actions `ContextMenu`; base currency row has no actions column; footer shows base code + last refresh time; stale footer copy when any rate is outdated
+- [ ] Add Currency (owner-only) opens `Modal` with Code / Name / Symbol / Fee % fields; validation per §9.8.4; calls `POST /api/currencies`
+- [ ] Edit Currency via ContextMenu: same modal pre-filled, code read-only; calls `PATCH /api/currencies/{id}`
+- [ ] Set as Base (owner-only, non-base rows only): `ConfirmationDialog` per §9.8.4; calls `POST /api/currencies/{id}/set-base`; shows progress `AlertBanner` while recalculation runs; auto-dismisses when next poll returns updated base
+- [ ] Delete via ContextMenu: disabled with `Tooltip` if currency used in any event; enabled otherwise; `ConfirmationDialog` before `DELETE /api/currencies/{id}`
+- [ ] Refresh Rates (owner-only): `POST /api/currencies/rates/refresh`; loading state on button; success toast on completion
+- [ ] **Profile tab** per UX §9.8.5: Avatar (read-only 56px), Display Name `Input`, Email read-only, Display Currency `Dropdown` (only `is_display_active` currencies; base currency labelled "[CODE] (Base)"), Default View `SegmentedControl`; Save Changes enabled only on dirty state; calls `PATCH /api/persons/{id}`
+- [ ] **Topbar account menu** (§5.3 update): add "My Profile" item between header and Settings; navigates to `/settings?tab=profile`
 
 ---
 
@@ -1392,7 +1675,7 @@ Phase A — Backend foundation (sequential)
 Phase B — Frontend foundation (parallel with Phase A after BE-001)
   FE-001 → FE-002 → FE-003
              FE-002 → FE-004
-  FE-003 + FE-004 → FE-005 → FE-006 → FE-007
+  FE-003 + FE-004 → FE-005 → FE-006 → FE-007 → FE-008
 
 Phase C — Auth & Household (after Phase A; FE-007 for AUTH-003+)
   AUTH-001 → AUTH-002
@@ -1476,10 +1759,11 @@ Phase M — Settings & Currencies (after Phase C; can run parallel with K)
 | FE-005 | Generic entity components | done |
 | FE-006 | Zustand stores and TanStack Query client | done |
 | FE-007 | App shell, routing, auth guard | done |
-| AUTH-001 | Google OAuth backend | pending |
-| AUTH-002 | Household member management backend | pending |
-| AUTH-003 | Auth frontend | pending |
-| AUTH-004 | Household settings and members frontend | pending |
+| FE-008 | Design system test page | done |
+| AUTH-001 | Google OAuth backend | done |
+| AUTH-002 | Household member management backend | done |
+| AUTH-003 | Auth frontend | done |
+| AUTH-004 | Household settings and members frontend | done |
 | CAT-001 | Category schemas and service | pending |
 | CAT-002 | Category routes and hierarchy endpoints | pending |
 | CAT-003 | Category merge and duplicate detection | pending |
@@ -1526,3 +1810,5 @@ Phase M — Settings & Currencies (after Phase C; can run parallel with K)
 |---|---|---|---|
 | 3.0 | 2026-05-28 | Ben + Claude | Full rewrite. Clean-repo start — no refactor epic. 55 stories across 13 epics. Compact coding-agent format. Builds entity hierarchy (BaseEntity, MonetaryValue, STI) correctly from day 1. Frontend design system fully specified before feature pages. Lessons from stories 1-1 → 2-5 incorporated into AC and notes. |
 | 3.1 | 2026-05-29 | Ben + Claude | Marked Epic 1 (BE-001–BE-008) and Epic 2 (FE-001–FE-007) as complete. Updated all AC checkboxes to checked. Added Epic 2 delivered deliverables block (design system component inventory, authStore mock Dev User, /design-system route). BE-008 status corrected from ready-for-dev to done in story table. |
+| 3.2 | 2026-05-29 | Ben + Claude | Added FE-008 (Design System Test Page) to Epic 2. Audited all E-code fixes from the FE fix plan — 33 items cleared, 17 remaining. FE-008 retroactively delivers E23 (Divider broken JSX), E56 (AlertBanner border utilities), E68 (EntityCard variant), and E74 (BulkActionBar). |
+| 3.3 | 2026-06-01 | Ben + Claude | Marked Epics 1 and 2 done in tracking table and sprint-status.yaml. Marked FE-008 done. Epic 2 retrospective complete. ColourPicker and EmojiIconPicker post-retro fixes applied (picker trigger ternary, tab token bg-accent-active, swatch ring token, hover surface-active, clear button). Created CLAUDE.md with comprehensive agent instructions (design token rules, component patterns, CSS cascade rules, backend patterns, P1–P4 process standards, all Epic 1+2 lessons). |

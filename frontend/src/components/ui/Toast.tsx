@@ -24,7 +24,7 @@ const variantColors = {
 
 const ToastItem = ({ toast }: { toast: Toast }) => {
   const dismiss = useAlertStore((state) => state.dismiss);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     timerRef.current = setTimeout(() => {
@@ -55,6 +55,18 @@ const ToastItem = ({ toast }: { toast: Toast }) => {
         {toast.message && (
           <span className="text-text-secondary text-sm">{toast.message}</span>
         )}
+        {toast.action && (
+          <button
+            type="button"
+            onClick={() => {
+              dismiss(toast.id);
+              toast.action!.onClick();
+            }}
+            className="mt-2 text-xs text-primary hover:underline focus:outline-none"
+          >
+            {toast.action.label}
+          </button>
+        )}
       </div>
       <button
         type="button"
@@ -74,7 +86,7 @@ export const ToastContainer = ({ maxToasts = 3 }: ToastContainerProps) => {
   const visibleToasts = toasts.slice(-maxToasts).reverse();
 
   return (
-    <div className="fixed top-4 right-4 z-toast flex flex-col gap-2 pointer-events-none">
+    <div className="fixed top-[80px] right-4 z-toast flex flex-col gap-2 pointer-events-none">
       {visibleToasts.map((toast) => (
         <div key={toast.id} className="pointer-events-auto">
           <ToastItem toast={toast} />

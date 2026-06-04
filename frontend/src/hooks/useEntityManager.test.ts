@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useEntityManager } from './useEntityManager';
 
 interface TestEntity {
@@ -22,17 +22,22 @@ const mockApi = {
 describe('useEntityManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: getAll returns empty list so initial load completes cleanly [G-11]
+    mockApi.getAll.mockResolvedValue([]);
   });
 
   describe('initial state', () => {
-    it('should initialize with empty items, no loading, no error', () => {
+    it('loads items on mount and settles to empty list with no error', async () => {
       const { result } = renderHook(() =>
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
+      // Wait for the initial getAll to complete
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
       expect(result.current.items).toEqual([]);
-      expect(result.current.isLoading).toBe(false);
       expect(result.current.error).toBe(null);
+      expect(mockApi.getAll).toHaveBeenCalledWith(false);
     });
   });
 
@@ -50,6 +55,9 @@ describe('useEntityManager', () => {
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
+      // Wait for initial load
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
       await act(async () => {
         await result.current.create({ name: 'Test Entity' });
       });
@@ -60,9 +68,12 @@ describe('useEntityManager', () => {
     });
 
     it('should return undefined when api.create is not provided', async () => {
+      mockApi.getAll.mockResolvedValue([]);
       const { result } = renderHook(() =>
-        useEntityManager<TestEntity>({ api: {} })
+        useEntityManager<TestEntity>({ api: { getAll: mockApi.getAll } })
       );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       let created: TestEntity | undefined;
       await act(async () => {
@@ -78,6 +89,8 @@ describe('useEntityManager', () => {
       const { result } = renderHook(() =>
         useEntityManager<TestEntity>({ api: mockApi })
       );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       await act(async () => {
         await result.current.create({ name: 'Test Entity' });
@@ -103,6 +116,8 @@ describe('useEntityManager', () => {
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
       let returnedItem: TestEntity | undefined;
       await act(async () => {
         returnedItem = await result.current.update('1', { name: 'New Name' });
@@ -118,6 +133,8 @@ describe('useEntityManager', () => {
       const { result } = renderHook(() =>
         useEntityManager<TestEntity>({ api: mockApi })
       );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       await act(async () => {
         await result.current.update('1', { name: 'New Name' });
@@ -141,6 +158,8 @@ describe('useEntityManager', () => {
       const { result } = renderHook(() =>
         useEntityManager<TestEntity>({ api: mockApi })
       );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       let returnedItem: TestEntity | undefined;
       await act(async () => {
@@ -167,6 +186,8 @@ describe('useEntityManager', () => {
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
       let returnedItem: TestEntity | undefined;
       await act(async () => {
         returnedItem = await result.current.restore('1');
@@ -185,6 +206,8 @@ describe('useEntityManager', () => {
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
       await act(async () => {
         await result.current.deletePermanently('1');
       });
@@ -198,6 +221,8 @@ describe('useEntityManager', () => {
       const { result } = renderHook(() =>
         useEntityManager<TestEntity>({ api: mockApi })
       );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       await act(async () => {
         await result.current.deletePermanently('1');
@@ -222,6 +247,8 @@ describe('useEntityManager', () => {
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
       await act(async () => {
         await result.current.duplicate('1');
       });
@@ -232,26 +259,50 @@ describe('useEntityManager', () => {
   });
 
   describe('detectDuplicate', () => {
-    it('should return false when no detectDuplicate function provided', () => {
+    it('should return null when no detectDuplicate function provided [G-08]', async () => {
       const { result } = renderHook(() =>
         useEntityManager<TestEntity>({ api: mockApi })
       );
 
-      const isDuplicate = result.current.detectDuplicate({ name: 'Test' });
-      expect(isDuplicate).toBe(false);
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      const duplicate = result.current.detectDuplicate({ name: 'Test' });
+      expect(duplicate).toBeNull();
     });
 
-    it('should call detectDuplicate function when provided', () => {
-      const detectDuplicate = vi.fn().mockReturnValue(true);
+    it('should return the duplicate entity when found [G-08]', async () => {
+      const existingEntity: TestEntity = {
+        id: '1',
+        name: 'Test',
+        status: 'active',
+        archived: false,
+      };
+      // detectDuplicate returns the entity itself (not boolean)
+      const detectDuplicateFn = vi.fn().mockReturnValue(existingEntity);
 
       const { result } = renderHook(() =>
-        useEntityManager<TestEntity>({ api: mockApi, detectDuplicate })
+        useEntityManager<TestEntity>({ api: mockApi, detectDuplicate: detectDuplicateFn })
       );
 
-      const isDuplicate = result.current.detectDuplicate({ name: 'Test' });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-      expect(detectDuplicate).toHaveBeenCalledWith({ name: 'Test' }, []);
-      expect(isDuplicate).toBe(true);
+      const found = result.current.detectDuplicate({ name: 'Test' });
+
+      expect(detectDuplicateFn).toHaveBeenCalledWith({ name: 'Test' }, []);
+      expect(found).toEqual(existingEntity);
+    });
+
+    it('should return null when no duplicate found', async () => {
+      const detectDuplicateFn = vi.fn().mockReturnValue(null);
+
+      const { result } = renderHook(() =>
+        useEntityManager<TestEntity>({ api: mockApi, detectDuplicate: detectDuplicateFn })
+      );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      const found = result.current.detectDuplicate({ name: 'Test' });
+      expect(found).toBeNull();
     });
   });
 });

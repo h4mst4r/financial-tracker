@@ -9,13 +9,16 @@
 import { create } from 'zustand';
 
 // --- Person Info Shape ---
+// Extended with role and pictureUrl from backend /auth/me response (AUTH-001 enrichment)
 
 export interface PersonInfo {
   personId: string;
   displayName: string;
   email: string;
+  role: string; // "owner" | "admin" | "member"
   defaultView: 'household' | 'personal';
   displayCurrency: string; // ISO 4217
+  pictureUrl: string | null;
 }
 
 // --- Auth State ---
@@ -30,6 +33,9 @@ interface AuthState {
 
   /** Clear all auth state (called on logout or 401) */
   clearAuth: () => void;
+
+  /** Update the current person's default view preference */
+  setDefaultView: (view: 'household' | 'personal') => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -52,4 +58,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       csrfToken: null,
     });
   },
+
+  setDefaultView: (view) => {
+    set((state) => ({
+      currentPerson: state.currentPerson
+        ? { ...state.currentPerson, defaultView: view }
+        : null,
+    }));
+  },
+
 }));

@@ -88,9 +88,10 @@ def test_financial_event_base_fields():
     column_names = {c.name for c in table.columns}
 
     base_fields = {
-        "name", "event_date", "event_type", "transaction_status",
-        "payee_person_id", "payment_method", "category_id", "transaction_type",
-        "is_shared_expense", "notes", "is_gst_claimable", "is_gift",
+        "name", "event_date", "event_type", "account_id", "payee",
+        "transaction_status", "payee_person_id", "payment_method",
+        "category_id", "transaction_type", "is_shared_expense",
+        "notes", "is_gst_claimable", "is_gift",
         "source_account_id", "linked_recurring_id",
     }
 
