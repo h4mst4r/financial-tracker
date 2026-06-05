@@ -18,6 +18,7 @@ import {
   type MemberData,
   type InvitationData,
 } from '../api/usePersons';
+import type { PersonInfo } from '../store/authStore';
 import { ApiError } from '../api/client';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -26,12 +27,13 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Dropdown } from '../components/ui/Dropdown';
+import { ContextMenu, type ContextMenuItem } from '../components/ui/ContextMenu';
 import { AlertBanner } from '../components/ui/AlertBanner';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { Copy, UserPlus, XCircle, Trash2 } from 'lucide-react';
+import { Copy, UserPlus, XCircle, Trash2, Shield, User, UserMinus, Link } from 'lucide-react';
 
 // --- Date Formatting ---
 
@@ -41,6 +43,26 @@ const formatDate = (iso: string) =>
     month: 'short',
     year: 'numeric',
   });
+
+// --- Timezone Options ---
+
+const TIMEZONE_OPTIONS = (() => {
+  const now = new Date();
+  return Intl.supportedValuesOf('timeZone')
+    .map((tz) => {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        timeZoneName: 'shortOffset',
+      }).formatToParts(now);
+      const offsetStr = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT+0';
+      const match = offsetStr.match(/GMT([+-])(\d+)(?::(\d+))?/);
+      const sign = match?.[1] === '+' ? 1 : -1;
+      const offsetMinutes = sign * (parseInt(match?.[2] ?? '0', 10) * 60 + parseInt(match?.[3] ?? '0', 10));
+      return { value: tz, label: `${tz} (${offsetStr})`, offsetMinutes };
+    })
+    .sort((a, b) => a.offsetMinutes - b.offsetMinutes)
+    .map(({ value, label }) => ({ value, label }));
+})();
 
 // --- Tab Types ---
 
@@ -128,10 +150,12 @@ const HouseholdTab: React.FC = () => {
             Timezone
           </label>
           {isOwner ? (
-            <Input
+            <Dropdown
+              variant="searchable"
+              options={TIMEZONE_OPTIONS}
               value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              placeholder="Enter timezone (e.g., America/New_York)"
+              onChange={setTimezone}
+              placeholder="Select timezone..."
             />
           ) : (
             <Tooltip content="Only the household owner can change these settings">
@@ -185,10 +209,19 @@ const HouseholdDangerZone: React.FC = () => {
         clearAuth();
         navigate('/login?deleted=1', { replace: true });
       },
-      onError: () => {
+      onError: (error: any) => {
+        console.error('[Settings] Delete household failed:', error);
+        console.error('[Settings] Error details:', {
+          message: error?.message,
+          status: error?.status,
+          statusText: error?.statusText,
+          body: error?.body,
+          response: error?.response,
+        });
         setDeleteModalOpen(false);
         setConfirmName('');
-        enqueue({ variant: 'error', title: 'Delete failed', message: 'Could not delete the household. Please try again.' });
+        const errorMsg = error?.body?.detail || error?.message || 'Could not delete the household. Please try again.';
+        enqueue({ variant: 'error', title: 'Delete failed', message: errorMsg });
       },
     });
   };
@@ -255,10 +288,13 @@ const HouseholdDangerZone: React.FC = () => {
 // --- Members Tab Component ---
 
 const MembersTab: React.FC = () => {
+  const { data: household } = useHousehold();
   const { data: members, isLoading } = usePersons();
   const { data: invitations } = useInvitations();
   const currentPerson = useAuthStore((s) => s.currentPerson);
   const enqueue = useAlertStore((s) => s.enqueue);
+  const setAuth = useAuthStore((s) => s.setAuth);
+  const navigate = useNavigate();
 
   const updateRole = useUpdatePersonRole();
   const removePerson = useRemovePerson();
@@ -376,57 +412,45 @@ const MembersTab: React.FC = () => {
       header: 'Actions',
       render: (member) => {
         const isOwnRow = member.id === currentPerson?.personId;
+        const roleRank = (r: string) => ({ owner: 3, admin: 2, member: 1 }[r] ?? 0);
+        const canAct = isAdminOrOwner && !isOwnRow &&
+          roleRank(currentPerson!.role) > roleRank(member.role);
 
-        return (
-          <div className="flex items-center gap-2">
-            {/* Role change Dropdown — admin+, only for members below own rank */}
-            {(() => {
-              const roleRank = (r: string) => ({ owner: 3, admin: 2, member: 1 }[r] ?? 0);
-              return isAdminOrOwner && !isOwnRow && roleRank(currentPerson!.role) > roleRank(member.role) ? (
-                <Dropdown
-                  value={member.role}
-                  options={[
-                    { value: 'admin', label: 'Admin' },
-                    { value: 'member', label: 'Member' },
-                  ]}
-                  onChange={(value) =>
-                    updateRole.mutate({ id: member.id, role: value as 'admin' | 'member' })
-                  }
-                  disabled={updateRole.isPending}
-                />
-              ) : null;
-            })()}
+        if (!canAct) {
+          return <span className="text-text-muted text-sm">—</span>;
+        }
 
-            {/* Remove button — admin+ only, not on own row */}
-            {isAdminOrOwner && !isOwnRow && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setRemoveTarget({ id: member.id, name: member.displayName });
-                  setRemoveConfirmOpen(true);
-                }}
-                className="text-error hover:bg-error-muted"
-                aria-label={`Remove ${member.displayName}`}
-              >
-                <Trash2 size={14} />
-              </Button>
-            )}
+        const items: ContextMenuItem[] = [];
 
-            {/* Leave button — own row only, not for owner */}
-            {isOwnRow && !isOwner && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setLeaveConfirmOpen(true)}
-                className="text-error hover:bg-error-muted"
-                aria-label="Leave household"
-              >
-                Leave
-              </Button>
-            )}
-          </div>
-        );
+        if (member.role === 'admin') {
+          items.push({
+            label: 'Change to Member',
+            icon: User,
+            onClick: () => updateRole.mutate({ id: member.id, role: 'member' }),
+            disabled: updateRole.isPending,
+          });
+        } else if (member.role === 'member') {
+          items.push({
+            label: 'Change to Admin',
+            icon: Shield,
+            onClick: () => updateRole.mutate({ id: member.id, role: 'admin' }),
+            disabled: updateRole.isPending,
+          });
+        }
+
+        if (items.length > 0) items.push({ divider: true });
+
+        items.push({
+          label: 'Remove member',
+          icon: UserMinus,
+          destructive: true,
+          onClick: () => {
+            setRemoveTarget({ id: member.id, name: member.displayName });
+            setRemoveConfirmOpen(true);
+          },
+        });
+
+        return <ContextMenu items={items} />;
       },
     },
   ];
@@ -469,40 +493,75 @@ const MembersTab: React.FC = () => {
       {/* Pending Invitations Section — filter to only pending status */}
       {(() => {
         const pending = invitations?.filter((i) => i.status === 'pending') ?? [];
-        return pending.length > 0 ? (
-        <div className="bg-surface-raised border border-border rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-4">
-            Pending Invitations
-          </h2>
-          <div className="space-y-3">
-            {pending.map((inv) => (
-              <div
-                key={inv.id}
-                className="flex items-center justify-between py-2 border-b border-border last:border-b-0"
-              >
-                <div>
-                  <div className="text-text-primary text-sm font-medium">
-                    {inv.invitedEmail}
-                  </div>
-                  <div className="text-text-secondary text-xs">
-                    Expires: {formatDate(inv.expiresAt)}
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => cancelInvitation.mutate(inv.id)}
-                  className="text-text-muted hover:text-error"
-                  aria-label="Cancel invitation"
-                >
-                  <XCircle size={14} />
-                </Button>
-              </div>
-            ))}
+        if (pending.length === 0) return null;
+
+        const inviteColumns: Column<InvitationData>[] = [
+          {
+            key: 'email',
+            header: 'Email',
+            render: (inv) => (
+              <span className="text-text-primary text-sm font-medium">{inv.invitedEmail}</span>
+            ),
+          },
+          {
+            key: 'expires',
+            header: 'Expires',
+            render: (inv) => (
+              <span className="text-text-secondary text-sm">{formatDate(inv.expiresAt)}</span>
+            ),
+          },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (inv) => {
+              const items: ContextMenuItem[] = [
+                {
+                  label: 'Copy invitation link',
+                  icon: Link,
+                  onClick: () => {
+                    navigator.clipboard.writeText(`${window.location.origin}/join/${inv.id}`);
+                    enqueue({ variant: 'success', title: 'Invitation link copied' });
+                  },
+                },
+                { divider: true },
+                {
+                  label: 'Cancel invitation',
+                  icon: XCircle,
+                  destructive: true,
+                  onClick: () => cancelInvitation.mutate(inv.id),
+                  disabled: cancelInvitation.isPending,
+                },
+              ];
+              return <ContextMenu items={items} />;
+            },
+          },
+        ];
+
+        return (
+          <div className="bg-surface-raised border border-border rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4">
+              Pending Invitations
+            </h2>
+            <Table
+              columns={inviteColumns}
+              data={pending}
+              rowKey={(inv) => inv.id}
+            />
           </div>
-        </div>
-      ) : null;
+        );
       })()}
+
+      {/* Leave Household — non-owner members only, below the table per spec §9.8.2 */}
+      {!isOwner && (
+        <div className="flex">
+          <Button
+            variant="danger"
+            onClick={() => setLeaveConfirmOpen(true)}
+          >
+            Leave Household
+          </Button>
+        </div>
+      )}
 
       {/* Invite Modal */}
       <Modal
@@ -610,7 +669,7 @@ const MembersTab: React.FC = () => {
       >
         <div className="space-y-4">
           <p className="text-text-secondary text-sm">
-            Are you sure you want to leave this household? You will lose access to all shared data.
+            You will leave <strong>{household?.name}</strong>. A new household will be created for you when you next sign in. This cannot be undone.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setLeaveConfirmOpen(false)}>
@@ -620,9 +679,31 @@ const MembersTab: React.FC = () => {
               variant="danger"
               onClick={() => {
                 leaveHousehold.mutate(undefined, {
-                  onSuccess: () => {
-                    enqueue({ variant: 'success', title: 'You have left the household' });
+                  onSuccess: (response) => {
                     setLeaveConfirmOpen(false);
+                    
+                    // Person is "booted" — no household
+                    if (response.household === null) {
+                      clearAuth();
+                      navigate('/login');
+                      return;
+                    }
+                    
+                    // Update authStore with new household data from response
+                    setAuth(
+                      {
+                        personId: response.person.personId,
+                        displayName: response.person.displayName,
+                        email: response.person.email,
+                        role: response.person.role,
+                        defaultView: response.person.defaultView as 'household' | 'personal',
+                        displayCurrency: response.person.displayCurrency,
+                        pictureUrl: response.person.pictureUrl,
+                      },
+                      response.household.householdId,
+                      response.csrfToken,
+                    );
+                    navigate('/dashboard');
                   },
                 });
               }}
@@ -677,11 +758,11 @@ export const Settings: React.FC = () => {
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
-            className={
+            className={`px-4 py-1.5 text-sm rounded transition-colors duration-fast focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary ${
               activeTab === tab.key
-                ? 'px-4 py-1.5 text-sm rounded bg-control-active text-primary font-medium'
-                : 'px-4 py-1.5 text-sm rounded text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors'
-            }
+                ? 'bg-control-active text-primary font-medium'
+                : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+            }`}
           >
             {tab.label}
           </button>

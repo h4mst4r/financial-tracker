@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — UX Design Specification
-version: 2.3
+version: 2.11
 status: living
 created: 2026-05-26
 authority: Complete design system and UI component reference. Derives from
@@ -833,6 +833,8 @@ Callers (e.g. `EntityCard`) may unconditionally push `{ divider: true }` before 
 
 This means callers never need to guard dividers with `if (hasItemAboveAndBelow)` — just declare the intended group structure and let the component normalise it. The filtering is applied to the `visibleItems` list before rendering, not to the `items` prop itself.
 
+**Header item variant:** `ContextMenuItem` supports a non-interactive header type: `{ header: true; displayName: string; email: string }`. When present it must be the first item in the `items` array. It renders as a two-line block above the first menu item and a separator `border-t border-border` divider below it. Styles: displayName → `text-sm font-medium text-text-primary truncate`; email → `text-xs text-text-secondary truncate`; container → `px-3 py-2`. The header item is extracted before divider-normalisation runs, so it never participates in the orphan-divider suppression logic. Currently used by the Topbar account menu (§5.3).
+
 **Viewport boundary clamping:** The `useFloatingPosition` hook accepts a `panelMinWidth` option. When set, the returned `left` value is clamped so that `left + panelMinWidth ≤ viewportWidth - 8px`. ContextMenu passes `{ panelMinWidth: 180 }` matching its `min-w-context-menu` utility. This prevents the menu panel from overflowing the right viewport edge when the trigger is near the right side of the screen.
 
 ---
@@ -848,6 +850,45 @@ All panels that detach from normal document flow and follow their trigger — Dr
 - Vertical flip: optional `preferAbove` causes the panel to render above the trigger when there's insufficient space below
 
 **Portal escaping:** All floating panels use `ReactDOM.createPortal(panel, document.body)` to escape ancestor `overflow-hidden` containers (e.g. table cells, card wrappers). The portal target is always `document.body` — never a custom container.
+
+**API signature:**
+
+```typescript
+// Return type — pass directly to the panel's style prop
+interface FloatingPosition {
+  top: number;    // px from viewport top (trigger.bottom + gap)
+  left: number;   // px from viewport left (clamped if panelMinWidth set)
+  width: number;  // trigger element width — use to match panel width to trigger
+}
+
+interface FloatingPositionOptions {
+  gap?: number;           // px between trigger bottom and panel top. Default: 4
+  panelMinWidth?: number; // when set, clamps left so panel stays within viewport
+  viewportPadding?: number; // px clearance from each viewport edge. Default: 8
+}
+
+function useFloatingPosition(
+  triggerRef: React.RefObject<HTMLElement | null>,
+  open: boolean,
+  options?: number | FloatingPositionOptions, // number shorthand = gap only
+): FloatingPosition | null
+```
+
+Returns `null` when `open` is false (panel not yet measured) or when `triggerRef.current` is absent. Always guard: `{open && position && createPortal(...)}`.
+
+**Usage pattern:**
+
+```tsx
+const triggerRef = useRef<HTMLButtonElement>(null);
+const position = useFloatingPosition(triggerRef, isOpen, { panelMinWidth: 180 });
+
+{isOpen && position && createPortal(
+  <div className="fixed z-dropdown" style={{ top: position.top, left: position.left }}>
+    ...
+  </div>,
+  document.body
+)}
+```
 
 **Rule:** Do not implement custom positioning logic in individual components. All new floating panels must use `useFloatingPosition`. This ensures consistent boundary awareness across the product.
 
@@ -950,20 +991,57 @@ Multi-select is available on all entity lists and tables. It enables bulk operat
 - Unselected items while selection is active: `opacity: 0.7`
 
 **Bulk Action Bar:**
-Slides up from the bottom of the viewport when ≥ 1 item is selected.
+Appears inline below the entity list when ≥ 1 item is selected. See §4.11 for full spec.
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  ☑ 4 items selected      [Archive]  [Export]  [✕ Clear] │
+│  4 items selected              [Archive]  [Delete]  [✕]  │
 └──────────────────────────────────────────────────────────┘
 ```
-- Height: 56px. `background: --color-surface-overlay`. `--shadow-xl`.
-  `border-top: 1px solid --color-border`. `z-index: --z-sticky`.
-- Slides up: `translateY(100%) → translateY(0)`, `--duration-normal --ease-bounce`.
-- Slides down on deselect.
-- Actions available: Archive selected, Export selected (CSV), Categorise selected
-  (Transactions only — opens category picker for bulk assignment).
-- Destructive actions (Archive) use `--color-warning` button.
 - Count label updates live as selection changes.
+- Archive and Delete buttons only rendered when the consumer passes `onBulkArchive` / `onBulkDelete` to `EntityPage`.
+- `BulkActionBar` is a separate component (`components/entity/BulkActionBar.tsx`) — see §4.11.
+
+### 4.11 BulkActionBar
+
+Rendered by `EntityPage` below the entity list whenever `selectedIds.size > 0`. Returns `null` when selection is empty — no reserved space.
+
+**Anatomy:**
+```
+┌──────────────────────────────────────────────────────────┐
+│  4 items selected              [Archive]  [Delete]  [✕]  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Container:** `bg-surface-overlay border border-border rounded-lg shadow-xl px-4 py-2 mt-3`. Inline within the page flow — not fixed to the viewport bottom.
+
+**Entrance animation:** `animate-slide-in` (defined in `index.css`). Appears when `selectedCount` goes from 0 → 1; disappears (unmounts) when it returns to 0.
+
+**Count label:** `"{N} item(s) selected"` — `text-sm text-text-secondary`. Singular/plural handled by the component.
+
+**Action buttons** (right-aligned, rendered only when the prop is provided):
+
+| Button | Variant | Icon | Prop required |
+|---|---|---|---|
+| Archive | `secondary sm` | `Archive` (Lucide) | `onArchive` |
+| Delete | `danger sm` | `Trash2` (Lucide) | `onDelete` |
+| × Clear | `icon sm` | `X` (Lucide) | `onClear` (always required) |
+
+All buttons respect an `isLoading` prop that disables them while a mutation is in-flight.
+
+**Props:**
+```typescript
+interface BulkActionBarProps {
+  selectedCount: number;
+  onArchive?: () => void;   // omit to hide Archive button
+  onDelete?: () => void;    // omit to hide Delete button
+  onClear: () => void;      // always present — × button
+  isLoading?: boolean;
+}
+```
+
+**Integration:** `EntityPage` manages selection state internally. Consumers pass `onBulkArchive` and/or `onBulkDelete` to `EntityPage`; it wires them to `BulkActionBar` after collecting the selected IDs. Consumers do not interact with `BulkActionBar` directly.
+
+---
 
 ### 5.1 Application Shell
 
@@ -1091,9 +1169,37 @@ Budgets › Food › August 2026 ×    [Clear all]
 
 ### 5.5 Tabs
 
-Horizontal tab bar. Underline indicator (`--color-primary`, 2px). Active tab text `--color-text`.
-Inactive tab text `--color-text-secondary`. Hover: `--color-text`.
+Two distinct tab patterns exist. Choose based on context:
+
+---
+
+**Pattern A — Underline tabs** (navigation within a content area; e.g. sub-views of a module page)
+
+Horizontal tab bar. Underline indicator (`--color-primary`, 2px) slides beneath the active tab.
+Active tab text: `text-text-primary`. Inactive: `text-text-secondary`. Hover: `text-text-primary`.
 Transition on indicator: `--duration-normal --ease-default`.
+
+---
+
+**Pattern B — Pill tab bar** (settings panels, picker panels, page-level section switching)
+
+Pill buttons inside a rounded container. Same visual language as `SegmentedControl` (§2.10) but supports 3 or more options. Used in: Settings page (§9.8), any section-level nav where options are 2–5.
+
+```
+┌────────────────────────────────────┐
+│  [Household]  [Members]  [Currencies]  [Profile]  │
+└────────────────────────────────────┘
+```
+
+Container: `flex gap-1 bg-surface-raised border border-border rounded-lg p-1 w-fit`
+Active pill: `bg-control-active text-primary font-medium rounded px-4 py-1.5 text-sm`
+Inactive pill: `text-text-secondary hover:text-text-primary hover:bg-surface-hover rounded px-4 py-1.5 text-sm transition-colors duration-fast`
+
+**When to use Pattern A vs B:**
+- Pattern A: content sub-views within a module where the user expects underline navigation convention (e.g. Transactions → All / Income / Expenses)
+- Pattern B: settings panels, admin pages, picker panels, or anywhere the tab bar sits inside a card/panel surface rather than at the page edge
+
+**URL sync:** Pattern B tab bars that represent persistent page state (e.g. Settings) sync the active tab to a `?tab=` query parameter so deep-linking and browser back work correctly. Pattern A tabs within data views do not need URL sync — they reflect local filter state only.
 
 ### 5.6 Pagination
 
@@ -1300,7 +1406,7 @@ budget history, capital history, asset valuation history.
 - Axes: `--text-xs --color-text-muted`; x-axis dates in `DD-MM-YYYY` abbreviated
 - Dot: 4px circle on data points; 6px on hover
 - Tooltip: `--color-surface-overlay` card; formatted values + dates
-- Multi-line: one colour per series from `--chart-*` palette; legend below chart
+- Multi-line: one colour per series from `--chart-*` palette; legend below chart uses interactive toggle pills (§7.11)
 - Area variant: line + semi-transparent fill (10% opacity) for balance charts
 
 ### 7.2 Bar Chart
@@ -1330,7 +1436,7 @@ Used for: spending by category, asset allocation, income sources.
 Used for: portfolio value over time (allocation breakdown), spending trends.
 
 - Semi-transparent fills (25% opacity); solid top line per series
-- Colour per series from `--chart-*`
+- Colour per series from `--chart-*`; legend uses interactive toggle pills (§7.11)
 - Hover: vertical cursor line + multi-value tooltip
 
 ### 7.5 Sparkline
@@ -1382,10 +1488,10 @@ Aggregate forex loss chart: line chart over time, axis = `fx_delta` sum per peri
 
 **Person comparison (grouped bar):**
 One bar per person per category. Bars grouped by category.
-Person colours: first 4 entries from `--chart-*`. Legend shows person avatars.
+Person colours: first 4 entries from `--chart-*`. Legend shows person avatars using interactive toggle pills (§7.11).
 
 **Category comparison (multi-line):**
-One line per category. Colours from entity colour or `--chart-*`.
+One line per category. Colours from entity colour or `--chart-*`. Legend uses interactive toggle pills (§7.11).
 X-axis = time periods; Y-axis = amount in display currency.
 
 Both support drill-down: clicking a bar/point filters to that person+category or category+period.
@@ -1400,6 +1506,52 @@ Monthly calendar grid. Each day cell shows upcoming occurrence dots.
 - Multiple occurrences: stacked dots (max 3, then "+N")
 
 Clicking a dot opens a popover with the recurring payment name, amount, and status.
+
+### 7.11 Chart Legend Toggle Pills
+
+Interactive colored pill buttons that appear below multi-series charts. Each pill controls visibility of one chart series. Used by: Line/Area charts (§7.1) with ≥ 2 series, Stacked Area (§7.4), Comparison charts (§7.9). Donut/Pie (§7.3) uses segment click → VisualizationFilter instead — no legend toggle pills.
+
+**Anatomy:**
+
+```
+[● Income]  [● Expenses]  [● Net]
+  indigo      red/dimmed    cyan
+```
+
+Leading dot: 8px filled circle (`rounded-full`) in the series color. Label: series name. Layout: `flex flex-wrap gap-2` below the chart.
+
+**States:**
+
+| State | Background | Text | Border | Dot |
+|---|---|---|---|---|
+| Active (series visible) | series color at 15% opacity | series color | series color at 40% opacity, 1px solid | series color, full opacity |
+| Inactive (series hidden) | `bg-surface-active` | `text-text-muted` | `border-border` | `text-text-muted` |
+| Hover (inactive pill) | `bg-surface-hover` | `text-text-secondary` | `border-border-light` | `text-text-secondary` |
+
+Active pill background and border are expressed as inline styles using the `--chart-N` CSS variable (not Tailwind, since chart colors are dynamic). Inactive state is purely token-based.
+
+**Pill structure:**
+
+```tsx
+<button
+  className="h-7 px-3 rounded-full text-xs font-medium flex items-center gap-1.5
+             transition-colors duration-fast border"
+  style={isActive ? {
+    backgroundColor: `color-mix(in srgb, ${seriesColor} 15%, transparent)`,
+    color: seriesColor,
+    borderColor: `color-mix(in srgb, ${seriesColor} 40%, transparent)`,
+  } : undefined}
+>
+  <span className="w-2 h-2 rounded-full shrink-0"
+    style={{ backgroundColor: isActive ? seriesColor : undefined }}
+  />
+  {label}
+</button>
+```
+
+**Toggle behavior:** Clicking an active pill hides the series (chart line/area fades `opacity 1→0`, `--duration-normal`). Clicking an inactive pill shows it (`opacity 0→1`, `--duration-normal`). At least one series must remain visible — the last active pill's click is a no-op (pill does not dim).
+
+**Accessibility:** Each pill is a `<button>` with `aria-pressed={isActive}` and `aria-label="Toggle [series name] series"`.
 
 ---
 
@@ -1578,7 +1730,7 @@ Public page at `/join/:token`. Uses `PublicPage`. Accessible without authenticat
 
 **States:**
 - **Valid, unauthenticated:** shows details + "Accept Invitation" (primary) which stores token and routes to OAuth; "Decline" (secondary) returns to `/login` (no API call — unauthenticated decline just drops the flow; user will create their own household on next login)
-- **Valid, authenticated, email matches:** "Accept Invitation" (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/dashboard`; on 403 shows email-mismatch `AlertBanner`. "Decline" (secondary) calls `POST /api/invitations/:token/decline`; on 200 updates `authStore` with new household data from response and navigates to `/dashboard` (the welcome toast fires there, see §9.8.3).
+- **Valid, authenticated, email matches:** "Accept Invitation" (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/dashboard`; on 403 shows email-mismatch `AlertBanner`; on 409 shows `AlertBanner` "You already belong to a household — leave or delete it before accepting this invitation." with a "Go to Settings" action. "Decline" (secondary) calls `POST /api/invitations/:token/decline`; on 200 updates `authStore` with new household data from response and navigates to `/dashboard` (the welcome toast fires there, see §9.8.3).
 - **Valid, authenticated, email mismatch:** `AlertBanner` (error) with instructions to sign in with correct account; both CTAs hidden until dismissed
 - **Expired / cancelled / declined / not found:** `AlertBanner` (warning) + "Back to Login" `Button` (secondary)
 
@@ -1662,10 +1814,15 @@ Tab bar: `bg-surface-raised border border-border rounded-lg p-1 w-fit`. Active p
 - Member sees no dropdowns
 - Own row: never shows dropdown
 
-**Remove button visibility rules** (column `[🗑]`):
-- Owner: sees remove on every non-owner row
-- Admin: sees remove on member rows only
-- No one can remove themselves; owner cannot be removed
+**Actions column (`⋯` ContextMenu per row — §4.7):**
+- Own row / rows the current user cannot act on: `—` (no ContextMenu)
+- Role change item: "Change to Admin" or "Change to Member" depending on target's current role
+- ContextMenu label for remove: **"Remove member"** (not "Remove from household" — too long for a menu item)
+- Remove visibility: owner sees it on every non-owner row; admin sees it on member rows only; no one can remove themselves; owner cannot be removed
+
+**Pending Invitations table (`Table` component — §4.7):**
+Columns: Email (`text-text-primary font-medium`) / Expires (formatted date, `text-text-secondary`) / Actions (`⋯` ContextMenu).
+ContextMenu items: "Copy invitation link" (copies `{origin}/join/{id}` to clipboard, fires success toast) + divider + "Cancel invitation" (destructive). Hidden entirely when no pending invitations exist.
 
 **Invite Member flow:**
 Opens `Modal` with:
@@ -1686,7 +1843,7 @@ Opens `Modal` with:
 Two-phase modal: email entry → link reveal. `Input` with validation, `AlertBanner` on API error. The copy field is a read-only `Input` with a trailing copy `<span role="button">` icon (§5.4 Nested Button Rule).
 
 **Leave Household flow:**
-"Leave Household" `Button` (secondary, `text-error`) visible only to non-owner members (admin or member role). Opens `ConfirmationDialog` with message "You will leave [household name] and a new household will be created for you. This cannot be undone." Confirm calls `POST /api/persons/leave`. On 200: update `authStore` with the response's new household data, navigate to `/dashboard` (welcome toast fires, see §9.8.3).
+"Leave Household" `Button` (`variant="danger"`) visible only to non-owner members (admin or member role). Opens `ConfirmationDialog` with message "You will leave **[household name]**. A new household will be created for you when you next sign in. This cannot be undone." Confirm calls `POST /api/persons/leave`. On 200: `response.household` is `null` — call `clearAuth()` and navigate to `/login`. A fresh household is created automatically the next time the user signs in via OAuth.
 
 ---
 
@@ -1907,7 +2064,322 @@ Dashboard widget and standalone Debt section.
 
 ---
 
-## 10. Animation System (Layer 10)
+### 9.12 Categories Page [CAT-005]
+
+Route: `/categories`. Uses standard `AppShell`. Pure management page — no charts or summary panels.
+
+#### Layout
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Categories               [Find Duplicates]  [+ Create] │  ← action bar
+├─────────────────────────────────────────────────────────┤
+│  [Show Archived toggle]                                  │
+├─────────────────────────────────────────────────────────┤
+│  [CategoryTree — full width]                             │
+│                                                          │
+│  ▶ 🍕 Food & Drink     expense   2 subs    ···           │
+│      └─ 🍔 Eating Out  expense             ···           │
+│      └─ 🛒 Groceries   expense             ···           │
+│  ─ 🏠 Housing          expense             ···           │
+│  ─ 💰 Income           income              ···           │
+│  ...                                                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### CategoryTree Row Anatomy
+
+Each row is a full-width strip with a coloured left bar (same 4px inline `borderLeft` pattern as EntityCard — using the category's `color` field). If no colour is set, falls back to `--color-entity-category` (cyan).
+
+```
+[⠿] [▶/─] [icon] Name                [type Badge]  [N subs]  [+ Add Sub]  [···]
+ │    │      │                                          │          │
+drag  │    emoji/                                  only on      only on
+handle│    lucide                                 parents     top-level
+     chevron                                                  when expanded
+```
+
+- **Drag handle** (`⠿`): visible on hover; always present on every row
+- **Chevron** (`▶`): shown only on parent rows (has children); rotates 90° when expanded; top-level rows with no children show `─` (a short dash) in place of chevron
+- **Icon**: emoji or Lucide icon from `EmojiIconPicker`
+- **Name**: `text-text-primary font-medium`
+- **Type badge**: `Badge` component — `expense` → warning variant (amber), `income` → success variant (green), `both` → default variant (grey)
+- **Sub-count**: `text-text-secondary text-sm` — e.g. `2 subs`; hidden on subcategory rows
+- **`+ Add Sub` button**: `Button` ghost xs — visible only on top-level rows when that row is expanded; hidden when collapsed or on subcategory rows
+- **`···` ContextMenu**: see below
+
+Subcategory rows are indented with a `pl-8` left padding and a `border-l border-border` connector line running the height of the group.
+
+**Archived rows**: `opacity-60 grayscale` + dashed left border + `[Archived]` Badge; shown only when "Show Archived" is on.
+
+#### Drag and Drop
+
+Categories support three drag interactions:
+
+| Gesture | Result |
+|---|---|
+| Drag a top-level category onto another top-level category | Drop target highlights; on release: confirmation prompt "Make '[name]' a subcategory of '[target]'?" — confirm assigns `parent_id` |
+| Drag a subcategory onto a different top-level category | Reassigns `parent_id` to the new parent — no prompt (intent is unambiguous) |
+| Drag a subcategory out of its group (drop onto the root zone between top-level rows) | Promotes to top-level — sets `parent_id = null`; root drop zone highlighted with a `border-dashed border-accent` indicator |
+
+**Drag visual feedback:**
+- Dragged row: `opacity-40` ghost in original position
+- Valid drop target (parent): `bg-surface-active border-accent` highlight on the target row
+- Root drop zone: `border-dashed border-2 border-accent bg-accent/5` strip appears between top-level rows when a subcategory is being dragged
+- Invalid drop (e.g. dragging a parent onto its own child): no highlight; drop rejected silently
+
+Note: drag-and-drop uses the HTML5 Drag and Drop API (`draggable`, `onDragStart`, `onDragOver`, `onDrop`). No third-party DnD library required at this scale.
+
+#### ContextMenu Items
+
+**Top-level category row:**
+```
+Edit
+Add Subcategory
+Duplicate
+Merge into…
+─────────────
+Promote  ← disabled (already top-level); shown greyed with Tooltip "Already a top-level category"
+─────────────
+Archive
+Delete
+```
+
+**Subcategory row:**
+```
+Edit
+Duplicate
+Merge into…
+─────────────
+Promote to top-level
+─────────────
+Archive
+Delete
+```
+
+#### Create / Edit Modal
+
+Uses `EntityModal` pattern. Fields:
+
+| Field | Component | Notes |
+|---|---|---|
+| Name | `Input` | Required; max 100 chars |
+| Icon | `EmojiIconPicker` | Required |
+| Colour | `ColourPicker` | Required |
+| Type | `Dropdown` | `expense` / `income` / `both` |
+| Parent category | `Dropdown` | Top-level categories only; "— None (top-level)" option; selecting None detaches from parent and promotes to top-level |
+
+Setting Parent to "— None (top-level)" on a subcategory promotes it. Setting a parent on a top-level category makes it a subcategory. The `depth` constraint (max 1) is enforced — top-level categories that already have children cannot be assigned a parent (dropdown option disabled with Tooltip "Cannot nest — this category has subcategories").
+
+#### Merge Flow
+
+Two entry points — both open the same Merge Modal:
+
+**Path A — ContextMenu → "Merge into…" (single source):**
+Selects the context-menu row as the source. Opens Merge Modal with source pre-populated.
+
+**Path B — BulkActionBar → "Merge" (multi-select):**
+Rows support Ctrl+click (toggle), Ctrl+A (select all), Escape (clear) per §9.3. When ≥ 2 categories are selected, `BulkActionBar` appears (§9.3) with: "N selected" count, **Merge** (secondary), Archive (secondary), Delete (danger), × clear. Clicking Merge opens the Merge Modal with all selected categories as sources; the user picks the target from a dropdown that excludes all selected sources.
+
+**Merge Modal** (`Modal` md size):
+
+1. Title: "Merge into…" (multi-select) or "Merge '[name]' into…" (single)
+2. Source list: read-only chips showing each source category name + colour dot
+3. Target: searchable `Dropdown` of all non-archived categories excluding sources
+4. `AlertBanner` (warning) if any source has transactions or subcategories: "This will reassign [N] transactions and [M] subcategories to the target. Sources will be archived."
+5. Footer: Cancel + "Merge" (primary)
+6. On confirm: calls `POST /api/categories/merge`; success Toast; invalidates category tree query
+
+#### Find Duplicates Flow
+
+"Find Duplicates" button in action bar calls `GET /api/categories/duplicates`. If no duplicates found: Toast "No duplicate categories found." If duplicates found: opens `Modal` (lg size) titled "Potential Duplicate Categories":
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Potential Duplicate Categories                      ✕  │
+│                                                          │
+│  Group 1                                                 │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  🍕 Food & Drink     14 transactions             │   │
+│  │  🍔 Food             3 transactions              │   │
+│  │                              [Merge →]           │   │
+│  └──────────────────────────────────────────────────┘   │
+│                                                          │
+│  Group 2                                                 │
+│  ...                                                     │
+│                                              [Done]      │
+└─────────────────────────────────────────────────────────┘
+```
+
+"Merge →" per group opens the standard Merge Modal (above) pre-populated with the group's categories, largest transaction count pre-selected as target.
+
+---
+
+### 9.13 Accounts Pages [ACCT-004]
+
+Routes: `/accounts` (bank + credit_card), `/capital`, `/assets`, `/insurance`. All use the standard `AppShell`. All use `EntityPage<Account>` with a card grid layout filtered by `account_type`. No summary panels above the grid — all four pages are identical in structure; only the page title and filtered cards differ.
+
+---
+
+#### AccountCard Anatomy
+
+All account cards use the standard `EntityCard<T>` shell (4px left accent bar via inline `borderLeft` in the entity accent colour, context menu on hover). The accent colour per type:
+
+| account_type | Entity accent token |
+|---|---|
+| `bank` | `--color-entity-account` (indigo) |
+| `credit_card` | `--color-entity-credit` (red) |
+| `capital` | `--color-entity-capital` (green) |
+| `asset` | `--color-entity-asset` (amber) |
+| `insurance` | `--color-entity-insurance` (cyan) |
+
+**Left accent bar:** 4px inline `borderLeft` in the entity accent colour for the account's type (see token table above). Same inline style pattern as all `EntityCard` instances — never a utility class.
+
+**Header row (always):** Account name (`text-base font-semibold text-text-primary`) + type `Badge` (entity variant, coloured via `--entity-accent`) + balance (`MonetaryValue` — primary amount right-aligned) + owner `AvatarStack` (max 3, "+N" overflow).
+
+**Owner name tags:** Below the header row, each owner is shown as a small `Badge` (neutral variant, `text-xs`) with their `display_name`. Primary owner badge has a `★` prefix (e.g. `★ Ben`). Non-primary owners show just their name (e.g. `Kim`). Tags wrap if there are multiple owners. Placed above the secondary info line.
+
+**Secondary info line (type-specific):**
+
+| Type | Secondary line content |
+|---|---|
+| `bank` | `****{last4} · {institution}` — masked account number + institution name. If no account_number, show institution only. If neither, omit. |
+| `credit_card` | Mini utilisation bar (4px height, full width of card, `--color-success`/`--color-warning`/`--color-error` based on pct) + `SGD {used} / {limit} · Due {due_day}{ordinal}` |
+| `capital` | `{investment_type} · {current_value in display currency}` — investment type capitalised (e.g. "Stock"), current value from `current_value` field |
+| `asset` | `{asset_type} · {latest valuation in display currency}` — asset type capitalised (e.g. "Property"), latest value from most recent `ValuationRecord`; if no valuations, shows purchase_value |
+| `insurance` | `{policy_type} · {insurer}` — both capitalised; if insurer is null, show policy_type only |
+
+**Context menu (⋯):** Edit · Duplicate · divider · Manage Owners · divider · Archive / Restore · divider · Delete (archived view only).
+
+---
+
+#### Account Type Selector (Create modal)
+
+A row of 5 pill toggle buttons at the top of the create modal, spanning full width:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  [🏦 Bank] [💳 Credit Card] [📈 Capital] [🏠 Asset] [🛡 Insurance]  │
+└──────────────────────────────────────────────────────────┘
+```
+
+Each pill: icon + label, equal width (`flex-1`). Active pill: `bg-control-active text-primary font-medium border-border-state`. Inactive: `text-text-secondary hover:bg-surface-hover border-border`. Container: `flex border border-border rounded-lg overflow-hidden` (no gap — pills are flush).
+
+**Type-switch warning (when switching type after filling subtype fields):** A `ConfirmationDialog` appears with:
+- Title: "Change account type?"
+- Message: "Switching to [New Type] will clear [N] fields specific to [Current Type]. This cannot be undone."
+- Confirm: "Change Type" (primary) · Cancel: "Keep [Current Type]" (secondary)
+
+Only triggers when at least one subtype-specific field (any nullable subtype field for the current type) has a non-empty value. If no subtype fields are filled, the type switches silently.
+
+---
+
+#### Account Modal Field Layout
+
+Two-column grid on ≥ 768px. Field width assignments:
+
+**Full-width fields (span both columns):**
+- Account type selector (pill toggle row)
+- Name
+- Balance (`MonetaryValueInput`)
+- Account number (bank only — password-style input with show/hide toggle; `type="password"` equivalent; displays `****{last4}` in read-only views)
+- Notes
+- RecurringConfig section (Capital, Asset, Insurance — see below)
+
+**Half-width field pairs:**
+- Institution · Month/Year
+- Bank: Interest Rate · Interest Frequency
+- Credit Card: Credit Limit · Annual Fee (row 1) · Billing Day · Due Day (row 2) · Reward Points (half, alone on row 3)
+- Capital: Investment Type · Cost Basis
+- Asset: Asset Type · Purchase Date · Purchase Value · Depreciation Formula (row 2)
+- Insurance: Policy Type · Insurer (row 1) · Premium Frequency · Coverage Amount (row 2) · Coverage Types (TagInput, full-width)
+
+**Month/Year field:** Uses the DatePicker in month-only mode (no day selection). Displays as `MM-YYYY`. Stores as `YYYY-MM`.
+
+**Section dividers** (using the labelled `Divider` component):
+- After Name: `─── BALANCE ───`
+- After balance block: `─── DETAILS ───` (groups institution, account number, month/year)
+- After base details: `─── [TYPE] SETTINGS ───` (groups subtype-specific fields)
+- At bottom (Capital/Asset/Insurance): `─── RECURRING PAYMENT ───` (the toggle section)
+
+---
+
+#### RecurringConfig Section (Capital, Asset, Insurance modals only)
+
+Placed at the bottom of the modal, after the `─── RECURRING PAYMENT ───` divider.
+
+```
+─── RECURRING PAYMENT ────────────────────────────────────
+Set up recurring payment   [Toggle OFF]
+```
+
+When Toggle is ON, the following fields animate in below the toggle row:
+
+```
+Frequency      [3rd of every month            ✕  ]
+               Next: 03-07-2026  ✓ Confirm
+Category       [Insurance ▾                      ]
+Amount override [SGD ▾] [_______________          ]
+               (leave blank to use account balance)
+Payment method [_______________                   ]
+Payee          [Ben ▾                             ]
+```
+
+Fields: `frequency_text` (uses `RecurringDateInput` component with the Confirm step), `category_id` (searchable Dropdown), `amount_override` (`MonetaryValueInput`, optional), `payment_method` (text Input), `payee_person_id` (person Dropdown).
+
+Toggle defaults to OFF on create. Toggle defaults to ON in edit mode if a `RecurringConfig` record exists for this account. Toggling OFF in edit mode opens a `ConfirmationDialog`: "Remove recurring payment config?" with "Remove" (danger) and "Keep" (secondary). Confirmed removal deletes the `RecurringConfig` via `DELETE /api/accounts/{id}/recurring-config`.
+
+---
+
+#### Valuation History (Assets page — Add Valuation flow)
+
+The Assets page AccountCard shows a `Skeleton` chart shape (shimmer) with a centred "Chart coming soon" label in `text-text-muted text-xs` below the secondary info line. This placeholder occupies the same height as the real chart will in the VIZ epic so the card height is stable.
+
+**Add Valuation** — triggered from a secondary button in the card context menu: "Add Valuation". Opens a small `Modal` (`size="sm"`):
+
+```
+┌─────────────────────────────────────┐
+│  Add Valuation                   ✕  │
+│                                     │
+│  Date        [01-07-2026          ] │  ← DatePicker
+│  Value       [SGD ▾] [__________  ] │  ← MonetaryValueInput
+│  Source      [Manual ▾            ] │  ← Dropdown: Manual / Market Appraisal / Depreciation Formula
+│  Notes       [___________________  ] │  ← optional text Input
+│                                     │
+│                  [Cancel]  [Add]    │
+└─────────────────────────────────────┘
+```
+
+Source values: `manual` (default) / `market_appraisal` / `depreciation_formula`. When "Depreciation Formula" is selected, a Formula Dropdown appears below Source (lists available asset formulas). The `formula_id` field on `ValuationRecord` is populated.
+
+On save, the card's secondary line updates to show the new latest valuation value.
+
+---
+
+#### Manage Owners Modal
+
+Triggered from the "Manage Owners" context menu item. Opens a `Modal` (`size="sm"`, title "Manage Owners").
+
+```
+┌─────────────────────────────────────┐
+│  Manage Owners                   ✕  │
+│                                     │
+│  Owners                             │
+│  [Ben ★  ▾] [Kim  ▾] [+  ▾]        │  ← person chips
+│                                     │
+│  Primary owner: Ben ★               │  ← star is clickable to change primary
+│                                     │
+│                  [Cancel]  [Save]   │
+└─────────────────────────────────────┘
+```
+
+Owners field: a multi-select `Dropdown` that renders selected persons as chips. Each chip has a ★ icon (gold when this person is primary, outline when not). Clicking a ★ on a chip sets that person as the primary owner (removes star from all others). Clicking × on a chip removes that owner (blocked if they are the only owner — `Tooltip`: "At least one owner is required").
+
+The Dropdown options list all household members not already selected. Adding an owner adds them as non-primary by default.
+
+On Save, calls `POST /api/accounts/{id}/owners` for each added person and `DELETE /api/accounts/{id}/owners/{person_id}` for each removed person, then `PATCH` (or re-POST with `is_primary: true`) for the primary owner change. All mutations are batched before Save — no live API calls until the user confirms.
+
+---
 
 ### 10.1 Page Transitions
 
@@ -1933,6 +2405,27 @@ Easing: `--ease-out`. Triggered on route mount.
 - Open: height `0 → auto` via `grid-template-rows: 0fr → 1fr`, `--duration-normal`
 - Close: reverse
 
+**Entity card entrance (after create):**
+- New card: `opacity: 0, translateY(12px) → opacity: 1, translateY(0)`, `--duration-slow --ease-out`
+- Only the newly created card animates. Existing cards do not shift until the new card has fully mounted.
+
+**Entity card archive / delete:**
+- Step 1: `opacity: 1 → 0`, `--duration-fast`
+- Step 2: `max-height → 0, margin-bottom → 0`, `--duration-normal --ease-in` (siblings slide up to fill gap)
+
+**Staggered list load (data arrives from API):**
+- Each card: `opacity: 0, translateY(8px) → opacity: 1, translateY(0)`, `--duration-normal --ease-out`
+- Stagger: 40ms delay per item (index × 40ms). Cap at 8 items — items 9+ appear at `--duration-instant` to avoid long waits on large lists.
+
+**Alert banner appear / dismiss:**
+- Mount: `opacity: 0, translateY(-8px) → opacity: 1, translateY(0)`, `--duration-fast --ease-out`
+- Dismiss: `opacity: 1 → 0` then `max-height → 0`, `--duration-normal`
+
+**Sidebar collapse / expand:**
+- Width: `240px → 56px` (icon-only collapsed state), `--duration-normal --ease-in-out`
+- Labels: fade `opacity: 1 → 0` at `--duration-fast` before the width transition begins, so text never wraps or squishes mid-animation
+- Expand is the reverse: width first, then labels fade in after width settles
+
 ### 10.3 Micro-animations
 
 | Interaction | Animation |
@@ -1944,6 +2437,12 @@ Easing: `--ease-out`. Triggered on route mount.
 | Success action (save) | Brief `scale(1.05)` pulse on the saved element, `--duration-normal` |
 | Error shake | `translateX(-4px → 4px → -4px → 0)` × 3, `--duration-fast` |
 | Number increment | Counter rolls up digit by digit (for stat cards), `--duration-slow` |
+| Chart legend pill toggle off | Affected series: `opacity 1 → 0`, `--duration-normal` |
+| Chart legend pill toggle on | Affected series: `opacity 0 → 1`, `--duration-normal` |
+| Filter chip appear | `scale(0) → scale(1)`, `--duration-fast --ease-bounce` |
+| Filter chip dismiss | `scale(1) → scale(0)`, `--duration-fast --ease-in` |
+| Drag card lift | `translateY(-4px) scale(1.02)` + shadow to `--shadow-xl`, `--duration-fast` (see §4.9) |
+| Balance value live update | Amber highlight pulse on the number (`background-color` flash to `--color-warning-muted → transparent`), `--duration-slow` |
 
 ### 10.4 Chart Animations
 
@@ -2157,5 +2656,10 @@ Visually smaller elements (e.g. 24px icons) have invisible padding to reach the 
 | 2.3 | 2026-06-01 | Ben + Claude | §1.1 Surface tokens: corrected hex values to match index.css implementation; added --color-surface-active (#26264a) for small button hover inside panels; corrected --color-border values. §1.9 Token table: clarified bg-control-active (nav tabs only) vs bg-accent-active (picker panel tabs only). §3.7 ColourPicker: swatch ring changed from ring-white/80 (magic) to ring-accent ring-offset-surface-raised (tokens); panel tab corrected to bg-accent-active text-accent; inactive tab corrected to text-text-secondary. §3.8 EmojiIconPicker: grid hover changed from bg-surface-hover to bg-surface-active (surface-hover is near-invisible on raised panels); panel tab corrected to bg-accent-active text-accent; clear button added to trigger. |
 | 2.4 | 2026-06-04 | Ben + Claude | §5.3 Topbar account menu expanded: full visual layout (name/email header + Settings + Log out), panel tokens (bg-surface-overlay, border-border, shadow-xl, z-dropdown, min-w-context-menu), trigger pattern (avatar button replaces Link), close behaviours (Escape/click-outside/re-click), destructive Log out styling (text-error), deferred display currency selector, implementation note (ContextMenu with header item variant). |
 | 2.5 | 2026-06-04 | Ben + Claude | §9.7 JoinHousehold: added decline-for-authenticated-user flow (POST /api/invitations/:token/decline creates new household, triggers welcome toast); updated expired/declined/cancelled state list. §9.8 Settings Page: full specification — Household tab (owner-only edit, Danger Zone delete), Members tab (role visibility rules for owner/admin/member, invite flow, Leave Household button), Welcome Toast (§9.8.3, isFirstLogin flag, sessionStorage guard), Currencies placeholder. §9.9 Login not_invited error copy. §9.8 (former DebtSummaryView) renumbered to §9.10. |
+| 2.9 | 2026-06-05 | Ben + Claude | Bug fix pass. §9.7 JoinHousehold accept state: added 409 AlertBanner ("already belongs to a household — leave or delete it first") with "Go to Settings" action. §9.8.2 Leave Household: corrected flow — `POST /api/persons/leave` returns `household: null`; on 200 call `clearAuth()` and navigate to `/login`; corrected modal copy (new household created on next sign-in, not immediately). |
 | 2.6 | 2026-06-04 | Ben + Claude | §9.8 Settings Page expanded to 4 tabs. §9.8 opening: full tab-bar visual + token spec. §9.8.4 Currencies tab: full spec — table columns (Code/Name/Symbol/Rate with stale ⚠/Fee/Active toggle/Actions ContextMenu), Add/Edit modal, Set as Base ConfirmationDialog, Refresh Rates button, stale footer. §9.8.5 Profile tab (new): Avatar/Display Name/Email(read-only)/Display Currency Dropdown/Default View SegmentedControl/Save Changes. §5.3 account menu update noted: "My Profile" item added (SETTINGS-003). |
 | 2.7 | 2026-06-04 | Ben + Claude | Comprehensive implementation alignment pass (from FE-001–FE-008 + AUTH-003–005 diff audit). §1.1: focus ring glow token table (ring-glow-primary/accent/error with per-component mapping); text-text-inverse semantics (white on coloured backgrounds only). §1.6 Z-Index Scale: portal escaping rule, toast top-[80px] placement, modal backdrop/panel both z-modal note, raw integer prohibition. §2.5 Avatar: exact initials algorithm (2-char, fallback "?"), alt text pattern, entity-person background. §2.7 Tooltip: whitespace-normal break-words wrapping; JS boundary clamping + vertical flip precise mechanism documented (no placement prop needed). §4.2 Modal: dirty-guard banner tokens (bg-warning-muted), size table (xs/sm/md/lg/fullscreen), mobile bottom-sheet (items-end + rounded-t-xl). §4.6a FloatingPosition: new section documenting useFloatingPosition hook, RAF-throttled tracking, portal escaping, single-hook rule. §4.7 Table: thead bg changed to bg-surface-raised + border-b-2 border-border-light for obvious header distinctness; sort icon opacity behaviour; mobile card-list collapse detail; ContextMenu-per-row rule. §9.1 EntityCard: inline style accent bar note (Tailwind border shorthand override); design system demo variants. §9.3 EntityPage: design system demo + BulkActionBar behaviour. §9.6 PublicPage: corrected max-w-content (28rem) not min-w-[360px]; full layout token documentation. §9.10 Design System Page (new): section catalogue, public pages subsection note. §9.11 DebtSummaryView renumbered. |
+| 2.8 | 2026-06-05 | Ben + Claude | §5.5 Tabs: split into Pattern A (underline) and Pattern B (pill tab bar); defined when to use each, container/pill tokens, URL-sync rule. §7.1, §7.4, §7.9: added §7.11 legend toggle pill reference. §7.11 Chart Legend Toggle Pills (new): pill states (active/inactive/hover), inline style pattern for dynamic chart colors using color-mix(), toggle behavior, at-least-one-active guard, aria-pressed accessibility. §10.2: added entity card entrance (translateY 12px, duration-slow), entity archive (opacity then max-height collapse), staggered list load (40ms stagger, cap at 8), alert banner appear/dismiss, sidebar collapse/expand (labels fade before width). §10.3: added chart legend pill toggle on/off, filter chip appear/dismiss (ease-bounce/ease-in), drag card lift (cross-ref §4.9), balance value live update (amber pulse). |
+| 2.9 | 2026-06-05 | Ben + Claude | §9.8.2 Members tab: replaced inline role Dropdown + trash icon button with `⋯` ContextMenu per row (§4.7 consistency); ContextMenu items: "Change to Admin"/"Change to Member" + divider + "Remove member" (label shortened from "Remove from household"). Pending Invitations section converted from custom div list to `Table` component with `⋯` ContextMenu (Copy invitation link + Cancel invitation). "Leave Household" button changed from `secondary + text-error` to `variant="danger"`. |
+| 2.11 | 2026-06-05 | Ben + Claude | §9.13 Accounts Pages (new): full spec for AccountCard anatomy per account_type (secondary info lines for bank/credit_card/capital/asset/insurance), entity accent token mapping, account type selector pill row, type-switch ConfirmationDialog, modal field layout (full-width vs half-width per type), section dividers, RecurringConfig Toggle section, valuation history Skeleton placeholder + Add Valuation modal (Date/Value/Source/Notes), Manage Owners modal (multi-select chips with primary star). |
+| 2.10 | 2026-06-05 | Ben + Claude | Epic 2 doc alignment pass. §4.6 ContextMenu: added header item variant spec (`{ header: true; displayName; email }` — renders non-interactive name/email block above items, used by Topbar account menu). §4.6a FloatingPosition: added full API signature (`useFloatingPosition(triggerRef, open, options?)` → `FloatingPosition \| null`) with usage pattern. §4.10 Multi-Select: corrected BulkActionBar description — bar is inline below entity list, not fixed-bottom viewport; updated button set (Archive + Delete, no Export or Categorise yet). §4.11 BulkActionBar (new standalone spec): container tokens, entrance animation, count label, action button table, props interface, integration note. Revision history reordered: 2.7 (Jun 4) → 2.8 (Jun 5) → 2.9 (Jun 5) — previously listed out of order as 2.9 → 2.8 → 2.7. Frontmatter version corrected to 2.10. |

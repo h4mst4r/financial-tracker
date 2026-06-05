@@ -57,6 +57,8 @@ export function JoinHousehold() {
       const apiErr = err as ApiError;
       if (apiErr?.status === 403) {
         setAcceptError('This invitation was sent to a different email address — sign in with the correct account');
+      } else if (apiErr?.status === 409) {
+        setAcceptError('You already belong to a household — leave or delete it before accepting this invitation.');
       } else {
         setAcceptError('Failed to accept invitation. Please try again.');
       }

@@ -173,6 +173,16 @@ async def delete_person(
         )
     )
 
+    # Invalidate all active sessions for the target person — prevents
+    # "zombie" sessions where a removed member retains authenticated access
+    # until their next API call.
+    sessions_result = await db.execute(
+        select(PersonSession).where(PersonSession.person_id == target_id)
+    )
+    for session_row in sessions_result.scalars().all():
+        await db.delete(session_row)
+    await db.flush()
+
     if has_events:
         person.archived = True
         person.archived_at = utcnow()
@@ -364,24 +374,21 @@ async def accept_invitation(
         await db.flush()
         return inv
 
-    old_household_id = db_person.household_id
+    # Strict guard: block acceptance if person already belongs to a different household.
+    # They must leave or delete their current household before joining another.
+    if db_person.household_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already belong to a household. Leave or delete it before accepting an invitation.",
+        )
 
-    # Reassign person to the inviting household with member role
+    # Assign person to the inviting household with member role
     db_person.household_id = inv.household_id
     db_person.role = "member"
     db_person.updated_by = db_person.id
     inv.status = "accepted"
     inv.accepted_at = now
     await db.flush()
-
-    # If the person was the sole member of their old household, clean it up.
-    # Their sessions are keyed to person_id (not household_id) so they're kept.
-    if old_household_id is not None:
-        remaining_result = await db.execute(
-            select(func.count(Person.id)).where(Person.household_id == old_household_id)
-        )
-        if remaining_result.scalar() == 0:
-            await _cascade_delete_empty_household(db, old_household_id)
 
     return inv
 
@@ -453,8 +460,11 @@ async def decline_invitation(
 async def leave_household(
     db: AsyncSession,
     person: Person,
-) -> tuple[Person, Household]:
-    """Leave current household — creates a new household for the person.
+) -> Person:
+    """Leave current household — detaches person, does NOT create a new household.
+
+    The person is "booted" with no household. On next login, they will need
+    a pending invitation to join a household (NotInvitedError otherwise).
 
     Raises 403 if person is the owner (owner must delete household instead).
     """
@@ -475,16 +485,12 @@ async def leave_household(
             detail="Person not found",
         )
 
-    # Detach from current household
+    # Detach from current household — no new household created
     db_person.household_id = None
     db_person.role = "member"
     await db.flush()
 
-    # Create new household
-    from backend.services.auth_service import _create_and_seed_household
-    new_household = await _create_and_seed_household(db, db_person)
-
-    return (db_person, new_household)
+    return db_person
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import type { PersonInfo } from '../store/authStore';
 import { useAlertStore } from '../store/alertStore';
@@ -37,10 +37,11 @@ export function useAuth() {
     // because setAuth is idempotent. Production is unaffected (no StrictMode double-invoke).
 
     let authSucceeded = false;
+    let response: AuthMeResponse | null = null;
 
     (async () => {
       try {
-        const response = await fetchMe();
+        response = await fetchMe();
         if (cancelled) return;
 
         // Map backend response to PersonInfo shape
@@ -61,6 +62,14 @@ export function useAuth() {
           pictureUrl: response.person.pictureUrl,
         };
 
+        if (!response.household) {
+          // Person exists but has no household — clear auth and send to login.
+          // This happens if a session outlived a leave_household call without
+          // the client clearing it (e.g. tab was open in background).
+          clearAuth();
+          navigate('/login', { replace: true });
+          return;
+        }
         setAuth(person, response.household.householdId, response.csrfToken);
         authSucceeded = true;
         // Capture pendingInvitationToken here (inside the try block while
@@ -102,7 +111,7 @@ export function useAuth() {
               navigate(`/join/${pendingToken}`, { replace: true });
             }
             // Welcome toast for first-time household creators
-            if (response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')) {
+            if (response && response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')) {
               sessionStorage.setItem('hasSeenWelcome', '1');
               useAlertStore.getState().enqueue({
                 variant: 'success',

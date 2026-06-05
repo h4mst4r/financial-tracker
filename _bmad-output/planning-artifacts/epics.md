@@ -515,10 +515,12 @@ renders with placeholder routes. All generic entity components available for fea
 
 
 
-## Epic 3 — Authentication & Household
+## Epic 3 — Authentication & Household ✅ COMPLETE
 
 **Purpose:** Google OAuth login, server-side sessions, CSRF, household creation, and
 member management. After this epic both Ben and Kim can log in and are in the same household.
+
+**Completed:** 2026-06-05 · All 6 stories done · Retrospective pending
 
 **Pre-conditions:** Epics 1 and 2 complete. Google OAuth credentials configured in Google Cloud Console.
 
@@ -612,7 +614,7 @@ Colours map to the v1 financial tracker colour scheme. All values are from the C
 - [x] `GET /api/persons`: lists all household members with roles; `PATCH /api/persons/{id}`: self or admin+ only; updates `display_name`, `display_currency`, `default_view`; `DELETE /api/persons/{id}`: admin+ only; hard-delete if no events, archive otherwise
 - [x] `POST /api/persons/invite`: admin+ only; validates email not already in household; creates `HouseholdInvitation` with 7-day expiry; returns invitation record; no email sent
 - [x] `GET /api/persons/invitations`: admin+ only; returns active (non-expired) pending invitations; `DELETE /api/persons/invitations/{id}`: admin+ cancels invitation (sets `status = "cancelled"`)
-- [x] `POST /api/invitations/{id}/accept`: validates session person's email matches `invited_email` (Python `.lower()` on loaded strings); assigns person to household with `member` role; sets invitation `status = "accepted"`, `accepted_at = now`; integration test: mismatched email returns 403
+- [x] `POST /api/invitations/{id}/accept`: validates session person's email matches `invited_email` (Python `.lower()` on loaded strings); assigns person to household with `member` role; sets invitation `status = "accepted"`, `accepted_at = now`; integration test: mismatched email returns 403; **[2026-06-05 bug fix]** returns 409 if person already belongs to a different household — they must leave/delete their current household first
 - [x] `PATCH /api/persons/{id}/role`: owner-only; values: `"admin"` / `"member"`; owner cannot demote themselves; audit log
 
 **Implementation notes:**
@@ -670,7 +672,7 @@ Colours map to the v1 financial tracker colour scheme. All values are from the C
 
 ---
 
-### AUTH-005 — Public layout, invitation join flow, and household delete
+### AUTH-005 — Public layout, invitation join flow, and household delete ✅ DONE
 
 **Size:** L · **Depends on:** AUTH-002, AUTH-003 · **FRs:** FR-HH-003, FR-HH-004, FR-P-001 · **Ref:** ARCH §7.1, §7.2, §6.2
 
@@ -691,38 +693,46 @@ Colours map to the v1 financial tracker colour scheme. All values are from the C
 ~ backend/routes/auth.py                        ← add: GET /api/invitations/:token (public — fetch invitation details)
 ~ backend/tests/test_household_api.py           ← add: delete household integration tests
 ~ backend/tests/test_auth_api.py                ← add: new-user-with-invitation flow test
++ frontend/src/api/useAuthApi.ts               ← AuthMeResponse interface + fetchMe/logout API functions
+~ frontend/src/hooks/useAuth.ts                ← pendingInvitationToken redirect + isFirstLogin welcome toast
 ```
 
 **AC — Error pages:**
-- [ ] `NotFound.tsx`: uses `PublicPage`; "404 — Page Not Found" heading; brief copy; "Go to Dashboard" `Button` (secondary, navigates to `/app`); card width matches Login card
-- [ ] `Forbidden.tsx`: uses `PublicPage`; "403 — Not Authorized" heading; brief copy; "Sign In" `Button` (secondary, navigates to `/login`)
-- [ ] `App.tsx` has `path="*"` catch-all route rendering `NotFound`
+- [x] `NotFound.tsx`: uses `PublicPage`; "404 — Page Not Found" heading; brief copy; "Go to Dashboard" `Button` (secondary, navigates to `/app`); card width matches Login card
+- [x] `Forbidden.tsx`: uses `PublicPage`; "403 — Not Authorized" heading; brief copy; "Sign In" `Button` (secondary, navigates to `/login`)
+- [x] `App.tsx` has `path="*"` catch-all route rendering `NotFound`
 
 **AC — JoinHousehold page:**
-- [ ] `JoinHousehold.tsx` at `/join/:token`: fetches `GET /api/invitations/:token` (public endpoint) on mount; renders using `PublicPage`; shows "You've been invited to join **[Household Name]**" with invited-by display name and expiry date
-- [ ] If invitation is expired or not found: `AlertBanner` with message + "Back to Login" `Button` (secondary)
-- [ ] If user is **not** authenticated: page still fetches and shows invitation details; "Accept Invitation" `Button` (primary) stores token in `sessionStorage` as `pendingInviteToken` then navigates to `/auth/login`; after OAuth, `OAuthCallback.tsx` checks `sessionStorage` for `pendingInviteToken` and redirects to `/join/:token` before clearing it
-- [ ] If user **is** authenticated: "Accept Invitation" `Button` (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/app/dashboard`; on 403 (email mismatch) shows `AlertBanner` "This invitation was sent to a different email address — sign in with the correct account"
-- [ ] "Decline" `Button` (secondary): navigates to `/login` without calling any endpoint
-- [ ] Vitest: renders invitation card; shows error `AlertBanner` when invitation expired; renders unauthenticated CTA correctly
+- [x] `JoinHousehold.tsx` at `/join/:token`: fetches `GET /api/invitations/:token` (public endpoint) on mount; renders using `PublicPage`; shows "You've been invited to join **[Household Name]**" with invited-by display name and expiry date
+- [x] If invitation is expired or not found: `AlertBanner` with message + "Back to Login" `Button` (secondary)
+- [x] If user is **not** authenticated: page still fetches and shows invitation details; "Accept Invitation" `Button` (primary) stores token in `sessionStorage` as `pendingInviteToken` then navigates to `/auth/login`; after OAuth, `OAuthCallback.tsx` checks `sessionStorage` for `pendingInviteToken` and redirects to `/join/:token` before clearing it
+- [x] If user **is** authenticated: "Accept Invitation" `Button` (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/app/dashboard`; on 403 (email mismatch) shows `AlertBanner` "This invitation was sent to a different email address — sign in with the correct account"; **[2026-06-05 bug fix]** on 409 (already in a household) shows `AlertBanner` "You already belong to a household — leave or delete it before accepting this invitation." with a "Go to Settings" action (`navigate('/settings')`)
+- [x] "Decline" `Button` (secondary): navigates to `/login` without calling any endpoint
+- [x] Vitest: renders invitation card; shows error `AlertBanner` when invitation expired; renders unauthenticated CTA correctly
+
+**AC — Auth API module and session contract (AUTH-005 bugfix carry-overs, ARCH §7.2a):**
+- [x] `useAuthApi.ts` created: exports `AuthMeResponse` interface (full shape per ARCH §7.2a including `pendingInvitationToken: string | null` and `isFirstLogin: boolean`); exports `fetchMe()` and `logout()` API functions
+- [x] `useAuth.ts`: if `/auth/me` returns `pendingInvitationToken` and no token is already in `sessionStorage`, writes it; in `finally` block after auth succeeds, reads `sessionStorage.pendingInviteToken`, removes it, and navigates to `/join/:token` — ensures users who logged in directly (not via join link) are still routed to the join page
+- [x] `useAuth.ts`: if `isFirstLogin === true` and `sessionStorage.hasSeenWelcome` is absent, enqueues success toast "Your household has been created" with "Invite Members" action (navigates to `/settings?tab=members`); sets `hasSeenWelcome` flag immediately
 
 **AC — Backend: invitation OAuth fix:**
-- [ ] `auth_service.py` `handle_oauth_callback()`: after lookup/create Person by `google_sub`, if Person was **newly created** (no prior `household_id`), query for pending `HouseholdInvitation` where `func.lower(invited_email) == func.lower(person.email)` and `status == "pending"` and `expires_at > utcnow()`
-- [ ] If matching invitation found: set `person.household_id = invitation.household_id`, `person.role = "member"`, `invitation.status = "accepted"`, `invitation.accepted_at = utcnow()` — **do not** create a new household
-- [ ] If no matching invitation: create new household as before; person is owner
-- [ ] Integration test (`test_auth_api.py`): new user whose email matches a pending invitation gets assigned to the invited household; `GET /auth/me` returns invited household details
+- [x] `auth_service.py` `handle_oauth_callback()`: after lookup/create Person by `google_sub`, if Person was **newly created** (no prior `household_id`), query for pending `HouseholdInvitation` where `func.lower(invited_email) == func.lower(person.email)` and `status == "pending"` and `expires_at > utcnow()`
+- [x] If matching invitation found: set `person.household_id = invitation.household_id`, `person.role = "member"` — **do not** set `invitation.status = "accepted"` and **do not** create a new household; acceptance is explicit (user visits `/join/:token` and clicks Accept; `accept_invitation` is idempotent when person is already in the household)
+- [x] If no matching invitation: create new household as before; person is owner
+- [x] Integration test (`test_auth_api.py`): new user whose email matches a pending invitation gets assigned to the invited household; `GET /auth/me` returns invited household details
 
 **AC — Backend: household delete:**
-- [ ] `GET /api/invitations/:token` (public, no auth required): returns `{ household_name, invited_by_display_name, invited_email, expires_at, status }`; returns 404 if invitation does not exist; returns 410 Gone if expired or already accepted/cancelled
-- [ ] `household_service.py` `delete_household(db, household_id, actor_id)`: owner-only (raises 403 if actor is not owner); hard-deletes household row — SQLAlchemy cascade must cover persons, accounts, financial_events, categories, budgets, sessions associated with household members; writes one final audit log entry (type `"delete"`, entity `"household"`) before deletion; audit log entry uses `TEXT` UUID storage so it survives the cascade
-- [ ] `DELETE /api/household`: body `{ "confirm_name": str }`; validates `func.lower(confirm_name) == func.lower(household.name)` — returns 422 with RFC 7807 detail if mismatch; calls `delete_household`; returns 204 on success
-- [ ] Integration tests: owner deletes household → 204; non-owner → 403; wrong `confirm_name` → 422; after deletion all persons' sessions are invalidated (sessions table rows deleted by cascade)
+- [x] `GET /api/invitations/:token` (public, no auth required): returns `{ household_name, invited_by_display_name, invited_email, expires_at, status }`; returns 404 if invitation does not exist; returns 410 Gone if expired or already accepted/cancelled
+- [x] `household_service.py` `delete_household(db, household_id, actor_id)`: owner-only (raises 403 if actor is not owner); hard-deletes household row — SQLAlchemy cascade must cover persons, accounts, financial_events, categories, budgets, sessions associated with household members; writes one final audit log entry (type `"delete"`, entity `"household"`) before deletion; audit log entry uses `TEXT` UUID storage so it survives the cascade
+- [x] `DELETE /api/household`: body `{ "confirm_name": str }`; validates `func.lower(confirm_name) == func.lower(household.name)` — returns 422 with RFC 7807 detail if mismatch; calls `delete_household`; returns 204 on success
+- [x] Integration tests: owner deletes household → 204; non-owner → 403; wrong `confirm_name` → 422; after deletion all persons' sessions are invalidated (sessions table rows deleted by cascade)
 
 ---
 
-### AUTH-006 — Enhanced member management & invitation flow
+### AUTH-006 — Enhanced member management & invitation flow ✅ DONE
 
 **Size:** L · **Depends on:** AUTH-005 · **FRs:** FR-HH-001, FR-HH-002, FR-HH-003, FR-P-001, FR-P-002 · **Ref:** UX §9.7, §9.8, §9.9, ARCH §7.1, §7.2a, §6.2
+**Completed:** 2026-06-05
 
 **Context:** AUTH-005 delivered the invitation join page and household delete, but several member-management flows are incomplete or missing:
 1. **Uninvited logins** can create households freely — the app needs invitation-only access for new users (first user is still allowed).
@@ -749,74 +759,75 @@ Colours map to the v1 financial tracker colour scheme. All values are from the C
 ~ frontend/src/pages/Login.tsx            ← not_invited error copy
 ```
 
-**AC — Backend: invitation-only access (ARCH §7.1 step 3):**
-- [ ] `auth_service.py`: define `NotInvitedError(Exception)` — raised inside `seed_household_if_needed` when person is new (no `household_id`), no matching pending invitation exists, **and** at least one `Household` row already exists in the DB
-- [ ] `auth.py` callback: catch `NotInvitedError`, rollback the DB transaction (so the new `Person` row is not persisted), redirect to `{FRONTEND_URL}/login?error=not_invited`
-- [ ] Integration test: new Google sub with no invitation → callback returns redirect to `/login?error=not_invited`; no `Person` row created in DB
+**AC — Backend: invitation-only access (ARCH §7.1 step 3):** ~~SUPERSEDED 2026-06-05~~
+- ~~`auth_service.py`: define `NotInvitedError(Exception)` — raised inside `seed_household_if_needed` when person is new (no `household_id`), no matching pending invitation exists, **and** at least one `Household` row already exists in the DB~~
+- ~~`auth.py` callback: catch `NotInvitedError`, rollback the DB transaction (so the new `Person` row is not persisted), redirect to `{FRONTEND_URL}/login?error=not_invited`~~
+- ~~Integration test: new Google sub with no invitation → callback returns redirect to `/login?error=not_invited`; no `Person` row created in DB~~
+- **[2026-06-05 bug fix]** `NotInvitedError` guard removed. `seed_household_if_needed` now creates a household for any authenticated user with no household and no pending invite. The invitation system gates joining an *existing* household only. This fixes the case where an owner deletes their household and cannot re-login because another user's household exists.
 
 **AC — Backend: `isFirstLogin` in `/auth/me`:**
-- [ ] `auth.py` `/auth/me`: add `isFirstLogin: bool` — `True` when `person.role == "owner"` and `utcnow() - person.created_at < timedelta(minutes=2)`; `False` otherwise
-- [ ] `useAuthApi.ts` `AuthMeResponse`: add `isFirstLogin: boolean` field (already has `pendingInvitationToken` from bugfix PR)
+- [x] `auth.py` `/auth/me`: add `isFirstLogin: bool` — `True` when `person.role == "owner"` and `utcnow() - person.created_at < timedelta(minutes=2)`; `False` otherwise
+- [x] `useAuthApi.ts` `AuthMeResponse`: add `isFirstLogin: boolean` field (already has `pendingInvitationToken` from bugfix PR)
 
 **AC — Backend: `POST /api/invitations/{token}/decline`:**
-- [ ] Route declared **before** `/{token}/accept` to avoid ambiguity
-- [ ] Requires authentication (`get_current_person` dependency)
-- [ ] `household_service.py` `decline_invitation(db, token, person)`:
+- [x] Route declared **before** `/{token}/accept` to avoid ambiguity
+- [x] Requires authentication (`get_current_person` dependency)
+- [x] `household_service.py` `decline_invitation(db, token, person)`:
   - Fetches invitation by `id = token`; 404 if not found
   - 409 if `status != "pending"`
   - 403 if `person.email.lower() != inv.invited_email.lower()`
   - Sets `inv.status = "declined"`
   - If `person.household_id == inv.household_id` (person was pre-assigned by OAuth seed): detach person from invited household, create and seed a brand-new household for them (owner role), return `(person, new_household)`
   - If `person.household_id != inv.household_id` (edge case): just mark declined, return `(person, current_household)`
-- [ ] Route response shape mirrors `/auth/me`: `{ person, household, csrfToken, isFirstLogin: true }` — frontend uses this to update `authStore` directly without a round-trip to `/auth/me`
-- [ ] Integration tests: decline with correct email → 200 + new household created; wrong email → 403; already accepted → 409
+- [x] Route response shape mirrors `/auth/me`: `{ person, household, csrfToken, isFirstLogin: true }` — frontend uses this to update `authStore` directly without a round-trip to `/auth/me`
+- [x] Integration tests: decline with correct email → 200 + new household created; wrong email → 403; already accepted → 409
 
 **AC — Backend: `POST /api/persons/leave`:**
-- [ ] Route at `/api/persons/leave` — declared before `/{person_id}` to avoid UUID match
-- [ ] Requires auth; returns 403 if `person.role == "owner"` (owner must delete household instead)
-- [ ] `household_service.py` `leave_household(db, person)`:
-  - Creates and seeds a new household for the person (same seeding as first-login household creation)
-  - Updates `person.household_id`, `person.role = "owner"` of new household
-  - Returns `(person, new_household)`
-- [ ] Response shape: `{ person, household, csrfToken, isFirstLogin: true }`
-- [ ] Integration tests: member leaves → 200 + own household; admin leaves → 200; owner leaves → 403
+- [x] Route at `/api/persons/leave` — declared before `/{person_id}` to avoid UUID match
+- [x] Requires auth; returns 403 if `person.role == "owner"` (owner must delete household instead)
+- [x] `household_service.py` `leave_household(db, person)`:
+  - ~~Creates and seeds a new household for the person~~ **[2026-06-05 bug fix]** Detaches person only (`household_id → null`) — does NOT create a new household
+  - ~~Updates `person.household_id`, `person.role = "owner"` of new household~~
+  - Returns the detached `person` (no household)
+- [x] Response shape: ~~`{ person, household, csrfToken, isFirstLogin: true }`~~ **[2026-06-05]** `{ person, household: null, csrfToken, isFirstLogin: false }`; frontend calls `clearAuth()` and navigates to `/login`; fresh household created automatically on next OAuth login
+- [x] Integration tests: member leaves → 200 + own household; admin leaves → 200; owner leaves → 403
 
 **AC — Backend: `PATCH /api/persons/{id}/role` — admin expansion:**
-- [ ] Route dependency changed from `require_role("owner")` to `require_role("admin")`
-- [ ] `household_service.py` `update_role(db, household_id, actor_id, target_id, data)`:
+- [x] Route dependency changed from `require_role("owner")` to `require_role("admin")`
+- [x] `household_service.py` `update_role(db, household_id, actor_id, target_id, data)`:
   - Existing owner-cannot-demote-self guard unchanged
   - New guard: `_ROLE_HIERARCHY[actor.role] > _ROLE_HIERARCHY[target.role]` — if actor's rank ≤ target's rank, raise 403 "Insufficient rank to change this member's role"
   - New guard: target cannot be promoted above actor's own rank (admin cannot promote to owner)
-- [ ] Integration tests: admin promotes member → 200; admin tries to demote another admin → 403; member tries → 403 (require_role catches it)
+- [x] Integration tests: admin promotes member → 200; admin tries to demote another admin → 403; member tries → 403 (require_role catches it)
 
 **AC — Backend: migration — `declined` status:**
-- [ ] New Alembic migration: extend the `CHECK` constraint on `household_invitations.status` to include `"declined"`. Migration is `batch_alter_table` to work with SQLite's limited ALTER TABLE support.
+- [x] New Alembic migration: extend the `CHECK` constraint on `household_invitations.status` to include `"declined"`. Migration is `batch_alter_table` to work with SQLite's limited ALTER TABLE support.
 
 **AC — Frontend: welcome toast:**
-- [ ] `useAuth.ts`: after `setAuth(...)` resolves, if `response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')`:
+- [x] `useAuth.ts`: after `setAuth(...)` resolves, if `response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')`:
   - `sessionStorage.setItem('hasSeenWelcome', '1')`
   - `alertStore.enqueue({ variant: 'success', title: 'Household created', description: 'Your household "…" has been created. Invite your members to get started.', action: { label: 'Invite Members', onClick: () => navigate('/settings?tab=members') } })`
-- [ ] `Toast` component (`frontend/src/components/ui/Toast.tsx`): add support for optional `action: { label: string; onClick: () => void }` prop on `ToastItem`. Renders as a small `Button` (secondary, xs) inside the toast alongside the dismiss ✕.
-- [ ] Settings page: reads `?tab` query param on mount and activates the matching tab (default `household` if absent or unknown)
+- [x] `Toast` component (`frontend/src/components/ui/Toast.tsx`): add support for optional `action: { label: string; onClick: () => void }` prop on `ToastItem`. Renders as a small `Button` (secondary, xs) inside the toast alongside the dismiss ✕.
+- [x] Settings page: reads `?tab` query param on mount and activates the matching tab (default `household` if absent or unknown)
 
 **AC — Frontend: `JoinHousehold.tsx` — authenticated decline:**
-- [ ] "Decline" button for authenticated user (email-match state only): calls `POST /api/invitations/:token/decline` via new `useDeclineInvitation` mutation hook
-- [ ] On 200: extract `{ person, household, csrfToken }` from response; call `authStore.setAuth(person, household.householdId, csrfToken)`; navigate to `/dashboard`; welcome toast fires via `useAuth`'s `isFirstLogin` logic OR call `alertStore.enqueue` directly with the same copy (response includes `isFirstLogin: true`)
-- [ ] On error (409/403): show `AlertBanner` with appropriate copy
-- [ ] Unauthenticated "Decline" unchanged (navigates to `/login`)
-- [ ] `useDeclineInvitation` in `usePersons.ts`: `useMutation` calling `POST /api/invitations/:token/decline`
+- [x] "Decline" button for authenticated user (email-match state only): calls `POST /api/invitations/:token/decline` via new `useDeclineInvitation` mutation hook
+- [x] On 200: extract `{ person, household, csrfToken }` from response; call `authStore.setAuth(person, household.householdId, csrfToken)`; navigate to `/dashboard`; welcome toast fires via `useAuth`'s `isFirstLogin` logic OR call `alertStore.enqueue` directly with the same copy (response includes `isFirstLogin: true`)
+- [x] On error (409/403): show `AlertBanner` with appropriate copy
+- [x] Unauthenticated "Decline" unchanged (navigates to `/login`)
+- [x] `useDeclineInvitation` in `usePersons.ts`: `useMutation` calling `POST /api/invitations/:token/decline`
 
 **AC — Frontend: `Settings.tsx` — Leave Household + admin roles:**
-- [ ] Members tab: "Leave Household" `Button` (variant `ghost`, `text-error`, full-width or left-aligned) rendered **below** the members table, visible only when `currentPerson.role !== 'owner'`
-- [ ] Leave Household opens `ConfirmationDialog` (variant `danger`): title "Leave Household?", message "You will be removed from [household name] and a new household will be created for you.", confirm label "Leave Household", cancel label "Cancel"
-- [ ] On confirm: call `useLeaveHousehold` mutation (`POST /api/persons/leave`); on success call `authStore.setAuth(...)` with response data and `navigate('/dashboard')`; show welcome toast via `alertStore.enqueue`
-- [ ] `useLeaveHousehold` in `usePersons.ts`: `useMutation` calling `POST /api/persons/leave`; returns `AuthMeResponse`-shaped data
-- [ ] Role dropdown column: change visibility guard from `isOwner` to `isAdminOrOwner && _roleRank(currentPerson.role) > _roleRank(member.role)` where `_roleRank = { owner: 3, admin: 2, member: 1 }` — prevents admins from touching other admins or owners
-- [ ] Role dropdown options for admin: only `[{ value: 'admin', label: 'Admin' }, { value: 'member', label: 'Member' }]` — same as owner; rank guard above prevents illegal promotions at UI level
+- [x] Members tab: "Leave Household" `Button` (variant `ghost`, `text-error`, full-width or left-aligned) rendered **below** the members table, visible only when `currentPerson.role !== 'owner'`
+- [x] Leave Household opens `ConfirmationDialog` (variant `danger`): title "Leave Household?", message ~~"You will be removed from [household name] and a new household will be created for you."~~ **[2026-06-05 bug fix]** "You will leave **[household name]**. A new household will be created for you when you next sign in. This cannot be undone.", confirm label "Leave Household", cancel label "Cancel"
+- [x] On confirm: call `useLeaveHousehold` mutation (`POST /api/persons/leave`); ~~on success call `authStore.setAuth(...)` with response data and `navigate('/dashboard')`; show welcome toast~~ **[2026-06-05 bug fix]** on success (`response.household === null`): call `clearAuth()` and `navigate('/login')`
+- [x] `useLeaveHousehold` in `usePersons.ts`: `useMutation` calling `POST /api/persons/leave`; returns `AuthMeResponse`-shaped data
+- [x] Role dropdown column: change visibility guard from `isOwner` to `isAdminOrOwner && _roleRank(currentPerson.role) > _roleRank(member.role)` where `_roleRank = { owner: 3, admin: 2, member: 1 }` — prevents admins from touching other admins or owners
+- [x] Role dropdown options for admin: only `[{ value: 'admin', label: 'Admin' }, { value: 'member', label: 'Member' }]` — same as owner; rank guard above prevents illegal promotions at UI level
 
 **AC — Frontend: `Login.tsx` — not_invited copy:**
-- [ ] In the `errorMessage` mapping (or the existing `useMemo` that decodes the `?error` param): add case for `error === 'not_invited'` → return `"You need an invitation to sign in. Contact an existing household member to receive an invitation link."`
-- [ ] No new components; uses existing `AlertBanner` error variant
+- [x] In the `errorMessage` mapping (or the existing `useMemo` that decodes the `?error` param): add case for `error === 'not_invited'` → return `"You need an invitation to sign in. Contact an existing household member to receive an invitation link."`
+- [x] No new components; uses existing `AlertBanner` error variant
 
 ---
 
@@ -886,7 +897,7 @@ Tree view, spending rollup, merge, and import mapping all operational.
 
 **AC:**
 - [ ] `GET /api/categories/duplicates`: returns groups of potential duplicates; detection criteria: exact case-insensitive match, whitespace-trimmed match, Levenshtein distance ≤ 2 (use `difflib.SequenceMatcher` with ratio ≥ 0.85); each group includes `transaction_count` per category
-- [ ] `POST /api/categories/merge`: `{ "target_id": UUID, "source_ids": [UUID] }`; validates all IDs belong to household; no source == target; no archived sources or targets; default categories cannot be merged into non-default (403); non-default can be merged into default
+- [ ] `POST /api/categories/merge`: `{ "target_id": UUID, "source_ids": [UUID] }`; validates all IDs belong to household; no source == target; no archived sources or targets
 - [ ] Merge execution (transactional): 1) update all `FinancialEvent.category_id` from source → target; 2) reassign subcategories of source to target (name-clash → append `" (2)"`); 3) archive source; all in one DB transaction
 - [ ] Returns `{ success, source_categories: [{id, name, transactions_reassigned}], subcategories_reassigned, message }`
 - [ ] Integration test: merge two categories → all events re-pointed → source archived → duplicate detection no longer returns that pair
@@ -906,7 +917,7 @@ Tree view, spending rollup, merge, and import mapping all operational.
 **AC:**
 - [ ] `POST /api/categories/import/preview`: accepts `{ "category_values": string[] }`; returns per-unique-name: `{ original_name, mapped_to_id, mapped_to_name, match_type, transaction_count, suggested_action }`; match types: `"exact"`, `"trimmed"`, `"fuzzy"`, `"unmapped"`; fuzzy uses `SequenceMatcher` ratio ≥ 0.85
 - [ ] Unmapped names default to `suggested_action: "create_new"`; matched names default to `"map"`
-- [ ] `auto_create_category(db, name, household_id, actor_id)`: creates category with auto-assigned colour from pool of non-default colours; idempotent per `(name, household_id)`
+- [ ] `auto_create_category(db, name, household_id, actor_id)`: creates category with auto-assigned colour cycling through the 14 entity accent colours (`--color-entity-*` tokens from `index.css`) based on `count(household categories) % 14`; idempotent per `(name, household_id)`
 - [ ] Category matching is case-insensitive and whitespace-trimmed before comparison
 - [ ] Unit test: 5 input names covering exact, trimmed, fuzzy, unmapped cases → correct match_type returned for each
 
@@ -914,23 +925,24 @@ Tree view, spending rollup, merge, and import mapping all operational.
 
 ### CAT-005 — Category management frontend
 
-**Size:** L · **Depends on:** FE-005, CAT-002, CAT-003 · **FRs:** FR-C-001 through FR-C-007 · **Ref:** UX §9.1–9.3
+**Size:** L · **Depends on:** FE-005, CAT-002, CAT-003 · **FRs:** FR-C-001 through FR-C-007 · **Ref:** UX §9.12, §9.1–9.3
 
 **Files:**
 ```
 + frontend/src/api/useCategories.ts
 + frontend/src/pages/Categories.tsx
 + frontend/src/components/categories/CategoryTree.tsx
-+ frontend/src/components/categories/CategoryManager.tsx
 ```
 
 **AC:**
-- [ ] `useCategories`: TanStack Query hooks wrapping all category API endpoints; `useCategoryTree()` fetches from `/api/categories/tree`
-- [ ] `CategoryManager` uses `EntityPage<Category>` with tree-view body instead of card grid
-- [ ] `CategoryTree`: collapsible tree; expand/collapse chevron (rotates 90°); subcategories indented with connector line (`border-l`); parent rows: folder icon + children count `Badge`; "Add Subcategory" button under expanded parents (top-level only)
-- [ ] Create/edit form in `EntityModal`: name input, `ColourPicker`, `EmojiIconPicker`, parent `Dropdown` (top-level only; shows `" — None (top-level)"` option)
-- [ ] Duplicate detection: "Find Duplicates" button triggers `GET /api/categories/duplicates`; results shown in grouped list with "Merge" action per group; merge opens `ConfirmationDialog` with transaction count warning
-- [ ] Default categories show lock icon; Delete action disabled with `Tooltip` "Default categories cannot be deleted"
+- [ ] `useCategories`: TanStack Query hooks wrapping all category API endpoints; `useCategoryTree()` fetches from `/api/categories/tree`; `useMergeCategories`, `useDuplicateCategories` mutations
+- [ ] `CategoryTree` per UX §9.12: full-width collapsible tree; 4px coloured `borderLeft` inline style per category colour (fallback `--color-entity-category`); chevron (`▶` rotates 90°) on parents, dash (`─`) on childless top-level rows; subcategories indented `pl-8` with `border-l border-border` connector; drag handle (`⠿`) visible on hover
+- [ ] Row shows: icon, name, type `Badge` (expense=warning/amber, income=success/green, both=default), sub-count on parents, `+ Add Sub` ghost button on expanded top-level rows, `···` ContextMenu
+- [ ] Drag and drop per UX §9.12: drag top-level onto top-level → confirmation prompt → assign `parent_id`; drag subcategory onto different parent → reassign; drag subcategory to root zone → promote (set `parent_id = null`); correct visual feedback for each state
+- [ ] Create/edit `EntityModal` per UX §9.12: Name, Icon (`EmojiIconPicker`), Colour (`ColourPicker`), Type `Dropdown`, Parent `Dropdown` (top-level only; "— None (top-level)" option; selecting None promotes subcategory; top-level rows with children have parent option disabled with Tooltip)
+- [ ] ContextMenu per UX §9.12: top-level items (Edit, Add Subcategory, Duplicate, Merge into…, Promote [disabled], Archive, Delete); subcategory items (Edit, Duplicate, Merge into…, Promote to top-level, Archive, Delete)
+- [ ] Merge flow per UX §9.12: two entry points — ContextMenu "Merge into…" (single source) and BulkActionBar "Merge" button (multi-select ≥ 2); both open the same Merge Modal with source chips, searchable target Dropdown, transaction/subcategory count `AlertBanner`; calls `POST /api/categories/merge`
+- [ ] Find Duplicates flow per UX §9.12: action bar button calls `GET /api/categories/duplicates`; no-results Toast; results Modal with per-group "Merge →" action pre-populating the merge modal
 
 ---
 
@@ -980,7 +992,7 @@ Asset valuations tracked. Account pages render with real data.
 - [ ] `update_account`: partial update; `MonetaryValue` fields accept user override for `amount_base`; `fx_delta` recomputed; audit log
 - [ ] `archive_account`: hard-delete if no events and no valuation records; soft-archive otherwise; audit log
 - [ ] `restore_account`: unarchives; audit log
-- [ ] `duplicate_account`: clones with new UUID; resets monetary values to 0; audit log
+- [ ] `duplicate_account`: clones with new UUID; copies all fields including balance and all subtype-specific fields unchanged; audit log
 - [ ] `add_owner(account_id, person_id, is_primary)` / `remove_owner`: enforces minimum 1 primary owner
 - [ ] Unit tests: create, archive blocked when events exist, hard-delete succeeds when empty, duplicate clears balances
 
@@ -1002,16 +1014,18 @@ Asset valuations tracked. Account pages render with real data.
 - [ ] `DELETE /api/accounts/{id}` returns 204 if empty; 409 with `"has-dependencies"` code if events exist
 - [ ] Owner endpoints: list, add, remove; minimum-1-owner enforced with 409
 - [ ] `GET/POST/DELETE /api/accounts/{id}/valuations`: latest valuation returned on `AccountResponse` as `current_value`
-- [ ] Integration test: full CRUD cycle for each account type; add/remove owner; valuation record lifecycle
+- [ ] Recurring config routes per ARCH §6.2: `GET /api/accounts/{id}/recurring-config` → returns config or 404; `PUT /api/accounts/{id}/recurring-config` → creates or fully replaces config (upsert); `DELETE /api/accounts/{id}/recurring-config` → removes config and returns 204
+- [ ] Integration test: full CRUD cycle for each account type; add/remove owner; valuation record lifecycle; set and delete recurring config
 
 ---
 
 ### ACCT-004 — Account frontend pages
 
-**Size:** L · **Depends on:** FE-005, ACCT-003 · **FRs:** FR-A-001 through FR-A-018 · **Ref:** UX §9.1–9.3
+**Size:** L · **Depends on:** FE-005, ACCT-003 · **FRs:** FR-A-001 through FR-A-018 · **Ref:** UX §9.1–9.3, §9.13
 
 **Files:**
 ```
++ frontend/src/types/account.ts
 + frontend/src/api/useAccounts.ts
 + frontend/src/pages/Accounts.tsx
 + frontend/src/pages/Capital.tsx
@@ -1020,11 +1034,16 @@ Asset valuations tracked. Account pages render with real data.
 ```
 
 **AC:**
-- [ ] Each page uses `EntityPage<Account>` filtered by `account_type`
-- [ ] `AccountCard` shows: name, type `Badge` (entity accent colour), balance (`MonetaryValue`), owner `Avatar` stack, status; context menu: Edit, Duplicate, Archive
-- [ ] Create/edit `EntityModal` dynamically shows subtype-specific field sections based on selected `account_type`; `MonetaryValueInput` used for balance; `RecurringConfig` toggle section in Asset/Capital/Insurance modal
-- [ ] Assets page: shows current value from latest `ValuationRecord`; "Add Valuation" button opens small modal with date + value; valuation history renders as a simple line chart (placeholder for VIZ epic)
-- [ ] `useAccounts` TanStack Query hooks cover all CRUD + owner + valuation operations
+- [ ] `types/account.ts` exports TypeScript interfaces: `Account`, `AccountOwner`, `ValuationRecord`, `RecurringConfig` — field names in `camelCase` per EDP §15.2; all nullable subtype-specific fields present as optional
+- [ ] Each page (`/accounts`, `/capital`, `/assets`, `/insurance`) uses `EntityPage<Account>` filtered by the relevant `account_type`(s); Accounts page shows `bank` and `credit_card`; Capital shows `capital`; Assets shows `asset`; Insurance shows `insurance`
+- [ ] `AccountCard` per UX §9.13: 4px left accent bar in the entity accent colour; header with name, type `Badge`, balance (`MonetaryValue`), owner `AvatarStack` (max 3); owner name `Badge` tags below the header (neutral variant, `text-xs`; primary owner prefixed with `★`); secondary info line is type-specific (see §9.13); context menu: Edit, Duplicate, Manage Owners, divider, Archive / Restore, divider, Delete (archived view only)
+- [ ] Account type selector in Create modal: row of 5 pill toggle buttons per UX §9.13; switching type when subtype fields are filled triggers a `ConfirmationDialog` ("Change account type? Switching will clear N fields."); confirmed switch clears those fields; uncofirmed switch reverts to previous type
+- [ ] Create/edit `EntityModal` per UX §9.13 field layout: full-width fields (type selector, name, balance, account_number with show/hide toggle for bank, notes, RecurringConfig section); half-width subtype field pairs; section dividers (`─── BALANCE ───`, `─── DETAILS ───`, `─── [TYPE] SETTINGS ───`)
+- [ ] Month/year field uses DatePicker in month-only mode (no day selection); displays `MM-YYYY`; stores as `YYYY-MM`
+- [ ] RecurringConfig section (Capital, Asset, Insurance modals): `Toggle` labelled "Set up recurring payment" at the bottom; ON state reveals `RecurringDateInput` + category Dropdown + optional amount override `MonetaryValueInput` + payment method Input + payee Dropdown; toggling OFF in edit mode when config exists triggers `ConfirmationDialog`; confirmed deletion calls `DELETE /api/accounts/{id}/recurring-config`
+- [ ] Assets page: `AccountCard` secondary line shows asset type + latest valuation; card body includes a `Skeleton` chart placeholder with "Chart coming soon" label (same shimmer shape as `chart` Skeleton); "Add Valuation" in context menu opens modal with Date, `MonetaryValueInput` (value + currency), Source Dropdown (manual / market_appraisal / depreciation_formula; selecting depreciation_formula reveals a Formula Dropdown), and Notes field
+- [ ] Manage Owners modal (from context menu): multi-select `Dropdown` renders selected persons as chips; each chip has a ★ icon (gold = primary, outline = non-primary); clicking ★ reassigns primary; clicking × removes owner (blocked at 1 owner); saves via batched `POST`/`DELETE` owner API calls on confirm
+- [ ] `useAccounts` TanStack Query hooks: `useAccounts(type?)`, `useAccount(id)`, `useCreateAccount`, `useUpdateAccount`, `useArchiveAccount`, `useRestoreAccount`, `useDuplicateAccount`, `useAddOwner`, `useRemoveOwner`, `useAddValuation`, `useDeleteValuation`, `useSetRecurringConfig`, `useDeleteRecurringConfig`
 
 ---
 
@@ -1764,6 +1783,8 @@ Phase M — Settings & Currencies (after Phase C; can run parallel with K)
 | AUTH-002 | Household member management backend | done |
 | AUTH-003 | Auth frontend | done |
 | AUTH-004 | Household settings and members frontend | done |
+| AUTH-005 | Public layout, invitation join flow, household delete | done |
+| AUTH-006 | Enhanced member management and invitation flow | done |
 | CAT-001 | Category schemas and service | pending |
 | CAT-002 | Category routes and hierarchy endpoints | pending |
 | CAT-003 | Category merge and duplicate detection | pending |
@@ -1812,3 +1833,4 @@ Phase M — Settings & Currencies (after Phase C; can run parallel with K)
 | 3.1 | 2026-05-29 | Ben + Claude | Marked Epic 1 (BE-001–BE-008) and Epic 2 (FE-001–FE-007) as complete. Updated all AC checkboxes to checked. Added Epic 2 delivered deliverables block (design system component inventory, authStore mock Dev User, /design-system route). BE-008 status corrected from ready-for-dev to done in story table. |
 | 3.2 | 2026-05-29 | Ben + Claude | Added FE-008 (Design System Test Page) to Epic 2. Audited all E-code fixes from the FE fix plan — 33 items cleared, 17 remaining. FE-008 retroactively delivers E23 (Divider broken JSX), E56 (AlertBanner border utilities), E68 (EntityCard variant), and E74 (BulkActionBar). |
 | 3.3 | 2026-06-01 | Ben + Claude | Marked Epics 1 and 2 done in tracking table and sprint-status.yaml. Marked FE-008 done. Epic 2 retrospective complete. ColourPicker and EmojiIconPicker post-retro fixes applied (picker trigger ternary, tab token bg-accent-active, swatch ring token, hover surface-active, clear button). Created CLAUDE.md with comprehensive agent instructions (design token rules, component patterns, CSS cascade rules, backend patterns, P1–P4 process standards, all Epic 1+2 lessons). |
+| 3.4 | 2026-06-05 | Ben + Claude | Epic 3 complete. AUTH-005 heading marked ✅ DONE. AUTH-005 and AUTH-006 added to story status tracking table. |

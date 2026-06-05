@@ -216,6 +216,22 @@ async def get_or_create_person(
 # ---------------------------------------------------------------------------
 
 
+async def _unique_household_name(db: AsyncSession, base_name: str) -> str:
+    """Return base_name if globally unique, otherwise base_name (2), (3), …"""
+    candidate = base_name
+    counter = 2
+    while True:
+        result = await db.execute(
+            select(func.count()).select_from(Household).where(
+                func.lower(Household.name) == func.lower(candidate)
+            )
+        )
+        if result.scalar() == 0:
+            return candidate
+        candidate = f"{base_name} ({counter})"
+        counter += 1
+
+
 async def _create_and_seed_household(
     db: AsyncSession,
     person: Person,
@@ -225,9 +241,10 @@ async def _create_and_seed_household(
     Shared by seed_household_if_needed (first login) and decline_invitation/leave_household.
     """
     household_id = uuid4()
+    unique_name = await _unique_household_name(db, f"{person.display_name}'s Household")
     household = Household(
         id=household_id,
-        name=f"{person.display_name}'s Household",
+        name=unique_name,
         base_currency="SGD",
         timezone="Asia/Singapore",
         created_by=person.id,
@@ -277,7 +294,8 @@ async def seed_household_if_needed(
     """If person has no household, create one with defaults.
 
     Checks for pending invitations first — if one exists, join that household
-    instead of creating a new one.
+    instead of creating a new one. Otherwise, creates a fresh household so any
+    authenticated user can operate the app solo or after leaving a previous one.
     """
     if person.household_id is not None:
         return
@@ -305,14 +323,11 @@ async def seed_household_if_needed(
         await db.flush()
         return
 
-    # Invitation-only guard: if any household exists, block uninvited signups.
-    count_result = await db.execute(select(func.count(Household.id)))
-    if count_result.scalar() > 0:
-        raise NotInvitedError()
-
-    # Step 1: flush person with household_id=NULL (nullable since migration a2064ba6d028).
-    # person.id is already set (pre-generated uuid4 in get_or_create_person),
-    # so this INSERT succeeds and satisfies households.created_by FK below.
+    # No pending invite — create a fresh household for this person.
+    # Any authenticated Google user without a household gets one; the invite
+    # system gates joining an *existing* household, not creating a new one.
+    # Step 1: flush person with household_id=NULL so the INSERT completes and
+    # person.id satisfies the households.created_by FK below.
     await db.flush()
 
     # Step 2: create household and seed defaults.

@@ -179,17 +179,8 @@ async def callback(
     # Get or create Person
     person = await auth_service.get_or_create_person(db, claims)
 
-    # Seed household on first login (invitation-only guard)
-    try:
-        await auth_service.seed_household_if_needed(db, person)
-    except auth_service.NotInvitedError:
-        await db.rollback()
-        frontend_url = getattr(settings, "FRONTEND_URL", None) or "http://localhost:5173"
-        response = Response(
-            content=f'<script>window.location.href="{frontend_url}/login?error=not_invited"</script>',
-            media_type="text/html",
-        )
-        return response
+    # Seed household on first login or re-login after leaving a household
+    await auth_service.seed_household_if_needed(db, person)
 
     # Create session
     session = await auth_service.create_session(db, person, request)
@@ -278,7 +269,7 @@ async def me(
             "defaultView": person.default_view,
             "displayCurrency": person.display_currency,
         },
-        "household": {
+        "household": None if person.household_id is None else {
             "householdId": str(person.household_id),
             "name": household.name if household else None,
             "baseCurrency": household.base_currency if household else None,

@@ -142,8 +142,8 @@ async def leave_household_route(
     person: Person = Depends(get_current_person),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Leave current household — creates new household for the person."""
-    db_person, new_household = await household_service.leave_household(db, person)
+    """Leave current household — detaches person, no new household created."""
+    db_person = await household_service.leave_household(db, person)
 
     session_obj = getattr(request.state, "session", None)
     return {
@@ -156,14 +156,9 @@ async def leave_household_route(
             "defaultView": db_person.default_view,
             "displayCurrency": db_person.display_currency,
         },
-        "household": {
-            "householdId": str(new_household.id),
-            "name": new_household.name,
-            "baseCurrency": new_household.base_currency,
-            "timezone": new_household.timezone,
-        },
+        "household": None,  # No household — person is "booted"
         "csrfToken": session_obj.csrf_token if session_obj else None,
-        "isFirstLogin": True,
+        "isFirstLogin": False,
         "pendingInvitationToken": None,
     }
 

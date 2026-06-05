@@ -170,7 +170,7 @@ export function useCancelInvitation() {
 export function useDeleteHousehold() {
   return useMutation({
     mutationFn: (confirmName: string) =>
-      api.delete('/api/household', { body: { confirm_name: confirmName } }).then(r => r.data),
+      api.delete('/api/household', { confirm_name: confirmName }).then(r => r.data),
   });
 }
 

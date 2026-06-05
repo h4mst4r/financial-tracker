@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — Architecture
-version: 2.3
+version: 2.5
 status: living
 created: 2026-05-26
 authority: Technical architecture specification. Derives from entity-design-philosophy.md.
@@ -243,27 +243,27 @@ frontend/
     │
     ├── hooks/                 # Generic hooks
     │   ├── useEntityManager.ts    # [EDP §14.2] — generic CRUD + lifecycle
-    │   ├── useVisualizationFilter.ts  # Read/write VisualizationFilter from store
-    │   └── useTheme.ts            # Theme token access
+    │   ├── useFloatingPosition.ts # Positioning for all floating panels (Dropdown, DatePicker, etc.) — see UX §4.6a
+    │   ├── useMultiSelect.ts      # Multi-select state for entity lists — see UX §4.10, §9.3
+    │   ├── useVisualizationFilter.ts  # Read/write VisualizationFilter from store [planned — Visualizations epic]
+    │   └── useTheme.ts            # Theme token access [planned — custom themes]
     │
     ├── components/
     │   ├── entity/            # Generic entity components [EDP §14]
     │   │   ├── EntityCard.tsx
     │   │   ├── EntityModal.tsx
-    │   │   └── EntityPage.tsx
+    │   │   ├── EntityPage.tsx
+    │   │   └── BulkActionBar.tsx  # Bulk-action bar shown when ≥1 entity selected — see UX §4.10
     │   │
-    │   ├── ui/                # Design system primitives (Layer 2 — see UX Spec)
+    │   ├── ui/                # Design system primitives — full inventory in ux-design-specification.md §2–6
     │   │   ├── Button.tsx
     │   │   ├── Input.tsx
-    │   │   ├── MonetaryValue.tsx  # [EDP §3.2]
-    │   │   ├── PersonRef.tsx      # [EDP §3.3]
-    │   │   ├── StatusBadge.tsx
     │   │   ├── Modal.tsx
     │   │   ├── Drawer.tsx
     │   │   ├── Toast.tsx
-    │   │   └── ...            # Full inventory in ux-design-specification.md
+    │   │   └── ...            # All remaining ui/ components: see ux-design-specification.md §2–6
     │   │
-    │   ├── visualization/     # Chart components
+    │   ├── visualization/     # Chart components [planned — Visualizations epic]
     │   │   ├── VisualizationFilterBar.tsx  # Shared filter controls
     │   │   ├── CurrencyModeToggle.tsx
     │   │   ├── SpendingByCategoryChart.tsx
@@ -277,23 +277,28 @@ frontend/
     │   │   └── PortfolioValueChart.tsx
     │   │
     │   └── layout/
-    │       ├── AppShell.tsx       # Sidebar + topbar wrapper
+    │       ├── AppShell.tsx       # Sidebar + topbar wrapper; requires auth
+    │       ├── PublicPage.tsx     # Shell-less centred layout for auth/error pages — see UX §9.6
     │       ├── Sidebar.tsx
-    │       ├── Topbar.tsx
-    │       └── PersonDashboardFilter.tsx
+    │       └── Topbar.tsx
     │
     ├── pages/                 # Route-level page components
-    │   ├── Dashboard.tsx
-    │   ├── Accounts.tsx
-    │   ├── Capital.tsx
-    │   ├── Assets.tsx
-    │   ├── Insurance.tsx
-    │   ├── Transactions.tsx
-    │   ├── RecurringPayments.tsx
-    │   ├── Transfers.tsx
-    │   ├── Budgets.tsx
-    │   ├── Categories.tsx
-    │   └── Settings.tsx
+    │   ├── Dashboard.tsx          # /
+    │   ├── Accounts.tsx           # /accounts
+    │   ├── Capital.tsx            # /capital
+    │   ├── Assets.tsx             # /assets
+    │   ├── Insurance.tsx          # /insurance
+    │   ├── Transactions.tsx       # /transactions
+    │   ├── RecurringPayments.tsx  # /recurring
+    │   ├── Transfers.tsx          # /transfers
+    │   ├── Budgets.tsx            # /budgets
+    │   ├── Categories.tsx         # /categories
+    │   ├── Settings.tsx           # /settings
+    │   ├── Login.tsx              # /login
+    │   ├── JoinHousehold.tsx      # /join/:token — see UX §9.7
+    │   ├── NotFound.tsx           # * catch-all
+    │   ├── Forbidden.tsx          # /forbidden
+    │   └── DesignSystem.tsx       # /design-system — dev/QA component catalogue; see UX §9.10
     │
     ├── types/                 # TypeScript interfaces mirroring Pydantic schemas
     │   ├── entities.ts        # BaseEntity, MonetaryValue, PersonRef, StatusEnum
@@ -415,10 +420,12 @@ class Person(BaseEntity):
     role:             Mapped[str]           = mapped_column(String(20), nullable=False, default="member")
     # role values: "owner" | "admin" | "member"
     display_currency: Mapped[str]           = mapped_column(String(3), nullable=False, default="SGD")
-    joined_at:        Mapped[datetime]      = mapped_column(DateTime(timezone=True), default=utcnow)
+    default_view:     Mapped[str]           = mapped_column(String(20), nullable=False, default="household")
+    # default_view: "household" | "personal"  — persisted Sidebar view toggle state [FR-P-006]
     last_active_at:   Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     google_sub:       Mapped[str]           = mapped_column(String(200), nullable=False, unique=True, index=True)
     # google_sub: Google OAuth subject identifier
+    # Note: joined_at is not a separate field — use created_at (inherited from BaseEntity) instead.
 
     household: Mapped["Household"] = relationship(back_populates="persons")
 
@@ -437,7 +444,8 @@ class HouseholdInvitation(Base):
     accepted_at:  Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at:   Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
     status:       Mapped[str]            = mapped_column(String(20), default="pending")
-    # status: "pending" | "accepted" | "expired" | "cancelled"
+    # status: "pending" | "accepted" | "expired" | "cancelled" | "declined"
+    # "declined" added in AUTH-006 migration — person rejects invitation and gets their own household
 
 
 # models/account.py
@@ -935,12 +943,12 @@ PERSONS
   POST   /api/persons/invite         → Create invitation (admin+)
   GET    /api/persons/invitations    → List pending invitations (admin+)
   DELETE /api/persons/invitations/{id} → Cancel invitation (admin+)
-  POST   /api/persons/leave          → Leave household (non-owner only); creates new household for the person; returns { person, household, csrfToken, isFirstLogin: true }
+  POST   /api/persons/leave          → Leave household (non-owner only); detaches person (household_id → null); no new household created; returns { person, household: null, csrfToken, isFirstLogin: false }; frontend clears auth and redirects to /login; on next login seed_household_if_needed creates a fresh household
 
 INVITATIONS (public — no auth required for GET; auth required for POST)
   GET    /api/invitations/{token}    → Fetch invitation details (returns 404 / 410 for expired|accepted|cancelled|declined)
-  POST   /api/invitations/{token}/accept → Accept invitation; email must match; idempotent if already in household
-  POST   /api/invitations/{token}/decline → Decline invitation (authenticated); email must match; if person is in invited household creates new household and reassigns; returns { person, household, csrfToken, isFirstLogin: true }
+  POST   /api/invitations/{token}/accept  → Accept invitation; email must match; idempotent if already in household; **409 if person already belongs to a different household** (must leave/delete current household first)
+  POST   /api/invitations/{token}/decline → Decline invitation (authenticated); email must match; if person is in invited household detaches them; creates new household and assigns person as owner; returns { person, household, csrfToken, isFirstLogin: true }
 
 ACCOUNTS
   GET    /api/accounts               → List (filter: ?type=bank|credit_card|capital|asset|insurance)
@@ -988,13 +996,19 @@ BUDGETS
   DELETE /api/budgets/{id}           → Hard delete (empty only)
 
 CATEGORIES
-  GET    /api/categories             → List (filter: ?include_archived=false)
+  GET    /api/categories             → List (filter: ?include_archived, ?top_level, ?parent_id); sorted alpha case-insensitive
   POST   /api/categories             → Create category
-  GET    /api/categories/{id}        → Get category
+  GET    /api/categories/tree        → Full hierarchy as nested tree; supports ?include_archived
+  GET    /api/categories/duplicates  → Groups of potential duplicates (exact, trimmed, fuzzy SequenceMatcher ≥ 0.85); each group includes transaction_count per category
+  POST   /api/categories/merge       → { target_id, source_ids[] }; reassigns events + subcategories, archives sources; transactional
+  POST   /api/categories/import/preview → { category_values: string[] }; returns per-name match_type + suggested_action
+  GET    /api/categories/{id}        → Get category (includes children_count, parent_name)
   PATCH  /api/categories/{id}        → Update category
-  POST   /api/categories/{id}/archive  → Archive
+  POST   /api/categories/{id}/archive  → Archive; auto-promotes children to top-level
+  POST   /api/categories/{id}/restore  → Restore archived category
+  PATCH  /api/categories/{id}/reassign-children → { new_parent_id: UUID | null }; bulk reassign subcategories
+  GET    /api/categories/{id}/spending-summary  → Spending totals for category + children (?from=&to=)
   DELETE /api/categories/{id}        → Hard delete (empty only)
-  POST   /api/categories/defaults    → Create default household categories
 
 CURRENCIES
   GET    /api/currencies             → List household currencies
@@ -1107,39 +1121,34 @@ GET /api/visualizations/compare/categories
 
 ### 6.4 Error Contract
 
-Error responses follow **RFC 7807 — Problem Details for HTTP APIs** (IETF standard).
-`Content-Type: application/problem+json`
+All error responses use a consistent JSON envelope:
 
 ```json
 {
-  "type":     "https://financialtracker.app/errors/validation-error",
-  "title":    "Validation Error",
-  "status":   400,
-  "detail":   "The 'amount' field must be greater than zero.",
-  "instance": "/api/events",
-  "errors":   [{"field": "amount", "message": "Must be > 0"}]
+  "error":  "Human-readable description",
+  "code":   "SNAKE_CASE_ERROR_CODE",
+  "detail": {}
 }
 ```
 
-| HTTP Status (RFC 9110) | `type` path | `title` | Meaning |
-|---|---|---|---|
-| 400 | `/errors/validation-error` | Validation Error | Pydantic field-level failure — `errors[]` has field details |
-| 400 | `/errors/business-rule-violation` | Business Rule Violation | e.g. `is_shared_expense` on a transfer |
-| 401 | `/errors/not-authenticated` | Not Authenticated | No valid session cookie |
-| 403 | `/errors/insufficient-role` | Insufficient Role | Valid session, role too low |
-| 404 | `/errors/not-found` | Not Found | Entity absent or not in household |
-| 409 | `/errors/duplicate-detected` | Duplicate Detected | Duplicate transaction — `instance` holds candidate ID |
-| 409 | `/errors/has-dependencies` | Has Dependencies | Hard delete blocked — entity has linked records |
-| 422 | `/errors/unprocessable` | Unprocessable | Semantically invalid (e.g. `end_date` before `start_date`) |
-| 500 | `/errors/internal-error` | Internal Server Error | Unexpected failure — logged server-side |
+`Content-Type: application/json`
 
-**HTTP status codes follow RFC 9110** (the current HTTP semantics standard).
-`type` URIs are resolvable documentation pages (served as static HTML in production).
-The `instance` field identifies the specific request URI where the error occurred.
+| HTTP Status | `code` value | Meaning |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Pydantic field-level failure — `detail` contains `exc.errors()` array |
+| 400 | `BUSINESS_RULE_VIOLATION` | e.g. `is_shared_expense` on a transfer |
+| 401 | `NOT_AUTHENTICATED` | No valid session cookie or session expired |
+| 403 | `INSUFFICIENT_ROLE` | Valid session, role too low |
+| 403 | `FORBIDDEN` | Authenticated but not authorised for this specific resource |
+| 404 | `NOT_FOUND` | Entity absent or not in household |
+| 409 | `DUPLICATE_DETECTED` | Duplicate transaction — `detail` holds `candidate_id` |
+| 409 | `HAS_DEPENDENCIES` | Hard delete blocked — entity has linked records |
+| 410 | `GONE` | Resource existed but is no longer available (e.g. expired invitation) |
+| 422 | `UNPROCESSABLE` | Semantically invalid (e.g. `end_date` before `start_date`) |
+| 500 | `INTERNAL_ERROR` | Unexpected failure — logged server-side, detail suppressed |
 
-FastAPI's built-in validation errors (`RequestValidationError`) are caught and
-reformatted to RFC 7807 before returning — the raw Pydantic error format is never
-exposed to clients.
+FastAPI's built-in `RequestValidationError` is caught by the global handler and
+reformatted to the envelope above — the raw Pydantic error array is placed in `detail`.
 
 ---
 
@@ -1178,8 +1187,9 @@ Browser                     Backend                      Google
 
 1. `auth_service.seed_household_if_needed()` checks for a pending `HouseholdInvitation` matching the verified email.
 2. **If matching invitation found:** assign `person.household_id` and `person.role = "member"` — do NOT mark invitation accepted yet. Acceptance is explicit: the person must visit `/join/:token` and click "Accept". The `accept_invitation` service is idempotent when the person is already in the target household.
-3. **If no matching invitation and at least one Household exists in DB:** this is an uninvited signup — raise `NotInvitedError`. Callback rolls back the new Person record and redirects to `{FRONTEND_URL}/login?error=not_invited`.
-4. **If no matching invitation and no Household exists:** this is the first user — create a new household, seed defaults, person is `owner`.
+3. **If no matching invitation:** create a new household, seed defaults, person is `owner`. This covers first-time users, users who left a household and re-login, and owners whose household was deleted.
+
+Note: the former `NotInvitedError` guard (block if any household exists) has been removed. Any authenticated Google user without a household can create one. The invitation system gates *joining an existing household*, not creating a new one.
 
 `/auth/me` returns `pendingInvitationToken: str | null` (UUID of the still-pending invitation for this email/household combination, if any) so `useAuth.ts` can redirect the person to `/join/:token` regardless of whether they arrived via the join link or via direct login. It also returns `isFirstLogin: bool` (true when `person.role == "owner"` and `person.created_at` is within 2 minutes) so the frontend can show the welcome toast.
 
@@ -1205,8 +1215,9 @@ and requires a dedicated test Google account (credentials in Secret Manager, `te
 
 ### 7.2 Session Management
 
-- Sessions stored in `sessions` table (SQLite). Record: `{id, person_id, expires_at, last_active_at, ip, user_agent}`.
-- Session cookie: `HttpOnly`, `Secure`, `SameSite=Strict`, 30-day max-age.
+- Sessions stored in `sessions` table (SQLite). Record: `{id, person_id, expires_at, last_activity_at, csrf_token, ip, user_agent}`.
+- Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`, 30-day max-age.
+  (`Lax` is required — `Strict` would block the cookie on the OAuth redirect callback from Google.)
 - **Sliding expiry:** `last_active_at` updated on every authenticated request. Session
   expires if no activity for 30 minutes (configurable via `SESSION_IDLE_MINUTES` secret).
 - On expiry: session record deleted; client receives 401.
@@ -1384,7 +1395,9 @@ const router = createBrowserRouter([
   { path: "/login",         element: <Login /> },
   { path: "/callback",      element: <OAuthCallback /> },
   { path: "/join/:token",   element: <JoinHousehold /> },
+  { path: "/forbidden",     element: <Forbidden /> },
   { path: "/design-system", element: <DesignSystem /> }, // Live component catalogue — dev/QA use
+  { path: "*",              element: <NotFound /> },
 ]);
 ```
 
@@ -1924,3 +1937,6 @@ async def compute_budget_actuals(
 | 2.1 | 2026-05-26 | Ben + Claude | Date format: ISO 8601 wire + DD-MM-YYYY display. Visualization endpoints: budget history, capital history, person comparison, category comparison. Error contract updated to RFC 7807 Problem Details (IETF standard). Mock OAuth strategy for tests — real credentials required only for one E2E smoke test. Multi-currency breadth: all ISO 4217 supported (SGD, NZD, USD, PHP, etc.) |
 | 2.2 | 2026-05-29 | Ben + Claude | Frontend architecture section updated to reflect Epic 2 completion: §8.0 Design Token System (Tailwind v4 @theme/@utility pattern, component layer map); §8.2 Auth Store (mock Dev User for pre-OAuth development); §8.1 routing updated with /design-system route; §8.3 VisualizationFilter and §8.4 component architecture renumbered. |
 | 2.3 | 2026-06-01 | Ben + Claude | §3.2 Frontend directory tree: removed tailwind.config.ts (Tailwind v4 is config-in-CSS; no config file exists). §7.3 CSRF: corrected "single-use rotation" claim — token is session-lifetime, not rotated per mutation. Frontmatter version corrected to match revision history. |
+| 2.4 | 2026-06-05 | Ben + Claude | §3.2 Frontend directory tree: hooks/ updated — added useFloatingPosition (built, Epic 2) and useMultiSelect (built, Epic 2); marked useVisualizationFilter and useTheme as planned. components/entity/ updated — added BulkActionBar. components/layout/ updated — added PublicPage, removed PersonDashboardFilter (planned, Visualizations epic); ui/ comment updated to cross-reference UX spec §2–6. pages/ updated — added Login, JoinHousehold, NotFound, Forbidden, DesignSystem with route annotations. §8.1 Router: added /forbidden (Forbidden) and * catch-all (NotFound) routes. |
+| 2.5 | 2026-06-05 | Ben + Claude | Epic 3 spec alignment pass. §4.4 Person model: added `default_view` field; removed stale `joined_at` (use inherited `created_at`). §4.4 HouseholdInvitation: added `"declined"` to status values (AUTH-006 migration). §7.2 Session record: added `csrf_token` to field list. Session cookie: corrected `SameSite=Strict` → `SameSite=Lax` with rationale (OAuth callback redirect). §6.2 PERSONS/INVITATIONS: added `POST /api/persons/leave` and `POST /api/invitations/{token}/decline` endpoints (AUTH-006). §6.4 Error contract: replaced RFC 7807 spec (was planned but not implemented) with the actual envelope `{error, code, detail}` used in `main.py`. |
+| 2.6 | 2026-06-05 | Ben + Claude | Bug fix pass — household creation and invitation guard logic. §6.2 `POST /api/persons/leave`: corrected — does NOT create new household; returns `household: null`; frontend clears auth and redirects to login; fresh household created on next login via `seed_household_if_needed`. §6.2 `POST /api/invitations/{token}/accept`: added strict 409 guard — person must have no current household (must leave/delete first) before accepting. §7.1 `seed_household_if_needed`: removed `NotInvitedError` global guard; any authenticated user without a household now gets one created; invitation system gates joining only. `/auth/me`: returns `household: null` (JSON null, not string "None") when `person.household_id` is null; `useAuth.ts` handles null household by clearing auth and redirecting to login. |
