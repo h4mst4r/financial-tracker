@@ -271,9 +271,22 @@ describe('Settings Page', () => {
     render(<MemoryRouter><Settings /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /members/i }));
 
-    // Remove button should be present for "Other Member" (not own row)
-    const removeButtons = screen.getAllByRole('button', { name: /remove other member/i });
-    expect(removeButtons.length).toBeGreaterThan(0);
+    // Per UX spec §9.8.2, actions use a ContextMenu (⋯) trigger per row.
+    // The admin row (own row) shows "—" — no ContextMenu.
+    // The "Other Member" row shows a ContextMenu trigger button.
+    // Open the ContextMenu and verify "Remove member" menuitem is present.
+    // There should be exactly one ContextMenu trigger (on the Other Member row).
+    const contextMenuTriggers = screen.getAllByRole('button', {
+      name: '',
+    }).filter((btn) => btn.getAttribute('aria-haspopup') === 'true');
+    // One trigger is the ContextMenu on the Other Member row
+    expect(contextMenuTriggers.length).toBeGreaterThanOrEqual(1);
+
+    // Click the trigger to open the menu
+    fireEvent.click(contextMenuTriggers[0]);
+
+    // Menuitem "Remove member" should be visible (rendered via portal)
+    expect(screen.getByRole('menuitem', { name: /remove member/i })).toBeInTheDocument();
   });
 
   it('Role badges rendered for all members', () => {

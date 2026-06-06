@@ -52,17 +52,18 @@ export const Badge: React.FC<BadgeProps> = ({
 		<span className={`${baseClasses} ${variantClasses} ${entityClasses} ${className}`} style={entityStyle} onClick={onClick}>
 			{children}
 			{dismissible && (
-				<button
-					type="button"
-					className="ml-0.5 hover:text-error transition-colors"
+				<span
+					role="button"
+					tabIndex={-1}
+					aria-label="Dismiss"
+					className="ml-0.5 hover:text-error transition-colors cursor-pointer"
 					onClick={(e) => {
 						e.stopPropagation();
 						onDismiss?.();
 					}}
-					aria-label="Dismiss"
 				>
 					<X size={12} aria-hidden="true" />
-				</button>
+				</span>
 			)}
 		</span>
 	);

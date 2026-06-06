@@ -414,6 +414,16 @@ async def restore_category(
     category.archived_by = None
     category.status = StatusEnum.active
 
+    # If the parent is still archived, promote to top-level rather than restoring a dangling reference
+    if category.parent_id is not None:
+        parent_result = await db.execute(
+            select(Category).where(Category.id == category.parent_id)
+        )
+        parent = parent_result.scalar_one_or_none()
+        if parent is None or parent.archived:
+            category.parent_id = None
+            category.depth = 0
+
     await db.flush()
 
     await audit.log(

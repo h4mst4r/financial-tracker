@@ -18,6 +18,7 @@ from backend.dependencies import get_db
 from backend.middleware.auth_middleware import DevBypassMiddleware
 from backend.middleware.csrf_middleware import CSRFMiddleware
 from backend.routes import auth as auth_routes
+from backend.routes import categories as categories_routes
 from backend.routes import household as household_routes
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,9 @@ def create_app() -> FastAPI:
 
     # --- Household and member management routes ---
     app.include_router(household_routes.router, prefix="/api")
+
+    # --- Category routes ---
+    app.include_router(categories_routes.router, prefix="/api")
 
     # --- Health check ---
     @app.get("/health")

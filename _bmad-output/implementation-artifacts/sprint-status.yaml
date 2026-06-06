@@ -1,5 +1,5 @@
 # generated: 2026-05-28
-# last_updated: 2026-06-06T00:00
+# last_updated: 2026-07-09T00:00
 # project: financial-tracker
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-28
-last_updated: 2026-06-06T00:00
+last_updated: 2026-06-06T00:01
 project: financial-tracker
 project_key: NOKEY
 tracking_system: file-system
@@ -83,7 +83,7 @@ development_status:
   # Epic 4 — Categories
   epic-4: in-progress
   cat-001-category-schemas-and-service-crud-seeding: done
-  cat-002-category-routes-and-hierarchy-endpoints: backlog
+  cat-002-category-routes-and-hierarchy-endpoints: done
   cat-003-category-merge-and-duplicate-detection: backlog
   cat-004-import-category-mapping-service: backlog
   cat-005-category-management-frontend: backlog

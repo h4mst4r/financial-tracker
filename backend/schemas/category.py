@@ -46,6 +46,12 @@ class CategoryCreate(BaseModel):
         return v
 
 
+class ReassignChildrenRequest(BaseModel):
+    """Request body for bulk-reassigning subcategories."""
+
+    new_parent_id: Optional[UUID] = None
+
+
 class CategoryUpdate(BaseModel):
     """Request body for partial category updates — all fields optional."""
 
