@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",  # ignore VITE_* and other frontend-only vars in .env
     )
 
     # --- Database ---
@@ -42,6 +43,12 @@ class Settings(BaseSettings):
 
     # --- Debug ---
     DEBUG: bool = False
+
+    # --- Developer tooling ---
+    # NEVER set AUTH_BYPASS_ENABLED=true in production.
+    # When true, localhost requests are auto-authenticated as a fixed dev user.
+    AUTH_BYPASS_ENABLED: bool = False
+    ENV: str = "development"
 
     def __post_init__(self) -> None:
         """Warn when default secrets are used."""

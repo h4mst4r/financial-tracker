@@ -6,11 +6,13 @@
  * AUTH-005 — refactored to use PublicPage layout component
  */
 
-import { useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { AlertBanner } from '../components/ui/AlertBanner';
 import { PublicPage } from '../components/layout/PublicPage';
+import { devLogin } from '../api/useAuthApi';
+import { useAuthStore } from '../store/authStore';
 
 /** Inline Google "G" logo SVG */
 const GoogleIcon = () => (
@@ -35,9 +37,14 @@ const GoogleIcon = () => (
 );
 
 export function Login() {
+  // Read at render time so vi.stubEnv works in tests (module-level constants are frozen at import)
+  const devBypassEnabled = import.meta.env.AUTH_BYPASS_ENABLED === 'true';
   const [searchParams] = useSearchParams();
   const error = searchParams.get('error');
   const deleted = searchParams.get('deleted') === '1';
+  const [devLoading, setDevLoading] = useState(false);
+  const navigate = useNavigate();
+  const setAuth = useAuthStore((s) => s.setAuth);
 
   const errorMessage = useMemo(() => {
     if (!error) return null;
@@ -56,6 +63,21 @@ export function Login() {
   const handleSignIn = () => {
     // Note: backend /auth/login ignores any query params — redirect to root OAuth flow
     window.location.href = '/auth/login';
+  };
+
+  const handleDevLogin = async () => {
+    setDevLoading(true);
+    try {
+      const data = await devLogin();
+      setAuth(
+        { ...data.person, defaultView: data.person.defaultView as 'household' | 'personal' },
+        data.household.householdId,
+        data.csrfToken,
+      );
+      navigate('/');
+    } finally {
+      setDevLoading(false);
+    }
   };
 
   return (
@@ -88,6 +110,21 @@ export function Login() {
         <GoogleIcon />
         <span className="truncate">Sign in with Google</span>
       </Button>
+
+      {devBypassEnabled && (
+        <Button
+          variant="secondary"
+          size="lg"
+          onClick={handleDevLogin}
+          disabled={devLoading}
+          className="w-full justify-center mt-3"
+          aria-label="Dev Login"
+        >
+          <span className="truncate">
+            {devLoading ? 'Logging in…' : 'Dev Login (bypass Google OAuth)'}
+          </span>
+        </Button>
+      )}
     </PublicPage>
   );
 }

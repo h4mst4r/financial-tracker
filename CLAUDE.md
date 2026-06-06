@@ -21,46 +21,35 @@ Story files live in `_bmad-output/implementation-artifacts/stories/`. Read the s
 
 ## 2. Process Standards (Non-Negotiable)
 
----
 ### P0 — No Unauthorized UI (Highest Priority Rule)
 
-Before adding ANY user-visible element to a page — button, form field, section, panel, menu item, tab, or any interactive control — you MUST verify it appears in `_bmad-output/planning-artifacts/ux-design-specification.md` under the relevant page/component section.
+Before adding ANY user-visible element — button, form field, section, panel, menu item, tab, or interactive control — verify it appears in `_bmad-output/planning-artifacts/ux-design-specification.md` under the relevant page/component section.
 
-**If the UX spec section for that page does not exist, or does not mention the element: DO NOT BUILD IT.**
+**If the UX spec section does not exist or does not mention the element: DO NOT BUILD IT.**
 
-The story's ACs are NOT sufficient authorization on their own. Agents frequently invent "logical" UI that was never designed. Every unauthorized addition causes visual inconsistency, introduces untested behaviour, and requires future cleanup work.
+The story's ACs are NOT sufficient authorization on their own. If you believe an element is necessary but it's not in the spec: stop, log it in the story's Dev Agent Record as "Spec Gap — requires UX spec update before implementation", and implement only what the spec explicitly describes.
 
-If you believe a UI element is necessary but it's not in the spec:
-1. **Stop**. Do not implement it.
-2. Note it in the story's Dev Agent Record as a "Spec Gap — requires UX spec update before implementation".
-3. Implement only what the spec explicitly describes.
-
-This rule exists because agents have repeatedly added unauthorized elements (e.g. Delete Household danger zone, role dropdowns, unauthorized buttons) that the product owner never approved.
-
----
 ### P1 — Visual Verification is Part of Done
-Before marking any frontend story done, the delivered component(s) must be verified either:
+Before marking any frontend story done, verify the delivered component(s) either:
 - On the `/design-system` page against the design token and variant spec, **or**
 - In the app in-context against the UX specification section referenced in the story
 
-Tests going green is a necessary but not sufficient condition for Done. A story that has passing tests but unverified visual output is not Done.
+Tests going green is necessary but not sufficient. A story with passing tests but unverified visual output is not Done.
 
 ### P2 — Document CSS / Architecture Nuances at Story-Close
-Every frontend story file must include a **"Known CSS / Architecture Nuances"** section in its Dev Agent Record (alongside the existing File List and Completion Notes). This section captures:
-- Any non-obvious CSS behaviour discovered (cascade, specificity, shorthand interactions)
-- Any token or utility that has a known constraint (e.g. "inline style required here, utility class conflicts with `border` shorthand")
-- Any pattern that future agents should inherit rather than reinvent
-
-This is the frontend equivalent of Epic 1's "Lessons Learned" discipline in backend story files.
+Every frontend story file must include a **"Known CSS / Architecture Nuances"** section in its Dev Agent Record. Capture:
+- Non-obvious CSS behaviour (cascade, specificity, shorthand interactions)
+- Token or utility constraints (e.g. "inline style required — utility conflicts with `border` shorthand")
+- Patterns future agents should inherit rather than reinvent
 
 ### P3 — Token Sweep Before Changing Component Mechanism
-Before changing how any existing component references a design decision (e.g. switching from inline style to utility class, or from hardcoded value to token), verify the compiled CSS ordering for the affected properties:
-1. Run `npx vite build` and inspect the output CSS for the relevant rules
+Before switching how a component references a design decision (e.g. inline style → utility class):
+1. Run `npx vite build` and inspect output CSS for the affected rules
 2. Confirm the new rule comes AFTER any Tailwind shorthand that could override it
-3. If ordering cannot be guaranteed, use inline style (which has specificity 1-0-0-0 and is always cascade-immune)
+3. If ordering cannot be guaranteed, use inline style (specificity 1-0-0-0, always cascade-immune)
 
 ### P4 — No Magic Values
-All hardcoded colour, opacity, size, z-index, transition duration, or breakpoint values that represent a design decision must be named tokens in `index.css`. See EDP §14.5 and UX §1.9 for the authoritative lists. If a needed token doesn't exist, add it — don't inline it.
+All hardcoded colour, opacity, size, z-index, transition duration, or breakpoint values must be named tokens in `index.css`. If a token doesn't exist, add it — don't inline it.
 
 Never use:
 - Raw hex colors: `#6366f1` → use `text-primary` or `bg-primary`
@@ -82,11 +71,17 @@ Every story, every time, in this order:
 4. **Confirm dependencies** — all `Depends on` stories must be `done` in `sprint-status.yaml`
 5. **Run existing tests** — must be green before writing a single line of new code
 6. **Implement** — only what the AC requires; no unrequested refactors, no extra abstractions
-7. **Visual verify** (frontend only) — open `/design-system` page or the feature page in browser; confirm against UX spec before marking Done
-8. **Check off ACs** — update `epics.md` or the story file with `[x]` for each confirmed criterion
-9. **Update sprint-status.yaml** — set story to `done`
+7. **Visual verify** (frontend only) — open `/design-system` or the feature page; confirm against UX spec
+8. **Check off ACs** — update the story file in `stories/` with `[x]` for each confirmed criterion (do NOT update `epics.md`)
+9. **Update sprint-status.yaml** — set story to `done` (this is the sole source of truth for status)
 
-**Definition of Done (frontend):** All ACs checked AND visual verification passed. Tests passing alone is NOT Done.
+**Definition of Done (frontend):** All ACs checked AND visual verification passed. Tests alone are NOT Done.
+
+**Constraints (apply throughout):**
+- No error handling for impossible cases — trust framework and SQLAlchemy guarantees
+- No comments explaining what code does — only non-obvious WHY (hidden constraint, workaround, subtle invariant)
+- No `any` in TypeScript — look up the type in existing types files
+- No new Tailwind utilities without a corresponding `@utility` block in `index.css`
 
 ---
 
@@ -96,52 +91,52 @@ All design decisions live in `frontend/src/index.css` as `@theme` CSS variables 
 **Never use raw hex values, px sizes, opacity decimals, or z-index integers in TSX components.**
 If a token you need doesn't exist, add it to `index.css` — don't hardcode it inline.
 
-### 4.1 Background Hierarchy (use in this order, outermost → innermost)
+### 4.1 Background Hierarchy (outermost → innermost)
 
 ```
-bg-bg              #09090f   — Page root, outer shell
-bg-surface         #16162a   — Main content areas, sidebar
-bg-surface-raised  #1c1c34   — Cards, panels, picker dropdowns, inputs
-bg-surface-hover   #1e1e38   — List row hover (barely visible — see §3.6)
-bg-surface-active  #26264a   — Small button hover INSIDE panels, selected states
-bg-surface-overlay #222244   — Elevated floating panels on top of raised panels
+bg-bg              — Page root, outer shell
+bg-surface         — Main content areas, sidebar, Topbar (NOT bg-bg — spec §5.3)
+bg-surface-raised  — Cards, panels, picker dropdowns, inputs
+bg-surface-hover   — List row hover (barely visible — full-width rows only)
+bg-surface-active  — Small button hover INSIDE panels, selected states
+bg-surface-overlay — Elevated floating panels on top of raised panels
 ```
 
-### 43.2 Text Tokens
+### 4.2 Text Tokens
 
 ```
-text-text-primary    #e8e8f0   — All body text, selected values, labels
-text-text-secondary  #9898b0   — Inactive tabs, placeholder-adjacent labels, sub-labels
-text-text-muted      #484860   — Placeholder text, disabled labels ONLY (very low contrast — avoid for interactive text)
-text-accent          #06b6d4   — Active picker tabs, accent interactive elements (cyan)
-text-primary         #6366f1   — Active nav/control tabs, selected check marks (indigo)
+text-text-primary    — All body text, selected values, labels
+text-text-secondary  — Inactive tabs, placeholder-adjacent labels, sub-labels
+text-text-muted      — Placeholder text, disabled labels ONLY (very low contrast — avoid for interactive text)
+text-accent          — Active picker tabs, accent interactive elements (cyan)
+text-primary         — Active nav/control tabs, selected check marks (indigo)
 ```
 
 ### 4.3 Border Tokens
 
 ```
-border-border         #2a2a45  — Default input/panel border
-border-border-light   #3a3a5c  — Hover border
-border-border-strong  #4a4a6a  — Focused non-picker inputs
-border-accent         #06b6d4  — Open picker/dropdown trigger border (cyan)
-border-error          #ef4444  — Error state border
-border-border-focus   #6366f1  — Keyboard focus ring border (indigo)
+border-border         — Default input/panel border
+border-border-light   — Hover border
+border-border-strong  — Focused non-picker inputs
+border-accent         — Open picker/dropdown trigger border (cyan)
+border-error          — Error state border
+border-border-focus   — Keyboard focus ring border (indigo)
 ```
 
-### 4.4 Ring / Glow Tokens (for focus rings — always paired with `ring-2`)
+### 4.4 Ring / Glow Tokens (always paired with `ring-2`)
 
 ```
-ring-glow-accent    rgb(6 182 212 / 0.2)    — Picker triggers when open (Dropdown, DatePicker, ColourPicker, EmojiIconPicker)
-ring-glow-primary   rgb(99 102 241 / 0.2)   — Text inputs on focus
-ring-glow-error     rgb(239 68 68 / 0.2)    — Error state inputs
+ring-glow-accent    — Picker triggers when open (Dropdown, DatePicker, ColourPicker, EmojiIconPicker)
+ring-glow-primary   — Text inputs on focus
+ring-glow-error     — Error state inputs
 ```
 
 ### 4.5 Fill / Active State Tokens
 
 ```
-bg-accent-subtle    primary at 15%  — Nav sidebar active item background
-bg-control-active   primary at 20%  — Active tab in SegmentedControl, Topbar navigation tabs
-bg-accent-active    accent  at 20%  — Active tab INSIDE picker panels (ColourPicker, EmojiIconPicker) ONLY
+bg-accent-subtle    — Nav sidebar active item background
+bg-control-active   — Active tab in SegmentedControl, Topbar navigation tabs
+bg-accent-active    — Active tab INSIDE picker panels (ColourPicker, EmojiIconPicker) ONLY
 ```
 
 **Critical distinction:** `bg-control-active` is for navigation/control tabs. `bg-accent-active` is exclusively for tabs inside picker dropdown panels. Getting this backwards makes pickers look wrong.
@@ -200,7 +195,7 @@ className={`
 
 ### 5.3 Hover Token for Small Buttons Inside Panels
 
-Grid buttons inside picker panels (emoji cells, icon cells, calendar day buttons) sit on a `bg-surface-raised` background. The delta from `surface-raised` → `surface-hover` is only 4 per channel — nearly invisible for 40×40px buttons.
+Grid buttons inside picker panels (emoji cells, icon cells, calendar day buttons) sit on `bg-surface-raised`. The delta to `bg-surface-hover` is only 4 per channel — nearly invisible for small buttons.
 
 ```
 INSIDE a picker panel grid: hover:bg-surface-active   ← use this
@@ -239,7 +234,7 @@ style={{ '--entity-accent': entity.colour, borderLeft: `4px solid ${entity.colou
 
 Then children can use `bg-entity-accent-muted` and `text-entity-accent`.
 
-### 54.6 Nested Button Rule — Never Button Inside Button
+### 5.6 Nested Button Rule — Never Button Inside Button
 
 `<button>` cannot be a descendant of `<button>` (invalid HTML, React hydration warning).
 
@@ -290,7 +285,7 @@ The Tooltip uses CSS hover — never `setTimeout` or `onMouseEnter/Leave` state:
 </span>
 ```
 
-Only JS in Tooltip: an Escape key listener to force-dismiss.
+Only JS in Tooltip: an Escape key listener to force-dismiss. Tooltips auto-flip above→below when near the top viewport edge — no `placement` prop needed.
 
 ### 5.9 SegmentedControl Pattern
 
@@ -321,20 +316,20 @@ className="shimmer-gradient animate-shimmer rounded"
 
 Stat and chart skeleton shapes need a `bg-surface` container frame or they appear as floating bars.
 
-### 5.11 Shell Background Hierarchy
-
-```
-Page body:              bg-bg        (#09090f)
-Sidebar:                bg-surface   (#16162a)
-Topbar:                 bg-surface   (#16162a)  ← NOT bg-bg (spec §5.3)
-Main content area:      bg-bg        (#09090f)
-Cards / panels:         bg-surface-raised (#1c1c34)
-Inputs / dropdowns:     bg-surface-raised (#1c1c34)
-```
-
 ---
 
 ## 6. Backend Architecture Rules
+
+### 6.0 — Always Activate the Venv First
+
+Before running ANY Python command (pytest, uvicorn, alembic, pip):
+
+```
+Windows PowerShell:  .venv\Scripts\activate
+Bash / WSL:          source .venv/bin/activate
+```
+
+The venv is at `.venv/` in the project root. Never run `python` or `pip` without it active.
 
 ### 6.1 Database & ORM
 
@@ -377,6 +372,18 @@ Archiving a category auto-promotes its children to top-level (`parent_id = NULL`
 
 Session sliding window uses `last_activity_at` (updated on every request). CSRF token has a `used: bool` field but is **not** single-use in middleware — the field exists for audit purposes only.
 
+### 6.7 Dev Auth Bypass (local development only)
+
+Set `AUTH_BYPASS_ENABLED=true` in `.env` to skip Google OAuth during local development. No Google credentials are needed when this is enabled.
+
+- `DevBypassMiddleware` auto-injects a session for all localhost requests before the CSRF check
+- Middleware order: `SecurityHeaders → DevBypass → CSRF → Route`
+- Fixed dev identity: `dev@localhost` / `google_sub=dev-bypass-user-001` / household "Dev Household"
+- Dev sessions have 24h expiry and are exempt from the 30-min sliding-window staleness check
+- `POST /auth/dev-login` is the programmatic entry point — public endpoint, no CSRF required
+- **NEVER** set `AUTH_BYPASS_ENABLED=true` in production — startup fires a `CRITICAL` log if `ENV != development`
+- Do not add OAuth credential checks or bypass fallback paths in application code — the bypass is entirely middleware-level
+
 ---
 
 ## 7. API Design Rules
@@ -393,8 +400,8 @@ Session sliding window uses `last_activity_at` (updated on every request). CSRF 
 ### 8.1 Zustand Stores
 
 ```
-authStore        — user identity, session token, default view (Household/My Finances)
-visualizationStore — active date range, group-by, entity filter state
+authStore            — user identity, session token, default view (Household/My Finances)
+visualizationStore   — active date range, group-by, entity filter state
 ```
 
 Do not create new stores for entity CRUD — that belongs to TanStack Query.
@@ -414,49 +421,3 @@ For any feature page implementing entity CRUD:
 - Use `EntityPage<T>` — action bar, filter slot, main content slot
 
 Do NOT build bespoke CRUD pages — extend the generic layer.
-
----
-
-## 9. Lessons from Completed Epics
-
-### From Epic 1 — Backend Foundation (completed 2026-05-28)
-
-| Lesson | Rule |
-|---|---|
-| SQLite case sensitivity | Always `func.lower()` for name uniqueness — never Python `.lower()` |
-| Category archiving | Returns 200 + promotes children; NOT 409 |
-| `CategorySelect.tsx` placement | Belongs in the Transactions epic, not Categories epic |
-| Default categories | Seeded at household creation, not app startup |
-| Depth column | `depth INT` (0/1) on Category — simpler than recursive parent chain walk |
-
-### From Epic 2 — Frontend Foundation (completed 2026-06-01)
-
-| Lesson | Rule |
-|---|---|
-| Picker trigger ternary | Single ternary — never split; closed branch must include `focus:ring-*` |
-| Picker tab token | `bg-accent-active` (cyan) for picker panels; `bg-control-active` (indigo) for nav |
-| Hover in panels | `hover:bg-surface-active` for small items; `hover:bg-surface-hover` for full-width rows |
-| Swatch ring | `ring-accent ring-offset-surface-raised` — never `ring-white/80` |
-| Entity accent bar | Must use inline `borderLeft` style — `border` shorthand overrides custom utilities |
-| Topbar background | `bg-surface`, not `bg-bg` (spec §5.3) |
-| Segmented control | `border-state` outer + `border-state-subtle` divider — never `border-primary/30` |
-| Skeleton shimmer | Peak token is `bg-surface-active` — `bg-surface-hover` is invisible |
-| CSS-primary Tooltip | Use `group-hover/tooltip:opacity-100` — never `setTimeout` show/hide |
-| Nested buttons | Inner interactive element must be `<span role="button">` not `<button>` |
-| Magic values | Every design value goes through `index.css` — spotted values: glow tokens, backdrop, breakpoints, component widths |
-| "Done" definition | Visual verification on `/design-system` is required — tests alone are not enough |
-| Viewport boundary clamping | Floating panels (tooltips, context menus) must clamp horizontally within viewport; use `panelMinWidth` option in `useFloatingPosition` for context menus, JS measurement for tooltips |
-| Tooltip vertical auto-flip | Tooltips automatically flip from above→below when near the top viewport edge. No `placement` prop needed — JS handles it. Remove `placement="bottom"` from all usages |
-| Toast below topbar | Toasts positioned at `top-[80px]` (topbar height 64px + 16px margin) — never `top-4` which obscures the sticky topbar |
-
----
-
-## 10. What NOT to Do
-
-- Do not refactor code outside the story's scope
-- Do not add error handling for impossible cases (trust framework guarantees)
-- Do not add comments explaining what the code does — only add comments for non-obvious WHY
-- Do not create new Tailwind utilities without adding them to `index.css @utility`
-- Do not use `any` in TypeScript — if the type isn't known, look it up in the existing types files
-- Do not start a story if `sprint-status.yaml` shows any `Depends on` story as not `done`
-- Do not mark a story `done` in `sprint-status.yaml` until ALL ACs are checked and visual verification is complete

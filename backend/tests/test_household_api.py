@@ -29,6 +29,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import backend.config
 import backend.database  # module-level — helpers and tests use this directly
 from backend.main import app
 from backend.models.base import utcnow
@@ -36,6 +37,14 @@ from backend.models.category import Category
 from backend.models.currency import Currency
 from backend.models.household import Household
 from backend.models.person import HouseholdInvitation, Person, Session as SessionModel
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_bypass():
+    """Ensure AUTH_BYPASS_ENABLED is False for these tests."""
+    backend.config.settings.AUTH_BYPASS_ENABLED = False
+    yield
+    backend.config.settings.AUTH_BYPASS_ENABLED = False
 
 
 # ---------------------------------------------------------------------------
@@ -458,28 +467,26 @@ async def test_cancel_invitation():
 
 @pytest.mark.asyncio
 async def test_accept_invitation_correct_email():
-    """Person with matching email accepts and is reassigned to target household."""
+    """Person already assigned to invited household (via seed_household_if_needed) accepts.
+
+    Real flow per ARCH §7.1: seed_household_if_needed assigns the person to the invited
+    household on first login. accept_invitation is idempotent when person.household_id
+    already matches — it just marks the invitation accepted.
+    Persons belonging to a *different* household are blocked with 409 (ARCH §2.6).
+    """
     hh_id, owner_id, session_id, csrf = await _create_household_and_owner()
 
-    # Invitee: has their own solo household (simulates AUTH-001 first-login auto-creation)
-    invitee_hh_id = uuid4()
+    # Invitee is already in the target household (assigned by seed_household_if_needed).
     invitee_id = uuid4()
     now = utcnow()
     async with backend.database.async_session_factory() as db:
-        invitee_hh = Household(
-            id=invitee_hh_id,
-            name="Invitee Solo HH",
-            base_currency="SGD",
-            timezone="Asia/Singapore",
-            created_by=invitee_id,
-        )
         invitee = Person(
             id=invitee_id,
-            household_id=invitee_hh_id,
+            household_id=hh_id,   # already in target household — idempotent accept path
             google_sub=f"invitee_{invitee_id.hex}",
             email="invitee@example.com",
             display_name="Invitee",
-            role="owner",
+            role="member",
             display_currency="SGD",
             default_view="household",
             created_by=invitee_id,
@@ -491,12 +498,12 @@ async def test_accept_invitation_correct_email():
             created_at=now,
             expires_at=now + timedelta(days=7),
         )
-        db.add_all([invitee_hh, invitee, inv])
+        db.add_all([invitee, inv])
         await db.flush()
         inv_id = inv.id
         await db.commit()
 
-    invitee_session_id, invitee_csrf = await _create_session_for(invitee_id, invitee_hh_id)
+    invitee_session_id, invitee_csrf = await _create_session_for(invitee_id, hh_id)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
@@ -507,7 +514,7 @@ async def test_accept_invitation_correct_email():
     assert resp.status_code == 200
     assert resp.json()["status"] == "accepted"
 
-    # Verify person is now in the target household with member role
+    # Verify person is still in the target household with member role
     from sqlalchemy import select
     async with backend.database.async_session_factory() as db:
         result = await db.execute(select(Person).where(Person.id == invitee_id))

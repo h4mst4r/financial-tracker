@@ -28,7 +28,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.database import async_session_factory
 from backend.models.base import utcnow
-from backend.models.category import Category
 from backend.models.currency import Currency
 from backend.models.household import Household
 from backend.models.person import HouseholdInvitation, Person, Session as SessionModel
@@ -50,25 +49,17 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 SESSION_COOKIE_NAME = "session_id"
 SESSION_EXPIRY_MINUTES = 30
 
+# Dev bypass sentinels — fixed, not configurable.
+DEV_GOOGLE_SUB = "dev-bypass-user-001"
+DEV_EMAIL = "dev@localhost"
+DEV_DISPLAY_NAME = "Dev User"
+DEV_HOUSEHOLD_NAME = "Dev Household"
+DEV_SESSION_HOURS = 24
+
 
 # ---------------------------------------------------------------------------
-# Default category seeds (first-login)
+# Default category seeds — delegated to category_service.seed_default_categories()
 # ---------------------------------------------------------------------------
-
-DEFAULT_CATEGORIES = [
-    {"name": "Food & Drink", "type": "expense", "color": "#ef4444", "icon": "🍕"},
-    {"name": "Shopping", "type": "expense", "color": "#6366f1", "icon": "🛍️"},
-    {"name": "Housing", "type": "expense", "color": "#f59e0b", "icon": "🏠"},
-    {"name": "Transport", "type": "expense", "color": "#64748b", "icon": "🚗"},
-    {"name": "Vehicle", "type": "expense", "color": "#14b8a6", "icon": "⛽"},
-    {"name": "Life & Entertainment", "type": "expense", "color": "#10b981", "icon": "🎬"},
-    {"name": "Health & Fitness", "type": "expense", "color": "#ec4899", "icon": "🏥"},
-    {"name": "Communication", "type": "expense", "color": "#06b6d4", "icon": "📱"},
-    {"name": "Financial Expenses", "type": "expense", "color": "#8b5cf6", "icon": "💳"},
-    {"name": "Income", "type": "income", "color": "#84cc16", "icon": "💰"},
-    {"name": "Savings & Investments", "type": "income", "color": "#10b981", "icon": "🏦"},
-    {"name": "Other", "type": "both", "color": "#94a3b8", "icon": "📦"},
-]
 
 
 # ---------------------------------------------------------------------------
@@ -266,17 +257,10 @@ async def _create_and_seed_household(
     )
     db.add(currency)
 
-    for cat_data in DEFAULT_CATEGORIES:
-        cat = Category(
-            household_id=household_id,
-            name=cat_data["name"],
-            category_type=cat_data["type"],
-            color=cat_data["color"],
-            icon=cat_data["icon"],
-            depth=0,
-            created_by=person.id,
-        )
-        db.add(cat)
+    # Seed default categories (delegated to category domain)
+    from backend.services.category_service import seed_default_categories
+
+    await seed_default_categories(db, household_id, person.id)
 
     await db.flush()
     return household
@@ -373,6 +357,105 @@ async def get_session_by_id(db: AsyncSession, session_id: UUID) -> Optional[Sess
         select(SessionModel).where(SessionModel.id == session_id)
     )
     return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Dev Auth Bypass (ARCH §7.6)
+# ---------------------------------------------------------------------------
+
+
+async def get_or_create_dev_session(
+    db: AsyncSession,
+) -> "tuple[Person, SessionModel]":
+    """Find-or-create the fixed dev Person + Session for AUTH_BYPASS_ENABLED mode.
+
+    Idempotent: subsequent calls reuse the existing dev person and session.
+    Does NOT commit — the caller is responsible via get_db context manager.
+    """
+    # Step 1 — find or create dev person + household
+    result = await db.execute(
+        select(Person).where(Person.google_sub == DEV_GOOGLE_SUB)
+    )
+    dev_person = result.scalar_one_or_none()
+
+    if dev_person is None:
+        # Bootstrap follows the same two-phase pattern as seed_household_if_needed.
+        # Pre-generate person UUID so household.created_by can reference it immediately.
+        person_id = uuid4()
+        household_id = uuid4()
+
+        household = Household(
+            id=household_id,
+            name=DEV_HOUSEHOLD_NAME,
+            base_currency="SGD",
+            timezone="Asia/Singapore",
+            created_by=person_id,
+        )
+        db.add(household)
+        await db.flush()
+
+        dev_person = Person(
+            id=person_id,
+            google_sub=DEV_GOOGLE_SUB,
+            email=DEV_EMAIL,
+            display_name=DEV_DISPLAY_NAME,
+            role="owner",
+            household_id=household_id,
+            display_currency="SGD",
+            default_view="household",
+        )
+        db.add(dev_person)
+        await db.flush()
+
+        # Seed default currency so the dev household is fully functional
+        currency = Currency(
+            household_id=household_id,
+            code="SGD",
+            name="Singapore Dollar",
+            symbol="S$",
+            is_base=True,
+            is_display_active=True,
+            rate_to_base=1.0,
+        )
+        db.add(currency)
+
+        # Seed default categories so the dev household is fully functional
+        from backend.services.category_service import seed_default_categories
+
+        await seed_default_categories(db, household_id, person_id)
+        await db.flush()
+
+        logger.info("dev_session_person_created", extra={"person_id": str(person_id)})
+
+    # Step 2 — find or create dev session
+    now = utcnow()
+    session_result = await db.execute(
+        select(SessionModel)
+        .where(
+            SessionModel.person_id == dev_person.id,
+            SessionModel.expires_at > now,
+        )
+        .order_by(SessionModel.last_activity_at.desc())
+        .limit(1)
+    )
+    dev_session = session_result.scalar_one_or_none()
+
+    if dev_session is None:
+        dev_session = SessionModel(
+            person_id=dev_person.id,
+            expires_at=now + timedelta(hours=DEV_SESSION_HOURS),
+            last_activity_at=now,
+            csrf_token=secrets.token_urlsafe(32),
+            ip_address="127.0.0.1",
+            user_agent="dev-bypass",
+        )
+        db.add(dev_session)
+        await db.flush()
+        logger.info("dev_session_created", extra={"session_id": str(dev_session.id)})
+    else:
+        dev_session.last_activity_at = now
+
+    return dev_person, dev_session
 
 
 # ---------------------------------------------------------------------------

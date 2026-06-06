@@ -16,6 +16,8 @@ from sqlalchemy import select
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi.responses import JSONResponse
+
 from backend.config import settings
 from backend.database import get_db
 from backend.dependencies import get_current_person
@@ -279,6 +281,64 @@ async def me(
         "pendingInvitationToken": str(pending_inv.id) if pending_inv else None,
         "isFirstLogin": is_first_login,
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/dev-login — Dev bypass login (ARCH §7.6)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/dev-login")
+async def dev_login(
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """Create/reuse the fixed dev session and return /auth/me-shaped payload.
+
+    Returns 404 when AUTH_BYPASS_ENABLED=false — the endpoint doesn't
+    conceptually exist in production.
+    """
+    if not settings.AUTH_BYPASS_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "Not found", "code": "NOT_FOUND", "detail": {}},
+        )
+
+    person, session = await auth_service.get_or_create_dev_session(db)
+
+    # Load household (created during get_or_create_dev_session)
+    hh_result = await db.execute(
+        select(Household).where(Household.id == person.household_id)
+    )
+    household = hh_result.scalar_one_or_none()
+
+    payload = {
+        "person": {
+            "personId": str(person.id),
+            "displayName": person.display_name,
+            "email": person.email,
+            "role": person.role,
+            "pictureUrl": person.picture_url,
+            "defaultView": person.default_view,
+            "displayCurrency": person.display_currency,
+        },
+        "household": None if household is None else {
+            "householdId": str(household.id),
+            "name": household.name,
+            "baseCurrency": household.base_currency,
+            "timezone": household.timezone,
+        },
+        "csrfToken": session.csrf_token,
+        "pendingInvitationToken": None,
+        "isFirstLogin": False,
+    }
+
+    session_id_str = str(session.id)
+    response = JSONResponse(content=payload, status_code=200)
+    response.headers["Set-Cookie"] = (
+        f"session_id={session_id_str}; HttpOnly; Path=/; SameSite=Lax"
+    )
+    response.headers["X-Session-Id"] = session_id_str
+    return response
 
 
 # ---------------------------------------------------------------------------

@@ -1,17 +1,22 @@
-"""auth_middleware — session validation helpers and path skip list.
+"""auth_middleware — session validation helpers, path skip list, dev bypass middleware.
 
 Auth enforcement is handled entirely by the get_current_person FastAPI
 dependency (dependencies.py). The functions and constants here are imported
 by csrf_middleware.py and dependencies.py.
+
+DevBypassMiddleware (ARCH §7.6) is also defined here and registered in main.py.
 """
 
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
 
 import backend.database
 from backend.models.person import Person, Session as SessionModel
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +34,8 @@ PATH_SKIP_PREFIXES = (
 )
 
 # Public auth endpoints that don't require a valid session.
-PUBLIC_AUTH_PATHS = {"/auth/login", "/auth/callback"}
+# /auth/dev-login is pre-auth — it creates the session, so CSRF must be skipped.
+PUBLIC_AUTH_PATHS = {"/auth/login", "/auth/callback", "/auth/dev-login"}
 
 SESSION_COOKIE_NAME = "session_id"
 
@@ -79,11 +85,16 @@ async def validate_session(session_id: str | None) -> "tuple[Person, SessionMode
         if expires_at < now:
             return None
 
-        if (now - last_activity).total_seconds() > STALE_THRESHOLD_SECONDS:
+        # Dev sessions (user_agent='dev-bypass') are exempt from the 30-min staleness check.
+        # They have a 24h expiry instead, which is the appropriate timeout for dev work.
+        is_dev_session = session_rec.user_agent == "dev-bypass"
+        if not is_dev_session and (now - last_activity).total_seconds() > STALE_THRESHOLD_SECONDS:
             return None
 
         session_rec.last_activity_at = now
-        session_rec.expires_at = now + __import__("datetime").timedelta(minutes=30)
+        # Dev sessions keep their 24h expiry; real sessions get a 30-min sliding window.
+        if not is_dev_session:
+            session_rec.expires_at = now + timedelta(minutes=30)
         person_id = session_rec.person_id
         await s.commit()
 
@@ -114,3 +125,94 @@ def _extract_cookie(headers: list, name: str) -> str | None:
                     if k.strip() == name:
                         return v.strip()
     return None
+
+
+def _extract_header(headers: list, name: str) -> str | None:
+    """Parse a single header value from raw ASGI headers (case-insensitive name)."""
+    name_bytes = name.lower().encode("latin-1")
+    for key, value in headers:
+        if key.lower() == name_bytes:
+            return value.decode("latin-1", errors="replace").strip()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# DevBypassMiddleware — ARCH §7.6
+# ---------------------------------------------------------------------------
+
+# Paths that bypass the bypass (ironic but necessary):
+# /auth/dev-login creates its own session; /auth/login+callback are real OAuth.
+_BYPASS_EXCLUDED_PATHS = {"/auth/login", "/auth/callback", "/auth/dev-login"}
+
+# Hosts considered localhost
+_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+class DevBypassMiddleware:
+    """Pure ASGI middleware that auto-authenticates localhost requests in dev mode.
+
+    When AUTH_BYPASS_ENABLED=true and the request comes from localhost with no
+    existing session, creates/reuses a fixed dev session and:
+      1. Injects X-Session-Token into the request so get_current_person picks it up.
+      2. Adds Set-Cookie + X-Session-Id to the response.
+
+    Completely inert when AUTH_BYPASS_ENABLED=false (default).
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        from backend.config import settings  # late import avoids circular deps at module load
+
+        if scope["type"] != "http" or not settings.AUTH_BYPASS_ENABLED:
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if path in _BYPASS_EXCLUDED_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        # Check client host — scope["client"] is (host, port) or None
+        client = scope.get("client")
+        if not client or client[0] not in _LOCALHOST_HOSTS:
+            await self.app(scope, receive, send)
+            return
+
+        # Skip if request already carries a session (cookie or header)
+        headers = list(scope.get("headers", []))
+        if _extract_cookie(headers, SESSION_COOKIE_NAME) or _extract_header(headers, "x-session-token"):
+            await self.app(scope, receive, send)
+            return
+
+        # --- All conditions met: create/reuse dev session ---
+        from backend.services.auth_service import get_or_create_dev_session
+
+        try:
+            async with backend.database.async_session_factory() as db:
+                dev_person, dev_session = await get_or_create_dev_session(db)
+                # Capture ID before the session closes to avoid DetachedInstanceError
+                session_id_str = str(dev_session.id)
+                await db.commit()
+        except Exception:
+            logger.exception("dev_bypass_session_creation_failed")
+            await self.app(scope, receive, send)
+            return
+
+        # Inject X-Session-Token so get_current_person / validate_session find the session
+        scope["headers"] = headers + [(b"x-session-token", session_id_str.encode("latin-1"))]
+
+        logger.debug("dev_bypass_applied", extra={"path": path})
+
+        cookie_header = f"session_id={session_id_str}; HttpOnly; Path=/; SameSite=Lax"
+
+        async def send_with_cookie(message):
+            if message["type"] == "http.response.start":
+                resp_headers = list(message.get("headers", []))
+                resp_headers.append((b"set-cookie", cookie_header.encode("latin-1")))
+                resp_headers.append((b"x-session-id", session_id_str.encode("latin-1")))
+                message = {**message, "headers": resp_headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cookie)

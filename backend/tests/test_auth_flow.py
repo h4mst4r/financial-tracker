@@ -22,6 +22,20 @@ from backend.main import app
 from backend.models.person import Person, Session as SessionModel
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_bypass():
+    """Reset AUTH_BYPASS_ENABLED to False before each test to ensure test isolation.
+    
+    The .env file may have AUTH_BYPASS_ENABLED=true for local development,
+    which would leak into tests. This fixture ensures a clean state.
+    """
+    import backend.config
+    original = backend.config.settings.AUTH_BYPASS_ENABLED
+    backend.config.settings.AUTH_BYPASS_ENABLED = False
+    yield
+    backend.config.settings.AUTH_BYPASS_ENABLED = original
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _use_test_db():
     """Use a temp file-based SQLite for auth tests with tables created."""
@@ -424,3 +438,153 @@ async def test_e2e_session_pipeline():
             headers={"X-Session-Token": session_id},
         )
         assert me_after_logout.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# DEV-001 — Dev auth bypass tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dev_bypass_creates_session_and_returns_auth_me():
+    """GET /auth/me with bypass enabled and no session → 200 with dev user + Set-Cookie."""
+    import backend.config
+
+    original = backend.config.settings.AUTH_BYPASS_ENABLED
+    backend.config.settings.AUTH_BYPASS_ENABLED = True
+    try:
+        transport = ASGITransport(app=app)
+        # ASGITransport always sets scope["client"] = ("127.0.0.1", 123)
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            resp = await client.get("/auth/me")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["person"]["email"] == "dev@localhost"
+        assert body["csrfToken"] is not None
+        assert body["household"] is not None
+        # Response must carry Set-Cookie so the browser can persist the session
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert "session_id" in set_cookie
+    finally:
+        backend.config.settings.AUTH_BYPASS_ENABLED = original
+
+
+@pytest.mark.asyncio
+async def test_dev_bypass_disabled_returns_401():
+    """GET /auth/me with bypass disabled and no session → 401 (unchanged behaviour)."""
+    import backend.config
+
+    assert backend.config.settings.AUTH_BYPASS_ENABLED is False  # default
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/auth/me")
+
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_dev_login_endpoint_enabled():
+    """POST /auth/dev-login with bypass enabled → 200 + full auth payload + Set-Cookie."""
+    import backend.config
+
+    original = backend.config.settings.AUTH_BYPASS_ENABLED
+    backend.config.settings.AUTH_BYPASS_ENABLED = True
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            resp = await client.post("/auth/dev-login")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["person"]["email"] == "dev@localhost"
+        assert body["csrfToken"] != ""
+        assert body["pendingInvitationToken"] is None
+        assert body["isFirstLogin"] is False
+        assert body["household"]["householdId"] is not None
+        set_cookie = resp.headers.get("set-cookie", "")
+        assert "session_id" in set_cookie
+    finally:
+        backend.config.settings.AUTH_BYPASS_ENABLED = original
+
+
+@pytest.mark.asyncio
+async def test_dev_login_endpoint_disabled_returns_404():
+    """POST /auth/dev-login with bypass disabled → 404."""
+    import backend.config
+
+    assert backend.config.settings.AUTH_BYPASS_ENABLED is False  # default
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/auth/dev-login")
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_dev_login_full_flow():
+    """Full dev login flow: POST /auth/dev-login → extract session → GET /auth/me → 200.
+
+    This is the integration test for the actual button behaviour in the browser:
+    1. POST /auth/dev-login returns session ID in X-Session-Id header
+    2. Subsequent GET /auth/me with that session ID returns the full auth contract
+    3. The dev person and household are persisted and reusable
+    """
+    import re
+    import backend.config
+
+    original = backend.config.settings.AUTH_BYPASS_ENABLED
+    backend.config.settings.AUTH_BYPASS_ENABLED = True
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            # Step 1: POST /auth/dev-login — simulates button click
+            login_resp = await client.post("/auth/dev-login")
+
+        assert login_resp.status_code == 200, f"dev-login failed: {login_resp.text}"
+
+        # Step 2: Extract session ID from X-Session-Id header (what the frontend stores in sessionStorage)
+        session_id = login_resp.headers.get("x-session-id")
+        assert session_id is not None, "X-Session-Id header missing from dev-login response"
+        assert len(session_id) > 0
+
+        # Step 3: Verify login response body matches /auth/me contract (ARCH §7.2a)
+        body = login_resp.json()
+        assert body["person"]["email"] == "dev@localhost"
+        assert body["person"]["displayName"] == "Dev User"
+        assert body["person"]["role"] == "owner"
+        assert body["household"]["name"] == "Dev Household"
+        assert body["household"]["baseCurrency"] == "SGD"
+        csrf_token = body["csrfToken"]
+        assert csrf_token and len(csrf_token) > 0
+        assert body["pendingInvitationToken"] is None
+        assert body["isFirstLogin"] is False
+
+        # Step 4: GET /auth/me with the session token from X-Session-Id (X-Session-Token header)
+        # This is exactly what api/client.ts does after storing the token in sessionStorage
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            me_resp = await client.get(
+                "/auth/me",
+                headers={"X-Session-Token": session_id},
+            )
+
+        assert me_resp.status_code == 200, f"/auth/me failed: {me_resp.text}"
+        me_body = me_resp.json()
+
+        # Step 5: Verify full /auth/me contract is returned for the dev user
+        assert me_body["person"]["email"] == "dev@localhost"
+        assert me_body["person"]["displayName"] == "Dev User"
+        assert me_body["household"]["name"] == "Dev Household"
+        assert me_body["csrfToken"] == csrf_token  # same session → same CSRF token
+
+        # Step 6: A second POST /auth/dev-login reuses the same person and household (idempotent)
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            login_resp2 = await client.post("/auth/dev-login")
+
+        assert login_resp2.status_code == 200
+        body2 = login_resp2.json()
+        assert body2["person"]["personId"] == body["person"]["personId"]
+        assert body2["household"]["householdId"] == body["household"]["householdId"]
+
+    finally:
+        backend.config.settings.AUTH_BYPASS_ENABLED = original

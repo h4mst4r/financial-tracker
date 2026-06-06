@@ -2132,7 +2132,7 @@ Note: drag-and-drop uses the HTML5 Drag and Drop API (`draggable`, `onDragStart`
 
 #### ContextMenu Items
 
-**Top-level category row:**
+**Top-level category row (active):**
 ```
 Edit
 Add Subcategory
@@ -2142,10 +2142,22 @@ Merge into…
 Promote  ← disabled (already top-level); shown greyed with Tooltip "Already a top-level category"
 ─────────────
 Archive
-Delete
 ```
 
-**Subcategory row:**
+**Top-level category row (archived view):**
+```
+Edit
+Add Subcategory
+Duplicate
+Merge into…
+─────────────
+Promote  ← disabled (already top-level); shown greyed with Tooltip "Already a top-level category"
+─────────────
+Restore
+Delete  ← destructive; only shown in archived view; hard-deletes if empty (no downstream deps), otherwise 409 with "Archive instead" prompt
+```
+
+**Subcategory row (active):**
 ```
 Edit
 Duplicate
@@ -2154,7 +2166,18 @@ Merge into…
 Promote to top-level
 ─────────────
 Archive
-Delete
+```
+
+**Subcategory row (archived view):**
+```
+Edit
+Duplicate
+Merge into…
+─────────────
+Promote to top-level
+─────────────
+Restore
+Delete  ← destructive; only shown in archived view; hard-deletes if empty (no downstream deps), otherwise 409 with "Archive instead" prompt
 ```
 
 #### Create / Edit Modal
@@ -2179,7 +2202,7 @@ Two entry points — both open the same Merge Modal:
 Selects the context-menu row as the source. Opens Merge Modal with source pre-populated.
 
 **Path B — BulkActionBar → "Merge" (multi-select):**
-Rows support Ctrl+click (toggle), Ctrl+A (select all), Escape (clear) per §9.3. When ≥ 2 categories are selected, `BulkActionBar` appears (§9.3) with: "N selected" count, **Merge** (secondary), Archive (secondary), Delete (danger), × clear. Clicking Merge opens the Merge Modal with all selected categories as sources; the user picks the target from a dropdown that excludes all selected sources.
+Rows support Ctrl+click (toggle), Ctrl+A (select all), Escape (clear) per §9.3. When ≥ 2 categories are selected, `BulkActionBar` appears (§9.3) with: "N selected" count, **Merge** (secondary), Archive/Restore (secondary — depends on archived view state), Delete (danger — only in archived view), × clear. Clicking Merge opens the Merge Modal with all selected categories as sources; the user picks the target from a dropdown that excludes all selected sources.
 
 **Merge Modal** (`Modal` md size):
 
@@ -2250,6 +2273,8 @@ All account cards use the standard `EntityCard<T>` shell (4px left accent bar vi
 | `insurance` | `{policy_type} · {insurer}` — both capitalised; if insurer is null, show policy_type only |
 
 **Context menu (⋯):** Edit · Duplicate · divider · Manage Owners · divider · Archive / Restore · divider · Delete (archived view only).
+
+**Duplicate behavior:** Follows the universal entity duplicate pattern (EDP §13.4). Clicking "Duplicate" clones the account immediately — no confirmation dialog. The clone has " (copy)" appended to the name and all monetary values zeroed. User can set correct balances via Edit modal after duplication.
 
 ---
 
@@ -2325,7 +2350,7 @@ Payment method [_______________                   ]
 Payee          [Ben ▾                             ]
 ```
 
-Fields: `frequency_text` (uses `RecurringDateInput` component with the Confirm step), `category_id` (searchable Dropdown), `amount_override` (`MonetaryValueInput`, optional), `payment_method` (text Input), `payee_person_id` (person Dropdown).
+Fields: `frequency_text` (uses `RecurringDateInput` component with the Confirm step), `category_id` (searchable Dropdown — requires CAT-005 from Epic 4), `amount_override` (`MonetaryValueInput`, optional), `payment_method` (text Input), `payee_person_id` (person Dropdown).
 
 Toggle defaults to OFF on create. Toggle defaults to ON in edit mode if a `RecurringConfig` record exists for this account. Toggling OFF in edit mode opens a `ConfirmationDialog`: "Remove recurring payment config?" with "Remove" (danger) and "Keep" (secondary). Confirmed removal deletes the `RecurringConfig` via `DELETE /api/accounts/{id}/recurring-config`.
 

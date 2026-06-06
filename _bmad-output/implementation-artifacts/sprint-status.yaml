@@ -1,5 +1,5 @@
 # generated: 2026-05-28
-# last_updated: 2026-05-28T21:45
+# last_updated: 2026-06-06T00:00
 # project: financial-tracker
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-28
-last_updated: 2026-06-03T23:15
+last_updated: 2026-06-06T00:00
 project: financial-tracker
 project_key: NOKEY
 tracking_system: file-system
@@ -67,18 +67,22 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3 — Authentication & Household
-  epic-3: in-progress
+  epic-3: done
   auth-001-google-oauth-backend-flow-callback-session: done
   auth-002-household-member-management-backend: done
   auth-003-auth-frontend-login-page-useauth-hook-route-hydration: done
   auth-004-household-settings-and-member-management-frontend: done
   auth-005-public-layout-invitation-join-household-delete: done
   auth-006-enhanced-member-management-invitation-flow: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
+
+  # Developer Tooling
+  dev-001-dev-auth-bypass-mode: done
+  developer-tooling-retrospective: optional
 
   # Epic 4 — Categories
-  epic-4: backlog
-  cat-001-category-schemas-and-service-crud-seeding: backlog
+  epic-4: in-progress
+  cat-001-category-schemas-and-service-crud-seeding: done
   cat-002-category-routes-and-hierarchy-endpoints: backlog
   cat-003-category-merge-and-duplicate-detection: backlog
   cat-004-import-category-mapping-service: backlog

@@ -42,3 +42,25 @@ export const fetchMe = (): Promise<AuthMeResponse> =>
 /** Logout — clears the server session */
 export const logout = (): Promise<void> =>
   api.post<void>('/auth/logout').then(() => {});
+
+/**
+ * Dev bypass login — creates/reuses the fixed dev session.
+ * Only available when AUTH_BYPASS_ENABLED=true (single flag controls both backend and frontend).
+ * Returns 404 in production (endpoint does not exist).
+ *
+ * Uses raw fetch (not api.post) to read X-Session-Id from the response and store it in
+ * sessionStorage as dev_session_token. Vite's dev proxy strips Set-Cookie headers, so the
+ * session must be passed via X-Session-Token header — same mechanism as the OAuth callback
+ * hash captured in main.tsx.
+ */
+export const devLogin = async (): Promise<AuthMeResponse> => {
+  const response = await fetch('/auth/dev-login', { method: 'POST' });
+  if (!response.ok) {
+    throw new Error(`Dev login failed: ${response.status}`);
+  }
+  const sessionId = response.headers.get('x-session-id');
+  if (sessionId) {
+    sessionStorage.setItem('dev_session_token', sessionId);
+  }
+  return response.json() as Promise<AuthMeResponse>;
+};

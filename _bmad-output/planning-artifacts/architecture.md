@@ -928,6 +928,7 @@ AUTH
   GET    /auth/callback              → OAuth callback, set session
   POST   /auth/logout                → Clear session
   GET    /auth/me                    → Current person + household
+  POST   /auth/dev-login             → Dev bypass login (returns 404 unless AUTH_BYPASS_ENABLED=true; see §7.6)
 
 HOUSEHOLD
   GET    /api/household              → Get household details
@@ -1310,6 +1311,130 @@ async def _get_or_404(db: AsyncSession, household_id: UUID, entity_id: UUID,
 ```
 
 There is no mechanism to query across household boundaries. This is by design.
+
+### 7.6 Dev Auth Bypass
+
+> **Dev-only feature.** Controlled by `AUTH_BYPASS_ENABLED` (env var, default `false`). Must never be `true` in production. A `CRITICAL` log fires at startup if enabled outside `ENV=development`.
+
+#### Purpose
+
+Eliminates the Google OAuth round-trip during local development. All protected API routes become accessible immediately from `localhost` without a Google account, internet connection, or OAuth redirect.
+
+#### Mechanism — Middleware auto-bypass
+
+`AuthMiddleware` gains a bypass branch that fires when all four conditions hold simultaneously:
+
+1. `settings.AUTH_BYPASS_ENABLED is True`
+2. `request.client is not None` and `request.client.host in {"127.0.0.1", "::1", "localhost"}`
+3. Request path is **not** `/auth/login` and not `/auth/callback` (those remain functional for real OAuth flows even in bypass mode)
+4. No valid session cookie (`session_id`) is present in the request
+
+When the branch fires:
+1. `auth_service.get_or_create_dev_session(db)` is called — returns `(Person, Session)` for the fixed dev identity.
+2. `request.state.person_id = person.id` is injected (same field used by all downstream dependencies).
+3. `call_next(request)` is awaited.
+4. The response receives `Set-Cookie: session_id={session.id}; HttpOnly; Path=/; SameSite=Lax` (no `Secure` — localhost is HTTP).
+5. `X-Session-Id: {session.id}` header is added (same cross-port dev mechanism as AUTH-001 callback).
+6. Response is returned; normal validation is skipped entirely.
+
+The net effect: the frontend's `GET /auth/me` call on app mount succeeds on the first unauthenticated request. The user never sees the login page.
+
+#### Mechanism — Explicit dev-login endpoint
+
+`POST /auth/dev-login` provides an explicit reset path (useful for scripts, tests, or resetting a corrupted dev session):
+
+- Returns `HTTP 404` when `AUTH_BYPASS_ENABLED=False` — the endpoint does not conceptually exist in production.
+- When enabled: calls `get_or_create_dev_session`, returns the same payload shape as `GET /auth/me` (ARCH §7.2a), sets session cookie + `X-Session-Id` header. No authentication required (whitelisted in `AuthMiddleware`'s public-path list alongside `/auth/login` and `/auth/callback`).
+
+#### Dev identity (fixed sentinels — not configurable)
+
+| Field | Value |
+|---|---|
+| `google_sub` | `"dev-bypass-user-001"` |
+| `email` | `"dev@localhost"` |
+| `display_name` | `"Dev User"` |
+| `household_name` | `"Dev Household"` |
+| `role` | `"owner"` |
+| Session TTL | 24 hours (vs 30 min sliding for real sessions) |
+
+#### `get_or_create_dev_session(db: AsyncSession) -> tuple[Person, Session]`
+
+Idempotent bootstrap function in `auth_service.py`:
+
+```python
+async def get_or_create_dev_session(db: AsyncSession) -> tuple[Person, Session]:
+    DEV_GOOGLE_SUB = "dev-bypass-user-001"
+
+    # Step 1 — find or create dev person + household
+    result = await db.execute(select(Person).where(Person.google_sub == DEV_GOOGLE_SUB))
+    dev_person = result.scalar_one_or_none()
+
+    if dev_person is None:
+        # Bootstrap: same two-phase pattern as seed_household_if_needed
+        household = Household(name="Dev Household", base_currency="SGD",
+                              timezone="Asia/Singapore", created_by=uuid4())
+        db.add(household)
+        await db.flush()  # get household.id
+
+        dev_person = Person(
+            google_sub=DEV_GOOGLE_SUB, email="dev@localhost",
+            display_name="Dev User", role="owner",
+            household_id=household.id,
+            display_currency="SGD", default_view="household",
+            created_by=household.id,  # temporary; patched below
+        )
+        db.add(dev_person)
+        await db.flush()  # get person.id
+
+        household.created_by = dev_person.id  # patch bootstrap FK
+        await category_service.seed_default_categories(db, household.id, dev_person.id)
+        logger.info("dev_session_person_created", person_id=str(dev_person.id))
+
+    # Step 2 — find or create dev session
+    result = await db.execute(
+        select(Session)
+        .where(Session.person_id == dev_person.id, Session.expires_at > utcnow())
+        .order_by(Session.last_activity_at.desc())
+        .limit(1)
+    )
+    dev_session = result.scalar_one_or_none()
+
+    if dev_session is None:
+        dev_session = Session(
+            person_id=dev_person.id,
+            expires_at=utcnow() + timedelta(hours=24),
+            last_activity_at=utcnow(),
+            csrf_token=secrets.token_urlsafe(32),
+            ip_address="127.0.0.1",
+            user_agent="dev-bypass",
+        )
+        db.add(dev_session)
+        await db.flush()
+        logger.info("dev_session_created", session_id=str(dev_session.id))
+    else:
+        dev_session.last_activity_at = utcnow()
+
+    return dev_person, dev_session
+    # Caller commits via get_db context manager
+```
+
+#### Frontend integration
+
+`Login.tsx` reads `import.meta.env.AUTH_BYPASS_ENABLED` (exposed to Vite via `envPrefix: ['VITE_', 'AUTH_BYPASS_']` in `vite.config.ts`). When `'true'`, a "Dev Login (bypass Google OAuth)" `Button` (secondary variant) is rendered below the Google button. On click it calls `useAuthApi().devLogin()` (`POST /auth/dev-login`), hydrates `authStore`, and navigates to `/`. The button is absent (`{devBypassEnabled && ...}`) in all production builds.
+
+`AUTH_BYPASS_ENABLED` is the single flag that controls both the backend middleware and the frontend dev button. It must be explicitly set `=true` in a local `.env` file — no defaults enable it.
+
+#### Safety summary
+
+| Guard | Where enforced |
+|---|---|
+| Localhost-only | `AuthMiddleware` (checks `request.client.host`) |
+| Setting default `false` | `config.py` (`AUTH_BYPASS_ENABLED: bool = False`) |
+| Non-dev environment warning | `main.py` startup (`CRITICAL` log if `ENV != "development"`) |
+| Endpoint 404 in production | `POST /auth/dev-login` route handler checks `settings.AUTH_BYPASS_ENABLED` |
+| Frontend never renders | `{devBypassEnabled && ...}` guard; `AUTH_BYPASS_ENABLED` defaults `false` in production |
+
+---
 
 ### 7.5 Security Headers
 
@@ -1939,4 +2064,6 @@ async def compute_budget_actuals(
 | 2.3 | 2026-06-01 | Ben + Claude | §3.2 Frontend directory tree: removed tailwind.config.ts (Tailwind v4 is config-in-CSS; no config file exists). §7.3 CSRF: corrected "single-use rotation" claim — token is session-lifetime, not rotated per mutation. Frontmatter version corrected to match revision history. |
 | 2.4 | 2026-06-05 | Ben + Claude | §3.2 Frontend directory tree: hooks/ updated — added useFloatingPosition (built, Epic 2) and useMultiSelect (built, Epic 2); marked useVisualizationFilter and useTheme as planned. components/entity/ updated — added BulkActionBar. components/layout/ updated — added PublicPage, removed PersonDashboardFilter (planned, Visualizations epic); ui/ comment updated to cross-reference UX spec §2–6. pages/ updated — added Login, JoinHousehold, NotFound, Forbidden, DesignSystem with route annotations. §8.1 Router: added /forbidden (Forbidden) and * catch-all (NotFound) routes. |
 | 2.5 | 2026-06-05 | Ben + Claude | Epic 3 spec alignment pass. §4.4 Person model: added `default_view` field; removed stale `joined_at` (use inherited `created_at`). §4.4 HouseholdInvitation: added `"declined"` to status values (AUTH-006 migration). §7.2 Session record: added `csrf_token` to field list. Session cookie: corrected `SameSite=Strict` → `SameSite=Lax` with rationale (OAuth callback redirect). §6.2 PERSONS/INVITATIONS: added `POST /api/persons/leave` and `POST /api/invitations/{token}/decline` endpoints (AUTH-006). §6.4 Error contract: replaced RFC 7807 spec (was planned but not implemented) with the actual envelope `{error, code, detail}` used in `main.py`. |
+| 2.7 | 2026-06-06 | Ben + Claude | Added §7.6 Dev Auth Bypass — localhost-only `AUTH_BYPASS_ENABLED` mode with middleware auto-bypass, `get_or_create_dev_session` service function, and `POST /auth/dev-login` endpoint. Added endpoint to §6.2 AUTH inventory. Sourced from Epic 3 retrospective HIGH-priority action item (DEV-001). |
+| 2.8 | 2026-06-06 | Ben + Claude | §7.6 simplification: dropped `VITE_AUTH_BYPASS_ENABLED` as a separate flag. `AUTH_BYPASS_ENABLED` is now the single flag for both backend and frontend. Frontend reads it via `import.meta.env.AUTH_BYPASS_ENABLED` (exposed through `envPrefix: ['VITE_', 'AUTH_BYPASS_']` in `vite.config.ts`). `.env.example` now has two flags only: `ENV` and `AUTH_BYPASS_ENABLED`. |
 | 2.6 | 2026-06-05 | Ben + Claude | Bug fix pass — household creation and invitation guard logic. §6.2 `POST /api/persons/leave`: corrected — does NOT create new household; returns `household: null`; frontend clears auth and redirects to login; fresh household created on next login via `seed_household_if_needed`. §6.2 `POST /api/invitations/{token}/accept`: added strict 409 guard — person must have no current household (must leave/delete first) before accepting. §7.1 `seed_household_if_needed`: removed `NotInvitedError` global guard; any authenticated user without a household now gets one created; invitation system gates joining only. `/auth/me`: returns `household: null` (JSON null, not string "None") when `person.household_id` is null; `useAuth.ts` handles null household by clearing auth and redirecting to login. |

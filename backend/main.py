@@ -4,6 +4,7 @@ Creates the FastAPI app, registers middleware (Auth → Household → CSRF),
 error handlers, and security headers.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -12,10 +13,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from backend.config import settings
 from backend.dependencies import get_db
+from backend.middleware.auth_middleware import DevBypassMiddleware
 from backend.middleware.csrf_middleware import CSRFMiddleware
 from backend.routes import auth as auth_routes
 from backend.routes import household as household_routes
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -89,16 +94,25 @@ async def http_exception_handler(
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
+
+    # Warn loudly if dev bypass is enabled outside a development environment.
+    if settings.AUTH_BYPASS_ENABLED and settings.ENV != "development":
+        logger.critical(
+            "auth_bypass_enabled_in_non_dev_environment",
+            extra={"env": settings.ENV},
+        )
+
     app = FastAPI(
         title="Financial Tracker API",
         version="0.1.0",
     )
 
     # --- Middleware stack (Starlette LIFO: last registered = outermost = runs first) ---
-    # Execution order: SecurityHeaders → CSRF → Route
+    # Execution order: SecurityHeaders → DevBypass → CSRF → Route
     # Auth and household context are resolved by FastAPI dependencies, not middleware.
-    app.add_middleware(CSRFMiddleware)           # innermost — runs last
-    app.add_middleware(SecurityHeadersMiddleware)  # outermost — runs first, wraps all responses
+    app.add_middleware(CSRFMiddleware)              # innermost — runs last
+    app.add_middleware(DevBypassMiddleware)         # injects dev session before CSRF check
+    app.add_middleware(SecurityHeadersMiddleware)   # outermost — runs first, wraps all responses
 
     # --- Exception handlers ---
     app.add_exception_handler(RequestValidationError, validation_exception_handler)

@@ -19,6 +19,15 @@ def _no_db_needed():
     pass
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_bypass():
+    """Ensure AUTH_BYPASS_ENABLED is False for these tests."""
+    import backend.config
+    backend.config.settings.AUTH_BYPASS_ENABLED = False
+    yield
+    backend.config.settings.AUTH_BYPASS_ENABLED = False
+
+
 # ---------------------------------------------------------------------------
 # Security headers
 # ---------------------------------------------------------------------------
