@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — UX Design Specification
-version: 2.11
+version: 3.4
 status: living
 created: 2026-05-26
 authority: Complete design system and UI component reference. Derives from
@@ -15,28 +15,7 @@ authority: Complete design system and UI component reference. Derives from
 > This document specifies *how the application looks, feels, and behaves* — every
 > component, every interaction state, every animation, every accessibility rule.
 
----
-
-## 0a. Developer Process Standards
-
-These process requirements apply to all frontend stories from Epic 3 onwards (established: Epic 2 Retrospective, 2026-06-01).
-
-### Visual Verification — Part of Done
-
-Before any frontend story is marked Done, the delivered component(s) must be visually verified against this specification, either:
-
-- On the `/design-system` page — use the relevant sub-section as the verification surface, or
-- In the app in-context — compare rendered output against the component section referenced in the story's **Ref:** field
-
-Tests passing is necessary but not sufficient. A story with green tests but unverified visual output is **not Done**.
-
-### No Magic Values
-
-All hardcoded colours, opacities, sizes, z-indices, transition durations, and breakpoints that represent design decisions must be named tokens in `frontend/src/index.css`. See §1.9 for the complete utility table. If a value is not listed there, add it before using it in a component.
-
-### CSS Nuances — Document at Story-Close
-
-Every frontend story's Dev Agent Record must include a **"Known CSS / Architecture Nuances"** section capturing any non-obvious behaviour discovered during implementation. Future agents inherit the knowledge, not the bugs.
+> **Process standards:** See CLAUDE.md §2 for P0-P4 rules (visual verification, no magic values, CSS documentation, token sweep).
 
 ---
 
@@ -917,7 +896,8 @@ Used for transaction ledger, recurring payment list, budget detail.
 - `<tfoot>` (optional): summary row; bold totals; `border-t-2 border-border-light` to mirror header weight
 
 **Sortable columns:**
-- Clicking a header button cycles: none → asc → desc → none
+- Clicking a header button cycles: none → asc → desc → none. Clicking a new column replaces the active sort entirely — no multi-column sort.
+- **Implicit secondary sort:** when any column other than Date is the primary sort, the backend always applies `event_date DESC` as the secondary. Rows with the same primary value show most-recent first.
 - Sort icon: `opacity-0 group-hover:opacity-60` when not sorted by this column (hints at sortability); `opacity-100` when this column is the active sort. Uses `ChevronUp` (asc) or `ChevronDown` (desc).
 - Sorted column header: `text-text-primary` (full brightness vs muted for unsorted)
 
@@ -1730,11 +1710,141 @@ Public page at `/join/:token`. Uses `PublicPage`. Accessible without authenticat
 
 **States:**
 - **Valid, unauthenticated:** shows details + "Accept Invitation" (primary) which stores token and routes to OAuth; "Decline" (secondary) returns to `/login` (no API call — unauthenticated decline just drops the flow; user will create their own household on next login)
-- **Valid, authenticated, email matches:** "Accept Invitation" (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/dashboard`; on 403 shows email-mismatch `AlertBanner`; on 409 shows `AlertBanner` "You already belong to a household — leave or delete it before accepting this invitation." with a "Go to Settings" action. "Decline" (secondary) calls `POST /api/invitations/:token/decline`; on 200 updates `authStore` with new household data from response and navigates to `/dashboard` (the welcome toast fires there, see §9.8.3).
+- **Valid, authenticated, email matches:** "Accept Invitation" (primary) calls `POST /api/invitations/:token/accept`; on 200 navigates to `/dashboard`; on 403 shows email-mismatch `AlertBanner`; on 409 shows `AlertBanner` "You already belong to a household — leave or delete it before accepting this invitation." with a "Go to Settings" action. "Decline" (secondary) calls `POST /api/invitations/:token/decline`; **[AUTH-007]** on 200 `response.household` is `null` — call `clearAuth()` and navigate to `/login`. Confirmation dialog before decline: "You will leave **[household name]**. You will need a new invitation to sign back in. This cannot be undone."
 - **Valid, authenticated, email mismatch:** `AlertBanner` (error) with instructions to sign in with correct account; both CTAs hidden until dismissed
 - **Expired / cancelled / declined / not found:** `AlertBanner` (warning) + "Back to Login" `Button` (secondary)
 
 Token is the invitation `id` (UUID). All `Button` instances use design-system `Button` component.
+
+### 9.7a PendingInvitationDialog [AUTH-007]
+
+Login-time modal that appears when a user has a pending invitation to a different household. Triggered after `/auth/me` returns `pendingInvitation` data.
+
+**Purpose:** Handle the scenario where a user already belongs to a household but has received an invitation to join a different household. This dialog appears at login time (not on the JoinHousehold page) and provides role-aware consequences.
+
+**Trigger:** `authStore.pendingInvitationToken` is set (populated from `/auth/me` response).
+
+**Three scenarios:**
+
+---
+
+#### Scenario 1: No Household (Standard Invitation)
+
+User has no household (`user.householdId` is null) but has a pending invitation.
+
+```
+┌────────────────────────────────────────┐
+│  Household Invitation                  │
+│                                        │
+│  You've been invited to join           │
+│                                        │
+│  ┌──────────────────────────────────┐ │
+│  │ 🏠  Smith Family Finances        │ │
+│  │ Invited by: Kim Smith            │ │
+│  │ Expires: 10 Jun 2026             │ │
+│  └──────────────────────────────────┘ │
+│                                        │
+│  [Accept Invitation]  [Dismiss]       │
+└────────────────────────────────────────┘
+```
+
+- **Accept Invitation:** Primary button. Calls `POST /api/invitations/:token/accept`. On 200: clear dialog, refresh `/auth/me`, navigate to `/dashboard`.
+- **Dismiss:** Secondary button. Closes dialog WITHOUT declining. Token remains pending. Dialog will reappear on next login.
+
+**Modal size:** `size="xs"` (400px max-width).
+
+---
+
+#### Scenario 2: Already in Target Household
+
+User already belongs to the household they were invited to (invitation is stale/redundant).
+
+**Behavior:** Silent dismiss. Dialog does NOT appear. The backend returns the invitation data but the frontend detects `user.householdId === pendingInvitation.householdId` and automatically dismisses without showing anything.
+
+---
+
+#### Scenario 3: Different Household (Role-Aware Conflict)
+
+User belongs to a different household than the invitation target.
+
+```
+┌────────────────────────────────────────────────────┐
+│  Household Conflict                                │
+│                                                    │
+│  You've been invited to join a new household,      │
+│  but you already belong to one.                    │
+│                                                    │
+│  ┌────────────────────────────────────────────┐   │
+│  │ 🏠  Smith Family Finances        (target)  │   │
+│  │ Invited by: Kim Smith                      │   │
+│  │ Expires: 10 Jun 2026                       │   │
+│  └────────────────────────────────────────────┘   │
+│                                                    │
+│  You currently belong to:                          │
+│  ┌────────────────────────────────────────────┐   │
+│  │ 🏠  Tan Household          (current)       │   │
+│  │ Role: Owner                                │   │
+│  └────────────────────────────────────────────┘   │
+│                                                    │
+│  Consequence:                                      │
+│  ┌────────────────────────────────────────────┐   │
+│  │ ⚠️  As the Owner, joining a new household  │   │
+│  │ will PERMANENTLY DELETE your current       │   │
+│  │ household and all its data.                │   │
+│  │ This action cannot be undone.              │   │
+│  └────────────────────────────────────────────┘   │
+│                                                    │
+│  [Delete & Join Smith Family]  [Dismiss]          │
+└────────────────────────────────────────────────────┘
+```
+
+```
+┌────────────────────────────────────────────────────┐
+│  Household Conflict                                │
+│                                                    │
+│  You've been invited to join a new household,      │
+│  but you already belong to one.                    │
+│                                                    │
+│  ┌────────────────────────────────────────────┐   │
+│  │ 🏠  Smith Family Finances        (target)  │   │
+│  │ Invited by: Kim Smith                      │   │
+│  │ Expires: 10 Jun 2026                       │   │
+│  └────────────────────────────────────────────┘   │
+│                                                    │
+│  You currently belong to:                          │
+│  ┌────────────────────────────────────────────┐   │
+│  │ 🏠  Tan Household          (current)       │   │
+│  │ Role: Admin                                │   │
+│  └────────────────────────────────────────────┘   │
+│                                                    │
+│  Consequence:                                      │
+│  ┌────────────────────────────────────────────┐   │
+│  │ ℹ️  As an Admin, joining a new household   │   │
+│  │ will REMOVE you from your current          │   │
+│  │ household. Your data will be archived.     │   │
+│  │ You can rejoin later to restore your data. │   │
+│  └────────────────────────────────────────────┘   │
+│                                                    │
+│  [Leave & Join Smith Family]  [Dismiss]           │
+└────────────────────────────────────────────────────┘
+```
+
+**Role-aware action buttons:**
+- **Owner/Dev:** Button text = "Delete & Join {target household}". Style: `destructive` (border-error text-error). Requires 2-step confirmation (type household name to confirm).
+- **Admin/Member:** Button text = "Leave & Join {target household}". Style: `primary`. Single-click confirm.
+
+**Consequence messaging:**
+- **Owner:** "As the Owner, joining a new household will PERMANENTLY DELETE your current household and all its data. This action cannot be undone."
+- **Admin:** "As an Admin, joining a new household will REMOVE you from your current household. Your data will be archived. You can rejoin later to restore your data."
+- **Member:** "Joining a new household will REMOVE you from your current household. Your data will be archived. You can rejoin later to restore your data."
+
+**Dismiss:** Secondary button. Closes dialog WITHOUT declining. Token remains pending. Dialog will reappear on next login.
+
+**Modal size:** `size="sm"` (560px max-width).
+
+**Mobile behavior:** Bottom-sheet pattern (§4.2). Full-width on screens < 640px.
+
+---
 
 ### 9.8 Settings Page [AUTH-004, AUTH-006, SETTINGS-003]
 
@@ -1819,6 +1929,10 @@ Tab bar: `bg-surface-raised border border-border rounded-lg p-1 w-fit`. Active p
 - Role change item: "Change to Admin" or "Change to Member" depending on target's current role
 - ContextMenu label for remove: **"Remove member"** (not "Remove from household" — too long for a menu item)
 - Remove visibility: owner sees it on every non-owner row; admin sees it on member rows only; no one can remove themselves; owner cannot be removed
+- **Household creation right (owner-only view, AUTH-007):** "Grant household creation" (when `canCreateHousehold = false`) or "Revoke household creation" (when `canCreateHousehold = true`) — placed above the divider that precedes "Remove member"; calls `PATCH /api/persons/{id}/household-creation`; on success shows success toast "Household creation rights updated for [display name]"; not visible to admin or member viewers
+
+**"Owner eligible" badge (AUTH-007):**
+Members with `canCreateHousehold = true` show a small pill badge "Owner eligible" (`bg-accent-subtle text-accent`, same pill sizing as the role badge) next to their display name — **visible to the owner only**. The owner's own row always has this badge but with no context menu action for it (the flag cannot be self-revoked). Admin and member viewers do not see this badge for anyone.
 
 **Pending Invitations table (`Table` component — §4.7):**
 Columns: Email (`text-text-primary font-medium`) / Expires (formatted date, `text-text-secondary`) / Actions (`⋯` ContextMenu).
@@ -1842,8 +1956,12 @@ Opens `Modal` with:
 ```
 Two-phase modal: email entry → link reveal. `Input` with validation, `AlertBanner` on API error. The copy field is a read-only `Input` with a trailing copy `<span role="button">` icon (§5.4 Nested Button Rule).
 
-**Leave Household flow:**
-"Leave Household" `Button` (`variant="danger"`) visible only to non-owner members (admin or member role). Opens `ConfirmationDialog` with message "You will leave **[household name]**. A new household will be created for you when you next sign in. This cannot be undone." Confirm calls `POST /api/persons/leave`. On 200: `response.household` is `null` — call `clearAuth()` and navigate to `/login`. A fresh household is created automatically the next time the user signs in via OAuth.
+**Leave Household flow [AUTH-007 updated]:**
+"Leave Household" `Button` (`variant="danger"`) visible only to non-owner members (admin or member role). Opens `ConfirmationDialog`. Confirm calls `POST /api/persons/leave`. On 200: `response.household` is `null` — call `clearAuth()` and navigate to `/login`.
+
+Confirmation dialog message is conditional on `authStore.person.canCreateHousehold`:
+- If `true`: "You will leave **[household name]**. A new household will be created for you when you next sign in. This cannot be undone."
+- If `false`: "You will leave **[household name]**. You will need a new invitation to sign back in. This cannot be undone."
 
 ---
 
@@ -2024,6 +2142,15 @@ No new components required — this is a copy addition to the existing error-mes
 
 Route: `/design-system`. Accessible without authentication (outside AppShell). Used for visual regression testing — every story that touches a component must verify against this page before marking Done.
 
+**Design System Page Policy (non-negotiable):**
+
+1. **Real components only.** Every section must use the actual exported React component. Raw `<div>` approximations of a component are forbidden — they show what was intended, not what exists.
+2. **Add when you ship.** Every story delivering a new reusable UI component must add a demo section to this page as part of its Definition of Done. No demo = not Done.
+3. **Remove when you delete.** If a story removes a component, its design-system section is removed in the same PR.
+4. **Don't add early.** A section for a component that has not been built yet must not be added in advance. Add it only once the real component exists and is exported.
+
+See also EDP §14.8.
+
 **Section catalogue (in scroll order):**
 
 | Section | Components covered |
@@ -2034,7 +2161,7 @@ Route: `/design-system`. Accessible without authentication (outside AppShell). U
 | Inputs | Input (default, search, password, error, disabled), Label with helper text |
 | Form Controls | Checkbox, Toggle, Dropdown (single/multi), DatePicker, ColourPicker, EmojiIconPicker, TagInput, MonetaryValueInput, RecurringDateInput |
 | Cards | Card (default, stat, elevated, ghost) + entity accent colour variants |
-| Overlays | Modal (sizes + dirty guard), Drawer, ConfirmationDialog, Accordion |
+| Overlays | Modal (sizes + dirty guard), Drawer, ConfirmationDialog, PendingInvitationDialog, Accordion |
 | Feedback | Toast (all variants + action prop), AlertBanner (all variants), Skeleton (4 shapes), EmptyState, ProgressBar |
 | Data | Table (full columns, sort, row selection, mobile card collapse) |
 | Actions | ContextMenu (all item types: default, icon, destructive, disabled, divider, header variant) |
@@ -2111,6 +2238,48 @@ handle│    lucide                                 parents     top-level
 Subcategory rows are indented with a `pl-8` left padding and a `border-l border-border` connector line running the height of the group.
 
 **Archived rows**: `opacity-60 grayscale` + dashed left border + `[Archived]` Badge; shown only when "Show Archived" is on.
+
+#### Row Interaction Rules
+
+These apply to every row in the CategoryTree (top-level and subcategory):
+
+| Rule | Behaviour |
+|---|---|
+| **Clearable selection** | Selection state machine: `none → selected → none`. Multi-select via `useMultiSelect`; Escape or clicking selected row clears it. No sticky non-escapable selection. |
+| **onClick → lift + shadow** | Clicking a row applies a momentary lift (subtle `translateY(-1px)` + `shadow-md`) to confirm the click registered. Uses `transition-all duration-100`. |
+| **⋮ context menu only** | All row actions (Edit, Duplicate, Archive, Delete, Merge, Promote…) go in a ContextMenu. Never render icon buttons directly in the row — not on hover, not always. |
+| **Default ⋮ trigger** | The `⋮` (`MoreVertical`) button is always visible at the row's trailing edge. Use `opacity-60 hover:opacity-100` for weight — **not** `opacity-0 group-hover:opacity-100`. Users must not hunt for actions. |
+
+#### Keyboard Interactions
+
+| Key | Behaviour |
+|---|---|
+| `Space` / `Enter` on a parent row | Toggle expand/collapse |
+| `ArrowRight` on collapsed parent | Expand |
+| `ArrowLeft` on expanded parent | Collapse |
+| `ArrowDown` / `ArrowUp` | Move focus to next/previous visible row |
+| `Escape` | Close any open ContextMenu; clear multi-select |
+| `Ctrl+A` | Select all visible rows (uses `useMultiSelect`) |
+
+#### Empty State
+
+The tree is always pre-seeded at household creation (see EDP §9). An empty state is shown only in the **archived view** when no archived categories exist:
+
+```
+[Archive icon]
+No archived categories
+All your categories are active.
+```
+
+Use `EmptyState` component with `icon={Archive}`.
+
+#### CategoryPicker (cross-page component)
+
+The hierarchical category selector used in Transaction, Budget, and other modals is **not built in CAT-005**. It is specified in EVENT-004 (Transaction modal). When implemented, it uses the standard `Dropdown` component with tree-indented option rendering:
+- Top-level categories: normal option label with icon
+- Subcategories: `pl-6` indent + `text-text-secondary` prefix dash `–`
+- Archived categories: excluded from the list
+- "No category" option: always present as the first option
 
 #### Drag and Drop
 
@@ -2266,11 +2435,11 @@ All account cards use the standard `EntityCard<T>` shell (4px left accent bar vi
 
 | Type | Secondary line content |
 |---|---|
-| `bank` | `****{last4} · {institution}` — masked account number + institution name. If no account_number, show institution only. If neither, omit. |
-| `credit_card` | Mini utilisation bar (4px height, full width of card, `--color-success`/`--color-warning`/`--color-error` based on pct) + `SGD {used} / {limit} · Due {due_day}{ordinal}` |
+| `bank` | `****{last4} · {institution}` — masked account number + institution name. If no account_number, show institution only. If neither, omit. If `reserved_amount > 0`: second line `Reserved: {amount}` in `text-text-muted text-xs`. |
+| `credit_card` | Mini utilisation bar (4px height, full width of card, `--color-success`/`--color-warning`/`--color-error` based on pct) + `{used} / {limit} · Due {due_day}{ordinal}`. If `reward_type != "none"`: second line `{reward_type} card` in `text-text-muted text-xs` + `Points expiry: {points_expiry}` if set. |
 | `capital` | `{investment_type} · {current_value in display currency}` — investment type capitalised (e.g. "Stock"), current value from `current_value` field |
-| `asset` | `{asset_type} · {latest valuation in display currency}` — asset type capitalised (e.g. "Property"), latest value from most recent `ValuationRecord`; if no valuations, shows purchase_value |
-| `insurance` | `{policy_type} · {insurer}` — both capitalised; if insurer is null, show policy_type only |
+| `asset` | `{asset_type} · {registration_no}` if registration_no set, else `{asset_type}` · latest valuation in `text-text-muted` on same line. Asset type capitalised (e.g. "Property"). |
+| `insurance` | `{policy_type} · {insurer}` + `policy_status` `Badge` (active = success; cancelled = error). Coverage summary on second line: up to 3 non-null coverage fields shown as `Death {amount} · TPD {amount} · CI {amount}`, abbreviated; remaining fields accessible via card hover tooltip or edit modal. |
 
 **Context menu (⋯):** Edit · Duplicate · divider · Manage Owners · divider · Archive / Restore · divider · Delete (archived view only).
 
@@ -2313,17 +2482,18 @@ Two-column grid on ≥ 768px. Field width assignments:
 
 **Half-width field pairs:**
 - Institution · Month/Year
-- Bank: Interest Rate · Interest Frequency
-- Credit Card: Credit Limit · Annual Fee (row 1) · Billing Day · Due Day (row 2) · Reward Points (half, alone on row 3)
+- Bank: Interest Rate · Interest Frequency (row 1) · Reserved Amount (half, alone on row 2 — label: "Reserved / Emergency Hold")
+- Credit Card: Credit Limit · Annual Fee (row 1) · Billing Day · Due Day (row 2) · Reward Type `Dropdown` (points/cashback/miles/none) · Reward Points (row 3) · Bonus Limit · Points Expiry `DatePicker` (row 4; both hidden when `reward_type = "none"`)
 - Capital: Investment Type · Cost Basis
-- Asset: Asset Type · Purchase Date · Purchase Value · Depreciation Formula (row 2)
-- Insurance: Policy Type · Insurer (row 1) · Premium Frequency · Coverage Amount (row 2) · Coverage Types (TagInput, full-width)
+- Asset: Asset Type · Registration No (row 1) · Purchase Date · Purchase Value (row 2) · Depreciation Formula (half, alone on row 3)
+- Insurance: `─── POLICY ───` divider; Policy Type · Insurer (row 1) · Policy No · Purchase Date (row 2) · Policy Status [Active / Cancelled] `SegmentedControl` · Premium Frequency (row 3); `─── COVERAGE ───` divider; Death · TPD (row 1) · CI · Early CI (row 2) · Personal Accident · Hospital (row 3, both text/decimal fields) · Surrender Value · Surrender Inquiry Date `DatePicker` (row 4; both shown only when `policy_type = "life"`)
 
 **Month/Year field:** Uses the DatePicker in month-only mode (no day selection). Displays as `MM-YYYY`. Stores as `YYYY-MM`.
 
 **Section dividers** (using the labelled `Divider` component):
 - After Name: `─── BALANCE ───`
 - After balance block: `─── DETAILS ───` (groups institution, account number, month/year)
+- Insurance modal has two additional internal dividers within the subtype settings section: `─── POLICY ───` (before policy fields) and `─── COVERAGE ───` (before coverage amount fields)
 - After base details: `─── [TYPE] SETTINGS ───` (groups subtype-specific fields)
 - At bottom (Capital/Asset/Insurance): `─── RECURRING PAYMENT ───` (the toggle section)
 
@@ -2403,6 +2573,136 @@ Owners field: a multi-select `Dropdown` that renders selected persons as chips. 
 The Dropdown options list all household members not already selected. Adding an owner adds them as non-primary by default.
 
 On Save, calls `POST /api/accounts/{id}/owners` for each added person and `DELETE /api/accounts/{id}/owners/{person_id}` for each removed person, then `PATCH` (or re-POST with `is_primary: true`) for the primary owner change. All mutations are batched before Save — no live API calls until the user confirms.
+
+---
+
+### 9.14 Transactions Page [EVENT-004]
+
+Route: `/transactions`. Full-width page using `EntityPage<Event>` in **table layout** (not card grid). Uses the standard `AppShell` with sidebar and Topbar.
+
+---
+
+#### Table Column Spec
+
+The table uses the `Table` component (§4.7). Date and Name columns are pinned left on horizontal scroll.
+
+| # | Header | Content | Width | Align | Sortable |
+|---|---|---|---|---|---|
+| 1 | Date | `DD-MM-YYYY` | 90px | left | ✓ |
+| 2 | Name | Transaction name; small `Badge` (neutral, `text-xs`) if `linked_recurring_id` is set: "Recurring" | 160px | left | ✓ |
+| 3 | Paid with | Account name, truncated with `Tooltip` on overflow | 100px | left | ✓ |
+| 4 | Category | Coloured `Badge` using the category's `color` field; "Uncategorised" in `text-text-muted` if null | 130px | left | ✓ |
+| 5 | Amount | `{CURRENCY_CODE} {amount}` e.g. `NZD 305.31`; right-aligned | 100px | right | ✓ |
+| 6 | `{BASE_CODE}` | Base-currency amount (header is the household's `base_currency` code, e.g. `SGD`); right-aligned; if `fx_delta ≠ 0`, show a `Δ` indicator icon (`text-text-muted`); hovering the cell shows a `Tooltip` with source indicator (`formula` / `spot rate` / `manual`) and delta: `Δ +0.43 SGD` | 90px | right | ✓ |
+| 7 | Payee | Person `Avatar` (initials, 24px) + display name, truncated | 80px | left | — |
+| 8 | Type | `Badge`: Inflow = success variant (green); Outflow = neutral variant (muted) — outflow is the default, green draws the eye to inflows | 70px | center | ✓ |
+| 9 | Status | `Badge`: `pending` = warning (amber); `completed` = success (green); `reconciled` = muted; `cancelled` = error (red) | 90px | center | ✓ |
+| 10 | Flags | Icon cluster (24px, `text-text-muted`); personal expense: `UserIcon`; GST claimable: `ReceiptIcon`; gift: `GiftIcon`; empty cell when no flags | 50px | center | — |
+| 11 | Notes | Truncated free text; full text on `Tooltip` hover | flex (min 80px) | left | — |
+| 12 | ⋯ | `ContextMenu` trigger per row | 40px | center | — |
+
+**Amount display when `currency == base_currency`:** Column 5 shows the amount normally. Column 6 (`{BASE_CODE}`) is hidden for that row — a dash `—` is shown. No `fx_delta` indicator.
+
+---
+
+#### Responsive Behaviour
+
+**≥1280px (full desktop):** All 12 columns visible. Horizontal scroll if viewport is narrower than total column width — Date and Name remain pinned.
+
+**768px–1279px (medium — laptop / sidebar-open):** Hide columns 9 (Status), 10 (Flags), 11 (Notes). 9 columns remain as a full table. No card collapse.
+
+**<768px (mobile):** Card collapse per §4.7. Each transaction becomes a `bg-surface border border-border rounded-lg p-4` card:
+
+```
+┌──────────────────────────────────────────────┐
+│  12-06-2026  Groceries              NZD 305.31  │  ← primary line
+│  [Groceries]  [Paid]                SGD 228.39  │  ← category badge + status + base amount
+│                                            ⋯   │  ← ContextMenu always visible
+└──────────────────────────────────────────────┘
+```
+
+Tapping the card (anywhere except `⋯`) expands it inline to reveal:
+
+```
+  Paid with   Altitude Visa
+  Type        Outflow
+  Payee       Ben
+  Notes       Pak N Save
+  Flags       🧾 GST
+```
+
+Expanded state: `border-border-strong`; collapse on second tap or on another card tap.
+
+---
+
+#### Row States
+
+**Default:** Standard zebra per §4.7 — odd rows `bg-surface`, even rows `bg-surface-raised`.
+
+**Hover:** `bg-surface-hover` (full row width).
+
+**Reconciled:** Full row `opacity-60`; Name cell `line-through`. The muted appearance signals the row is settled and no further action is needed.
+
+**Personal expense:** `UserIcon` shown in Flags column. No row-level colour change — personal vs shared is a flag, not a status.
+
+**Cancelled:** Full row `opacity-40`; Status badge shows error variant.
+
+---
+
+#### ContextMenu Items (per row)
+
+```
+Edit
+Duplicate
+Reconcile          ← keyboard shortcut R; hidden if already reconciled
+───
+Archive / Restore
+───
+Delete             ← archived view only
+```
+
+---
+
+#### Action Bar and Filter Bar
+
+```
+[+ Add Transaction]   [🔍 Search…]   [Filters ▾  ●]   [Rows: 50 ▾]
+```
+
+- **Search input** (`🔍 Search…`): free-text; queries `name` and `notes` fields via `?search=` param; debounced 300ms; clears with ✕
+- **Filters toggle button** (`Filters ▾`): opens/collapses the filter bar below. Shows a filled dot `●` indicator when any filter is active.
+
+**Filter bar (collapsible, collapsed by default):**
+
+```
+[Date range    ▾]  [Category      ▾]  [Account  ▾]  [Payee  ▾]  [Type  ▾]  [Status  ▾]  [Shared: All ▾]
+```
+
+- Date range `DatePicker` (two-date range) → writes `time_range` to `visualizationStore`
+- Category `CategorySelect` (multi) → writes `category_ids` to `visualizationStore`
+- Account `Dropdown` (multi) → writes `account_ids` to `visualizationStore`
+- Payee `Dropdown` (household persons; multi) → local state → `payee_person_id` query param
+- Type `Dropdown` (All / Inflow / Outflow) → writes `transaction_type` to `visualizationStore`
+- Status `Dropdown` (All / Pending / Completed / Reconciled / Cancelled) → local state only
+- Shared expense `Dropdown` (All / Shared / Personal) → writes `is_shared_expense` to `visualizationStore`
+
+Filter bar animates open/closed (`max-height` transition, `--duration-normal`).
+
+**Active filter chips:** When any filter is active, a chip row appears directly below the filter bar (or below the action bar when filter bar is collapsed). Each chip shows the filter label and value; click ✕ on a chip to clear that filter. A "Clear all" link appears at the end of the chip row when two or more filters are active.
+
+---
+
+#### Pagination
+
+`Pagination` component (§5.6) sits below the table: ← Prev · page numbers · Next →  · total count label (`{N} transactions`). Rows-per-page `Dropdown` options: 25 / 50 / 100; default 50.
+
+---
+
+#### Empty State
+
+Full-width `EmptyState` component spanning all columns:
+- No transactions yet: icon `ReceiptIcon`, title "No transactions yet", body "Add your first transaction to start tracking.", action "Add Transaction"
+- Filters active with no results: icon `SearchIcon`, title "No transactions match your filters", body "Try adjusting the date range or clearing some filters.", action "Clear filters"
 
 ---
 
@@ -2580,6 +2880,120 @@ All animations check `prefers-reduced-motion: reduce`. When set:
 
 ---
 
+### 9.15 PendingInvitationDialog [AUTH-008]
+
+Login-time modal that appears when an authenticated user has a pending invitation to a household. Triggered by `useAuth.ts` after `/auth/me` returns — the backend checks for pending invitations to **any** household (not just the current one) and includes them in the response.
+
+**Trigger:** On successful authentication, if `response.pendingInvitation` is present, show this dialog **before** navigating to the dashboard. The dialog is modal (backdrop + focus trap) — the user must resolve it before proceeding.
+
+**Three scenarios, determined by the backend response:**
+
+| Scenario | Condition | Dialog State |
+|---|---|---|
+| **No household** | User has no `household_id` | Standard accept/decline (mirrors JoinHousehold §9.7) |
+| **Already in target** | User's `household_id` matches the invitation's household | Dismiss silently — idempotent; no dialog shown |
+| **Different household** | User is in Household A, invited to Household B | Conflict dialog with role-aware resolution |
+
+The "Already in target" scenario is handled server-side — the backend returns `pendingInvitation: null` for idempotent invitations, so the frontend never renders the dialog.
+
+---
+
+#### 9.15.1 Scenario A — No Household (Standard Accept/Decline)
+
+User has no household. This mirrors the JoinHousehold page (§9.7) but rendered as a modal inside the app shell (the user is already authenticated).
+
+```
+┌──────────────────────────────────────────────────────┐
+│  You've been invited to join                        ✕ │
+│                                                      │
+│  Smith Family Finances                               │
+│  Invited by: Kim Smith                               │
+│  Expires: 10 Jun 2026                                │
+│                                                      │
+│                    [Decline]  [Accept Invitation]    │
+└──────────────────────────────────────────────────────┘
+```
+
+**Modal config:** `size="xs"` (max 400px, `max-w-dialog-xs`). Headerless (no title bar — the invitation title is the modal heading). Close button × at `top-3 right-3` (§4.2 headerless pattern).
+
+**Heading:** `text-xl font-semibold text-text-primary mb-4` — "You've been invited to join"
+**Household name:** `text-2xl font-semibold text-text-primary mb-1` — plain text, no emoji, no card wrapper
+**Meta lines:** `text-sm text-text-secondary` — "Invited by: [name]", "Expires: [date]"
+**Actions:** Right-aligned, `mt-6` — "Decline" (secondary) + "Accept Invitation" (primary)
+
+**No cards, no emoji, no bold (`font-bold`) anywhere in this dialog.**
+
+**Accept flow:** `POST /api/invitations/:token/accept`. On 200: navigate to `/dashboard`. On 403: show `AlertBanner` (error) inside modal — "This invitation is for a different email address."
+**Decline flow:** `POST /api/invitations/:token/decline`. On 200: dismiss dialog, navigate to `/dashboard` (user has no household; they'll be prompted to create one on next login, or via the welcome flow).
+
+---
+
+#### 9.15.2 Scenario B — Different Household (Conflict — Go to Settings)
+
+User is in Household A and receives an invitation to Household B. The dialog informs the user of the conflict and sends them to Settings to resolve it there. No inline delete or leave actions — those are performed in Settings where the user has full context and confirmation flows.
+
+This applies to all roles (owner, admin, member) — the dialog does not branch on role.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  Household conflict                                    ✕   │
+│                                                            │
+│  You've been invited to join Smith Family Finances         │
+│  by Kim Smith (expires 10 Jun 2026).                       │
+│                                                            │
+│  You are currently the Owner of Tan Household.             │
+│  To accept this invitation, go to Settings to              │
+│  leave or delete your current household first.             │
+│                                                            │
+│  This invitation will remain pending.                      │
+│                                                            │
+│                     [Decline]  [Go to Settings]            │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Modal config:** `size="sm"` (max 560px, `max-w-dialog-sm`).
+
+**Layout:** Plain prose paragraphs only — no cards, no emoji, no bold text, no icon boxes.
+
+- Invitation summary: `text-sm text-text-secondary` — "You've been invited to join [household] by [inviter] (expires [date])."
+- Current household context: `text-sm text-text-primary` — "You are currently the [role] of [current household]. To accept this invitation, go to Settings to [delete/leave] your current household first." (owner: "delete"; admin/member: "leave")
+- Persistence note: `text-sm text-text-secondary` — "This invitation will remain pending."
+
+**Role label wording:**
+- Owner → "You are currently the Owner of [name]."
+- Admin → "You are currently an Admin of [name]."
+- Member → "You are currently a Member of [name]."
+
+**Action buttons:**
+- "Decline" — `Button` secondary — calls `POST /api/invitations/:token/decline`; on 200 navigates to `/dashboard` (same as Scenario A decline).
+- "Go to Settings" — `Button` primary — calls `onClose()` then navigates to `/settings`.
+
+---
+
+#### 9.15.3 Design Token Summary
+
+| Element | Token |
+|---|---|
+| Modal backdrop | `bg-backdrop` + `backdrop-blur-sm` |
+| Modal panel | `bg-surface-overlay`, `rounded-xl`, `shadow-xl` |
+| Heading (Scenario A) | `text-xl font-semibold text-text-primary` |
+| Household name (Scenario A) | `text-2xl font-semibold text-text-primary` |
+| Body text (Scenario B) | `text-sm text-text-primary` |
+| Secondary text | `text-sm text-text-secondary` |
+| Accept/primary button | `Button` primary |
+| Decline/secondary button | `Button` secondary |
+| Go to Settings button | `Button` primary |
+| Close × button | `text-text-muted`, hover `text-text-primary` |
+
+#### 9.15.4 Integration Notes
+
+- **Trigger point:** `useAuth.ts` — after `/auth/me` resolves, check `response.pendingInvitation`. If present and `scenario !== 'already_member'`, render `<PendingInvitationDialog>`.
+- **Dismissal:** Scenario B "Decline" calls the same endpoint as Scenario A — invitation is declined and user is redirected to `/dashboard`. "Go to Settings" closes the dialog and navigates to Settings so the user can delete/leave their household before accepting. The ✕ button closes without action; dialog reappears on next login.
+- **Declined invitation visibility:** Settings → Members → Invitations table shows both pending and declined invitations sent by the household. Declined rows have a "Declined" badge and a "Delete invitation" context menu action to remove them from the list.
+- **Mobile:** Follows standard Modal mobile bottom-sheet pattern (§4.2) — `items-end`, `rounded-t-xl`, full-width panel.
+
+---
+
 ## 11. Accessibility (Layer 11)
 
 ### 11.1 WCAG 2.1 Level AA Compliance
@@ -2686,5 +3100,13 @@ Visually smaller elements (e.g. 24px icons) have invisible padding to reach the 
 | 2.7 | 2026-06-04 | Ben + Claude | Comprehensive implementation alignment pass (from FE-001–FE-008 + AUTH-003–005 diff audit). §1.1: focus ring glow token table (ring-glow-primary/accent/error with per-component mapping); text-text-inverse semantics (white on coloured backgrounds only). §1.6 Z-Index Scale: portal escaping rule, toast top-[80px] placement, modal backdrop/panel both z-modal note, raw integer prohibition. §2.5 Avatar: exact initials algorithm (2-char, fallback "?"), alt text pattern, entity-person background. §2.7 Tooltip: whitespace-normal break-words wrapping; JS boundary clamping + vertical flip precise mechanism documented (no placement prop needed). §4.2 Modal: dirty-guard banner tokens (bg-warning-muted), size table (xs/sm/md/lg/fullscreen), mobile bottom-sheet (items-end + rounded-t-xl). §4.6a FloatingPosition: new section documenting useFloatingPosition hook, RAF-throttled tracking, portal escaping, single-hook rule. §4.7 Table: thead bg changed to bg-surface-raised + border-b-2 border-border-light for obvious header distinctness; sort icon opacity behaviour; mobile card-list collapse detail; ContextMenu-per-row rule. §9.1 EntityCard: inline style accent bar note (Tailwind border shorthand override); design system demo variants. §9.3 EntityPage: design system demo + BulkActionBar behaviour. §9.6 PublicPage: corrected max-w-content (28rem) not min-w-[360px]; full layout token documentation. §9.10 Design System Page (new): section catalogue, public pages subsection note. §9.11 DebtSummaryView renumbered. |
 | 2.8 | 2026-06-05 | Ben + Claude | §5.5 Tabs: split into Pattern A (underline) and Pattern B (pill tab bar); defined when to use each, container/pill tokens, URL-sync rule. §7.1, §7.4, §7.9: added §7.11 legend toggle pill reference. §7.11 Chart Legend Toggle Pills (new): pill states (active/inactive/hover), inline style pattern for dynamic chart colors using color-mix(), toggle behavior, at-least-one-active guard, aria-pressed accessibility. §10.2: added entity card entrance (translateY 12px, duration-slow), entity archive (opacity then max-height collapse), staggered list load (40ms stagger, cap at 8), alert banner appear/dismiss, sidebar collapse/expand (labels fade before width). §10.3: added chart legend pill toggle on/off, filter chip appear/dismiss (ease-bounce/ease-in), drag card lift (cross-ref §4.9), balance value live update (amber pulse). |
 | 2.9 | 2026-06-05 | Ben + Claude | §9.8.2 Members tab: replaced inline role Dropdown + trash icon button with `⋯` ContextMenu per row (§4.7 consistency); ContextMenu items: "Change to Admin"/"Change to Member" + divider + "Remove member" (label shortened from "Remove from household"). Pending Invitations section converted from custom div list to `Table` component with `⋯` ContextMenu (Copy invitation link + Cancel invitation). "Leave Household" button changed from `secondary + text-error` to `variant="danger"`. |
+| 2.13 | 2026-06-07 | Ben + Claude | §9.13 Accounts update: secondary info lines updated for all 5 types (bank reserved_amount, credit card reward_type + points_expiry, asset registration_no, insurance policy_status badge + coverage summary); modal field layout updated — Bank adds Reserved Amount; CreditCard adds reward_type/bonus_limit/points_expiry (hidden when none); Asset adds Registration No; Insurance fully redesigned with POLICY + COVERAGE divider sections, per-type coverage fields (death/tpd/ci/early_ci/personal_accident/hospital), surrender value (life only), policy_status SegmentedControl. |
+| 2.12 | 2026-06-07 | Ben + Claude | §9.14 Transactions Page (new): full table column spec (12 columns: Date, Name, Paid with, Category, Amount, {BASE_CODE}, Payee, Type, Status, Flags, Notes, ⋯); responsive rules (≥1280px full / 768–1279px hides Status+Flags+Notes / <768px card collapse with tap-to-expand); row states (reconciled opacity-60 + strikethrough, personal flag icon, cancelled opacity-40); ContextMenu items; action bar with filter controls and store wiring; pagination spec; two empty states. |
 | 2.11 | 2026-06-05 | Ben + Claude | §9.13 Accounts Pages (new): full spec for AccountCard anatomy per account_type (secondary info lines for bank/credit_card/capital/asset/insurance), entity accent token mapping, account type selector pill row, type-switch ConfirmationDialog, modal field layout (full-width vs half-width per type), section dividers, RecurringConfig Toggle section, valuation history Skeleton placeholder + Add Valuation modal (Date/Value/Source/Notes), Manage Owners modal (multi-select chips with primary star). |
 | 2.10 | 2026-06-05 | Ben + Claude | Epic 2 doc alignment pass. §4.6 ContextMenu: added header item variant spec (`{ header: true; displayName; email }` — renders non-interactive name/email block above items, used by Topbar account menu). §4.6a FloatingPosition: added full API signature (`useFloatingPosition(triggerRef, open, options?)` → `FloatingPosition \| null`) with usage pattern. §4.10 Multi-Select: corrected BulkActionBar description — bar is inline below entity list, not fixed-bottom viewport; updated button set (Archive + Delete, no Export or Categorise yet). §4.11 BulkActionBar (new standalone spec): container tokens, entrance animation, count label, action button table, props interface, integration note. Revision history reordered: 2.7 (Jun 4) → 2.8 (Jun 5) → 2.9 (Jun 5) — previously listed out of order as 2.9 → 2.8 → 2.7. Frontmatter version corrected to 2.10. |
+
+| 3.0 | 2026-06-07 | Ben + Claude | AUTH-007 — invite-only household creation. §9.8.2 Members tab: added 'Owner eligible' badge (canCreateHousehold = true, owner-only view, bg-accent-subtle text-accent); added 'Grant/Revoke household creation' ContextMenu actions for non-owner rows (owner-only). §9.8.2 Leave Household: modal copy is now conditional on canCreateHousehold (new-household message if true, re-invitation message if false). §9.7 JoinHousehold decline: updated decline success flow to clearAuth + navigate('/login') (same as leave); response.household is null; added confirmation dialog. |
+| 3.2 | 2026-06-08 | Ben + Claude | §9.12 Categories: Row CSS Reference table (exact classes for every row element); expand/collapse animation spec (max-height transition, no display:none); keyboard interaction table (Space/Enter/Arrow/Escape/Ctrl+A); empty state (archived view only, EmptyState+Archive icon); CategoryPicker scope note (built in EVENT-004, not CAT-005). |
+| 3.3 | 2026-06-08 | Ben + Claude | §9.10 Design System Page: added 4-point policy (real components only; add when shipped; remove when deleted; don't add early). Aligns with EDP §14.8 and CLAUDE.md P1. |
+| 3.4 | 2026-06-08 | Ben + Claude | §9.12 Categories Row Interaction Rules table: clearable selection state machine; onClick lift+shadow; ⋮ context menu only (never inline buttons); default ⋮ trigger always visible (opacity-60, not opacity-0 hover-reveal). |
+| 3.1 | 2026-06-07 | Ben + Sally | AUTH-008 — PendingInvitationDialog. §9.15 (new): login-time modal for authenticated users with pending invitations. Three scenarios: (A) no household → standard accept/decline mirroring §9.7; (B) already in target → silent dismiss, handled server-side; (C) different household → conflict dialog with role-aware resolution. Owner must DELETE current household (permanent, two-step ConfirmationDialog). Admin/Member can LEAVE current household (archived, reversible, single-step). Design token table, mobile bottom-sheet pattern, integration notes (useAuth.ts trigger, dismissal persistence, revisit via Settings → Members). |

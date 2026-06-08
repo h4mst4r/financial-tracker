@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — Architecture
-version: 2.5
+version: 3.1
 status: living
 created: 2026-05-26
 authority: Technical architecture specification. Derives from entity-design-philosophy.md.
@@ -423,9 +423,14 @@ class Person(BaseEntity):
     default_view:     Mapped[str]           = mapped_column(String(20), nullable=False, default="household")
     # default_view: "household" | "personal"  — persisted Sidebar view toggle state [FR-P-006]
     last_active_at:   Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    google_sub:       Mapped[str]           = mapped_column(String(200), nullable=False, unique=True, index=True)
+    google_sub:           Mapped[str]  = mapped_column(String(200), nullable=False, unique=True, index=True)
     # google_sub: Google OAuth subject identifier
     # Note: joined_at is not a separate field — use created_at (inherited from BaseEntity) instead.
+    can_create_household: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
+    # can_create_household: gate for household auto-creation on login (AUTH-007).
+    # True only for: the first-ever person bootstrapped in the DB, persons explicitly granted by an owner,
+    # and the dev bypass person. All invited members start False.
+    # SaaS forward-compat: this flag maps to "has active paid plan" when subscriptions are introduced.
 
     household: Mapped["Household"] = relationship(back_populates="persons")
 
@@ -445,7 +450,7 @@ class HouseholdInvitation(Base):
     expires_at:   Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
     status:       Mapped[str]            = mapped_column(String(20), default="pending")
     # status: "pending" | "accepted" | "expired" | "cancelled" | "declined"
-    # "declined" added in AUTH-006 migration — person rejects invitation and gets their own household
+    # "declined" added in AUTH-006 migration — person rejects invitation; AUTH-007: decline is now detach-only (no new household)
 
 
 # models/account.py
@@ -944,12 +949,13 @@ PERSONS
   POST   /api/persons/invite         → Create invitation (admin+)
   GET    /api/persons/invitations    → List pending invitations (admin+)
   DELETE /api/persons/invitations/{id} → Cancel invitation (admin+)
-  POST   /api/persons/leave          → Leave household (non-owner only); detaches person (household_id → null); no new household created; returns { person, household: null, csrfToken, isFirstLogin: false }; frontend clears auth and redirects to /login; on next login seed_household_if_needed creates a fresh household
+  POST   /api/persons/leave          → Leave household (non-owner only); detaches person (household_id → null); no new household created; returns { person, household: null, csrfToken, isFirstLogin: false }; frontend clears auth and redirects to /login; on next login seed_household_if_needed creates a fresh household only if can_create_household = true; otherwise redirects to not_invited
+  PATCH  /api/persons/{id}/household-creation → Grant/revoke can_create_household (owner-only); body: { canCreateHousehold: bool }; 403 if requester is not owner; 400 if owner attempts self-revoke
 
 INVITATIONS (public — no auth required for GET; auth required for POST)
   GET    /api/invitations/{token}    → Fetch invitation details (returns 404 / 410 for expired|accepted|cancelled|declined)
   POST   /api/invitations/{token}/accept  → Accept invitation; email must match; idempotent if already in household; **409 if person already belongs to a different household** (must leave/delete current household first)
-  POST   /api/invitations/{token}/decline → Decline invitation (authenticated); email must match; if person is in invited household detaches them; creates new household and assigns person as owner; returns { person, household, csrfToken, isFirstLogin: true }
+  POST   /api/invitations/{token}/decline → Decline invitation (authenticated); email must match; detaches person from invited household (household_id → null); does NOT create a new household (AUTH-007); returns { person, household: null, csrfToken, isFirstLogin: false }; frontend clears auth and redirects to /login
 
 ACCOUNTS
   GET    /api/accounts               → List (filter: ?type=bank|credit_card|capital|asset|insurance)
@@ -1155,64 +1161,47 @@ reformatted to the envelope above — the raw Pydantic error array is placed in 
 
 ## 7. Authentication & Security
 
-### 7.1 Google OAuth 2.0 Flow
+### 7.1 Authentication Flow
 
-```
-Browser                     Backend                      Google
-   │                            │                            │
-   │── GET /auth/login ─────────►│                            │
-   │                            │── Generate state + nonce   │
-   │                            │── Store in DB session      │
-   │◄── Redirect to Google ─────│                            │
-   │                            │                            │
-   │──────────────────────────────────────────────────────────►│
-   │◄─────────────────── Redirect with code + state ──────────│
-   │                            │                            │
-   │── GET /auth/callback ──────►│                            │
-   │    ?code=...&state=...      │── Validate state vs DB    │
-   │                            │── Exchange code for token ─►│
-   │                            │◄── id_token + access_token ─│
-   │                            │── Decode id_token          │
-   │                            │── Lookup/create Person     │
-   │                            │   (if NEW person:          │
-   │                            │    check pending invitation │
-   │                            │    by email before creating │
-   │                            │    new household — see      │
-   │                            │    AUTH-005 fix)            │
-   │                            │── Create server session    │
-   │◄── Set-Cookie: session ────│── Update last_active_at    │
-   │── Redirect to /app ────────►│                            │
-```
+All authentication flows converge through `GET /auth/callback`. The decision logic is determined by the Person's current state.
 
-**Invitation-aware new-user flow (AUTH-005 + AUTH-006 revision):** When `google_sub` is not found (first-time login):
+**Person state truth table — what happens on next OAuth login:**
 
-1. `auth_service.seed_household_if_needed()` checks for a pending `HouseholdInvitation` matching the verified email.
-2. **If matching invitation found:** assign `person.household_id` and `person.role = "member"` — do NOT mark invitation accepted yet. Acceptance is explicit: the person must visit `/join/:token` and click "Accept". The `accept_invitation` service is idempotent when the person is already in the target household.
-3. **If no matching invitation:** create a new household, seed defaults, person is `owner`. This covers first-time users, users who left a household and re-login, and owners whose household was deleted.
+| `household_id` | `can_create_household` | Pending invite? | Result |
+|---|---|---|---|
+| set | any | no | Validates session → Dashboard |
+| set | any | yes | `/join/:token` (must accept/decline first) |
+| null | false | no | `NotInvitedError` → `/login?error=not_invited` |
+| null | true | no | Creates new household → Dashboard |
+| null | any | yes | Assigns `household_id` from invite (pending) → `/join/:token` |
+| any | any | any (archived person) | 401 "Account is disabled" |
 
-Note: the former `NotInvitedError` guard (block if any household exists) has been removed. Any authenticated Google user without a household can create one. The invitation system gates *joining an existing household*, not creating a new one.
+**`GET /auth/callback` algorithm:**
+1. Validate `oauth_state` cookie against DB → 403 if missing/expired
+2. Exchange auth code for `id_token` from Google
+3. `get_or_create_person(email, google_sub)` — upserts Person row
+4. `seed_household_if_needed(person)` — applies truth table above:
+   - If `person.household_id` is set → no-op
+   - If pending `HouseholdInvitation` matches email → assign `household_id`, `role="member"` (pending, not yet accepted)
+   - If `can_create_household = True` → create household, seed defaults, person becomes `owner`
+   - If `can_create_household = False` and no invite → raise `NotInvitedError`, redirect to `/login?error=not_invited` (person row persisted, no session created)
+5. `create_session()` → set `session_id` cookie → redirect to `/#session={session.id}`
+6. Frontend `main.tsx` reads hash fragment, stores session token, calls `GET /auth/me`
+7. `/auth/me` returns `{ person, household, csrfToken, pendingInvitationToken, isFirstLogin }` → `authStore.setAuth()` → navigate to `/dashboard` or `/join/:token`
 
-`/auth/me` returns `pendingInvitationToken: str | null` (UUID of the still-pending invitation for this email/household combination, if any) so `useAuth.ts` can redirect the person to `/join/:token` regardless of whether they arrived via the join link or via direct login. It also returns `isFirstLogin: bool` (true when `person.role == "owner"` and `person.created_at` is within 2 minutes) so the frontend can show the welcome toast.
+**Bootstrap rule:** `get_or_create_person` sets `can_create_household = True` only for the very first `Person` row in the DB (`SELECT COUNT(*) FROM persons == 0`). All subsequent new persons start with `False`.
 
-**Frontend continuation (AUTH-003):**
-```
-Browser (React app)                              Backend
-   │── GET /auth/me ──────────────────────────────►│
-   │                                               │── Read session cookie
-   │                                               │── Validate via AuthMiddleware
-   │◄── { person, household } ─────────────────────│
-   │                                               │
-   │   authStore.setAuth(person, householdId, csrfToken)
-   │   AuthGuard reads authStore.currentPerson
-   │   Protected routes unlock — App shell renders
-```
+**Owner household deletion recovery:** When an owner deletes their household, `delete_household` sets `owner.can_create_household = True` and `owner.household_id = null`. On next login, step 4 creates a fresh household. Person rows are retained (not deleted).
 
-**The complete session pipeline** (AUTH-001 backend → AUTH-003 frontend) is treated as a single end-to-end contract. The `/auth/me` response shape must match `authStore`'s `PersonInfo` interface exactly. Verifying this contract is part of AUTH-001's Definition of Done — see epics.md AUTH-001 pipeline AC.
+**Invite/decline semantics:** `decline_invitation` is detach-only — sets `person.household_id = null`, does NOT create a new household. `can_create_household` is unchanged. On next login, `seed_household_if_needed` re-evaluates the truth table.
 
-**Test isolation:** Unit and integration tests never contact Google. A `MockOAuthServer`
-fixture intercepts all `httpx` calls to Google endpoints and returns signed mock tokens.
-Only one E2E smoke test (`test_auth_real_oauth.py`) exercises the real Google OAuth flow
-and requires a dedicated test Google account (credentials in Secret Manager, `test` env only).
+**Session resolution order (backend):** `get_current_person` checks credentials in this order:
+1. `X-Session-Token` header (explicit — set by frontend after OAuth redirect or dev-login)
+2. `session_id` cookie (ambient — browser-set from previous responses)
+
+**Why header-first:** In dev mode, Vite's proxy strips `Set-Cookie`, so the frontend stores the session in `sessionStorage` and sends it via header. In production (no proxy), the frontend doesn't set `X-Session-Token`, so the cookie is always used.
+
+**Test isolation:** Unit and integration tests never contact Google. A `MockOAuthServer` fixture intercepts all `httpx` calls to Google endpoints and returns signed mock tokens. Only one E2E smoke test (`test_auth_real_oauth.py`) exercises the real Google OAuth flow.
 
 ### 7.2 Session Management
 
@@ -1311,6 +1300,25 @@ async def _get_or_404(db: AsyncSession, household_id: UUID, entity_id: UUID,
 ```
 
 There is no mechanism to query across household boundaries. This is by design.
+
+### 7.5 Security Headers
+
+Applied globally via `SecurityHeadersMiddleware` in `main.py`. The table below shows the **required** state after DEV-002:
+
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Content-Security-Policy:   default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+X-Content-Type-Options:    nosniff
+X-Frame-Options:           DENY
+Referrer-Policy:           strict-origin-when-cross-origin
+Permissions-Policy:        camera=(), microphone=(), geolocation=(), payment=()
+```
+
+**Notes:**
+- `style-src 'unsafe-inline'` is required for Tailwind v4's injected CSS; evaluate removing post-build-audit
+- `img-src https://lh3.googleusercontent.com` is required for `Person.picture_url` Google profile images
+- `frame-ancestors 'none'` supersedes `X-Frame-Options: DENY`; both headers are set (belt + suspenders)
+- CSP and Permissions-Policy were absent from the initial `SecurityHeadersMiddleware` implementation; DEV-002 adds them
 
 ### 7.6 Dev Auth Bypass
 
@@ -1434,26 +1442,27 @@ async def get_or_create_dev_session(db: AsyncSession) -> tuple[Person, Session]:
 | Endpoint 404 in production | `POST /auth/dev-login` route handler checks `settings.AUTH_BYPASS_ENABLED` |
 | Frontend never renders | `{devBypassEnabled && ...}` guard; `AUTH_BYPASS_ENABLED` defaults `false` in production |
 
----
+### 7.7 Rate Limiting
 
-### 7.5 Security Headers
+`slowapi` is used for per-endpoint rate limiting. The `Limiter` uses `get_remote_address` as the key function.
 
-Applied globally via middleware:
+Limits:
+- `POST /auth/login`: 20 requests/minute per IP
+- `GET /auth/callback`: 20 requests/minute per IP
+- `POST /auth/dev-login`: 20 requests/minute per IP
 
+Rate limit violations return HTTP 429 with the standard error envelope:
+```json
+{"error": "Rate limit exceeded", "code": "RATE_LIMITED", "detail": {}}
 ```
-Strict-Transport-Security: max-age=31536000; includeSubDomains
-Content-Security-Policy:   default-src 'self'; script-src 'self'; ...
-X-Content-Type-Options:    nosniff
-X-Frame-Options:           DENY
-Referrer-Policy:           strict-origin-when-cross-origin
-Permissions-Policy:        camera=(), microphone=(), geolocation=()
-```
+
+Middleware order with slowapi: `SecurityHeaders → DevBypass → CSRF → SlowAPI → Route`
 
 ---
 
 ## 8. Frontend Architecture
 
-### 8.0 Design Token System
+### 8.1 Design Token System
 
 All design tokens are defined in `frontend/src/index.css` using Tailwind CSS v4's
 native `@theme {}` block — no separate `tailwind.config.ts` is used.
@@ -1493,7 +1502,7 @@ parent components to control per-instance colour theming without prop drilling.
 | Feature-specific | `components/<domain>/` | Built per feature epic |
 | Layout | `components/layout/` | AppShell, Sidebar, Topbar |
 
-### 8.1 Routing
+### 8.2 Routing
 
 ```typescript
 // App.tsx — React Router v6 nested routes
@@ -1533,7 +1542,7 @@ mock Dev User so the full app shell and all placeholder module pages are navigab
 a running backend. The mock is stripped at build time in production via a Vite
 `import.meta.env.DEV` guard.
 
-### 8.2 Auth Store
+### 8.3 Auth Store
 
 ```typescript
 // store/authStore.ts — Zustand
@@ -1548,7 +1557,7 @@ interface AuthState {
 // mock Dev User so the app shell is navigable without backend OAuth.
 ```
 
-### 8.3 VisualizationFilter Global State
+### 8.4 VisualizationFilter Global State
 
 ```typescript
 // store/visualizationStore.ts — Zustand
@@ -1574,10 +1583,11 @@ const defaultFilter: VisualizationFilter = {
   currency_mode: "converted",
   display_currency: "SGD",
   transaction_type: "all",
+  is_shared_expense: null,
 };
 ```
 
-### 8.4 Three-Layer Component Architecture
+### 8.5 Three-Layer Component Architecture
 
 ```typescript
 // hooks/useEntityManager.ts — [EDP §14.2]
@@ -2060,10 +2070,13 @@ async def compute_budget_actuals(
 | 1.0 | 2026-05-23 | Ben + BMAD | Initial architecture — v1 migration scope |
 | 2.0 | 2026-05-26 | Ben + Claude | Full rewrite — entity hierarchy applied to all models, STI for accounts and events, MonetaryValueMixin, VisualizationFilter architecture, aggregation API endpoints, four-source recurring payment processor, EntityDebt computation queries, hard-delete logic, security patterns, comprehensive test strategy |
 | 2.1 | 2026-05-26 | Ben + Claude | Date format: ISO 8601 wire + DD-MM-YYYY display. Visualization endpoints: budget history, capital history, person comparison, category comparison. Error contract updated to RFC 7807 Problem Details (IETF standard). Mock OAuth strategy for tests — real credentials required only for one E2E smoke test. Multi-currency breadth: all ISO 4217 supported (SGD, NZD, USD, PHP, etc.) |
-| 2.2 | 2026-05-29 | Ben + Claude | Frontend architecture section updated to reflect Epic 2 completion: §8.0 Design Token System (Tailwind v4 @theme/@utility pattern, component layer map); §8.2 Auth Store (mock Dev User for pre-OAuth development); §8.1 routing updated with /design-system route; §8.3 VisualizationFilter and §8.4 component architecture renumbered. |
+| 2.2 | 2026-05-29 | Ben + Claude | Frontend architecture section updated to reflect Epic 2 completion: §8.1 Design Token System (Tailwind v4 @theme/@utility pattern, component layer map); §8.3 Auth Store (mock Dev User for pre-OAuth development); §8.2 routing updated with /design-system route; §8.4 VisualizationFilter and §8.5 component architecture renumbered. |
 | 2.3 | 2026-06-01 | Ben + Claude | §3.2 Frontend directory tree: removed tailwind.config.ts (Tailwind v4 is config-in-CSS; no config file exists). §7.3 CSRF: corrected "single-use rotation" claim — token is session-lifetime, not rotated per mutation. Frontmatter version corrected to match revision history. |
-| 2.4 | 2026-06-05 | Ben + Claude | §3.2 Frontend directory tree: hooks/ updated — added useFloatingPosition (built, Epic 2) and useMultiSelect (built, Epic 2); marked useVisualizationFilter and useTheme as planned. components/entity/ updated — added BulkActionBar. components/layout/ updated — added PublicPage, removed PersonDashboardFilter (planned, Visualizations epic); ui/ comment updated to cross-reference UX spec §2–6. pages/ updated — added Login, JoinHousehold, NotFound, Forbidden, DesignSystem with route annotations. §8.1 Router: added /forbidden (Forbidden) and * catch-all (NotFound) routes. |
+| 2.4 | 2026-06-05 | Ben + Claude | §3.2 Frontend directory tree: hooks/ updated — added useFloatingPosition (built, Epic 2) and useMultiSelect (built, Epic 2); marked useVisualizationFilter and useTheme as planned. components/entity/ updated — added BulkActionBar. components/layout/ updated — added PublicPage, removed PersonDashboardFilter (planned, Visualizations epic); ui/ comment updated to cross-reference UX spec §2–6. pages/ updated — added Login, JoinHousehold, NotFound, Forbidden, DesignSystem with route annotations. §8.2 Router: added /forbidden (Forbidden) and * catch-all (NotFound) routes. |
 | 2.5 | 2026-06-05 | Ben + Claude | Epic 3 spec alignment pass. §4.4 Person model: added `default_view` field; removed stale `joined_at` (use inherited `created_at`). §4.4 HouseholdInvitation: added `"declined"` to status values (AUTH-006 migration). §7.2 Session record: added `csrf_token` to field list. Session cookie: corrected `SameSite=Strict` → `SameSite=Lax` with rationale (OAuth callback redirect). §6.2 PERSONS/INVITATIONS: added `POST /api/persons/leave` and `POST /api/invitations/{token}/decline` endpoints (AUTH-006). §6.4 Error contract: replaced RFC 7807 spec (was planned but not implemented) with the actual envelope `{error, code, detail}` used in `main.py`. |
+| 2.6 | 2026-06-05 | Ben + Claude | Bug fix pass — household creation and invitation guard logic. §6.2 `POST /api/persons/leave`: corrected — does NOT create new household; returns `household: null`; frontend clears auth and redirects to login; fresh household created on next login via `seed_household_if_needed`. §6.2 `POST /api/invitations/{token}/accept`: added strict 409 guard — person must have no current household (must leave/delete first) before accepting. §7.1 `seed_household_if_needed`: removed `NotInvitedError` global guard; any authenticated user without a household now gets one created; invitation system gates joining only. `/auth/me`: returns `household: null` (JSON null, not string "None") when `person.household_id` is null; `useAuth.ts` handles null household by clearing auth and redirecting to login. |
 | 2.7 | 2026-06-06 | Ben + Claude | Added §7.6 Dev Auth Bypass — localhost-only `AUTH_BYPASS_ENABLED` mode with middleware auto-bypass, `get_or_create_dev_session` service function, and `POST /auth/dev-login` endpoint. Added endpoint to §6.2 AUTH inventory. Sourced from Epic 3 retrospective HIGH-priority action item (DEV-001). |
 | 2.8 | 2026-06-06 | Ben + Claude | §7.6 simplification: dropped `VITE_AUTH_BYPASS_ENABLED` as a separate flag. `AUTH_BYPASS_ENABLED` is now the single flag for both backend and frontend. Frontend reads it via `import.meta.env.AUTH_BYPASS_ENABLED` (exposed through `envPrefix: ['VITE_', 'AUTH_BYPASS_']` in `vite.config.ts`). `.env.example` now has two flags only: `ENV` and `AUTH_BYPASS_ENABLED`. |
-| 2.6 | 2026-06-05 | Ben + Claude | Bug fix pass — household creation and invitation guard logic. §6.2 `POST /api/persons/leave`: corrected — does NOT create new household; returns `household: null`; frontend clears auth and redirects to login; fresh household created on next login via `seed_household_if_needed`. §6.2 `POST /api/invitations/{token}/accept`: added strict 409 guard — person must have no current household (must leave/delete first) before accepting. §7.1 `seed_household_if_needed`: removed `NotInvitedError` global guard; any authenticated user without a household now gets one created; invitation system gates joining only. `/auth/me`: returns `household: null` (JSON null, not string "None") when `person.household_id` is null; `useAuth.ts` handles null household by clearing auth and redirecting to login. |
+| 2.9 | 2026-06-07 | Ben + Claude | §7.5 Security Headers: corrected — CSP and Permissions-Policy were absent from initial `SecurityHeadersMiddleware`; added correct header values including `img-src googleusercontent.com` and `style-src 'unsafe-inline'` rationale. Added §7.7 Rate Limiting: `slowapi` applied to auth endpoints (20 req/min/IP); middleware order updated. Both gaps are addressed by DEV-002. |
+| 3.0 | 2026-06-07 | Ben + Claude | §7.1 Auth flow: distilled auth-pathway-spec.md into architecture. Replaced verbose OAuth sequence diagram with compact person-state truth table + callback algorithm. Consolidated all 8 login pathways (dev, bootstrap, returning, invitee, uninvited, household deletion, leave, flag-grant) into single decision table. Added session resolution order (header-first rationale). Removed narrative pathway descriptions — callback algorithm is the source of truth. |
+| 3.1 | 2026-06-07 | Ben + Claude | AUTH-007 — invite-only household creation. §4.4 Person: added `can_create_household: bool` (default False); bootstrap rule (first person in DB gets True). §6.2 PERSONS: added `PATCH /api/persons/{id}/household-creation` (owner-only grant/revoke); updated `/leave` and `/decline` comments. §6.2 INVITATIONS: `decline` is now detach-only — no new household created. §7.1 `seed_household_if_needed`: restored `NotInvitedError` guard scoped to `can_create_household = False`; documented bootstrap rule and grant/revoke mechanism; SaaS forward-compat note. |

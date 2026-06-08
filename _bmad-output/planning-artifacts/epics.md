@@ -1,6 +1,6 @@
 ---
 title: Financial Tracker — Epics & Stories
-version: 3.0
+version: 3.9
 status: living
 created: 2026-05-28
 authority: Implementation plan. Derives from entity-design-philosophy.md [EDP],
@@ -38,14 +38,7 @@ dependency order. Never start a story unless all `Depends on` stories are comple
 - No new linting errors
 - PR description references this story ID
 
-**Lessons from previous attempt (stories 1-1 → 2-5):**
-- Use `func.lower()` for all case-insensitive name uniqueness checks in SQLite
-- Session sliding window uses `last_activity_at`; CSRF token uses `used: bool` (not datetime)
-- CSRF middleware does not single-use tokens — one token is valid for its lifetime
-- Archiving a category auto-promotes its children to top-level (`parent_id = NULL`) — do not return 409
-- `CategorySelect.tsx` belongs in the transactions epic, not the categories epic
-- Default categories are seeded as household-owned records at household creation, not at app startup
-- The `depth` column (0/1) on `Category` is simpler than walking the parent chain for depth checks
+> **Backend gotchas:** See CLAUDE.md §6 for common mistakes (case-insensitive queries, CSRF, category archiving, model columns, etc).
 
 ---
 
@@ -520,7 +513,7 @@ renders with placeholder routes. All generic entity components available for fea
 **Purpose:** Google OAuth login, server-side sessions, CSRF, household creation, and
 member management. After this epic both Ben and Kim can log in and are in the same household.
 
-**Completed:** 2026-06-05 · All 6 stories done · Retrospective pending
+**Completed:** 2026-06-08 · 6 of 6 stories done (AUTH-007 done) · Retrospective pending
 
 **Pre-conditions:** Epics 1 and 2 complete. Google OAuth credentials configured in Google Cloud Console.
 
@@ -831,6 +824,114 @@ Colours map to the v1 financial tracker colour scheme. All values are from the C
 
 ---
 
+### AUTH-007 — Invite-only household creation with `can_create_household`
+
+**Size:** M · **Depends on:** AUTH-006, DEV-001 · **FRs:** FR-HH-001, FR-P-001 · **Ref:** ARCH §4.4, §6.2, §7.1, §7.2a; UX §9.8.2, §9.9
+
+**Context:** The 2026-06-05 bug fix in AUTH-006 removed the `NotInvitedError` guard to unblock an owner who deleted their own household. This inadvertently opened household creation to all authenticated users: any person with no `household_id` and no pending invitation now auto-gets a household created on next login. This story replaces the open model with an invite-only model gated by a `can_create_household: bool` flag on `Person`.
+
+**The broken scenario this fixes:**
+1. Owner invites User 2 → User 2 joins as member
+2. User 2 calls `POST /api/persons/leave` → `household_id = null`
+3. User 2 logs in again → `seed_household_if_needed` finds no pending invite → **silently creates Household 2**
+4. User 2 cannot be re-invited (409 "already in a household")
+
+**New access model:**
+- `can_create_household: bool` column on `Person` (default `False`)
+- Bootstrap: the very first `Person` created in the DB gets `True` automatically
+- Owners can grant/revoke the flag for any member via `PATCH /api/persons/{id}/household-creation`
+- `seed_household_if_needed`: pending invite → join; flag `True` → create household; flag `False` → `NotInvitedError` → redirect to `not_invited`
+- `decline_invitation` no longer creates a new household — detach only (same shape as `leave_household`)
+- `leave_household` does NOT modify the flag — leaving is reversible via invitation; the flag is an admin grant
+- **SaaS note:** `can_create_household` maps to "has active paid plan" when subscriptions are introduced — no structural change needed at that point
+
+**Files:**
+```
+~ backend/models/person.py
++ backend/migrations/versions/XXXX_add_can_create_household_to_persons.py
+~ backend/services/auth_service.py
+~ backend/services/household_service.py
+~ backend/routes/auth.py
+~ backend/routes/household.py
+~ backend/schemas/person.py
+~ backend/tests/test_auth_flow.py
+~ backend/tests/test_household_api.py
+~ frontend/src/types/auth.ts
+~ frontend/src/api/usePersonApi.ts (or useMemberApi.ts)
+~ frontend/src/pages/Settings.tsx
+~ frontend/src/pages/JoinHousehold.tsx
+```
+
+**AC:**
+
+**Backend: `Person` model + migration:**
+- `can_create_household: Mapped[bool]` column — `NOT NULL`, SQLAlchemy `default=False`, server default `false`
+- Migration: add column; backfill `role = 'owner'` rows to `true`; reversible
+
+**Backend: bootstrap in `get_or_create_person`:**
+- When creating a NEW person: `SELECT COUNT(*) FROM persons` before flush; if 0 → `can_create_household = True`; otherwise `False`
+- Dev bypass person in `get_or_create_dev_session`: explicitly set `can_create_household = True`
+
+**Backend: `seed_household_if_needed` — invite-only guard:**
+- After pending-invite check: if no pending invite AND `person.can_create_household = False` → raise `NotInvitedError`
+- If no pending invite AND `can_create_household = True` → create household (unchanged)
+- **Ordering invariant:** invitation check MUST run before flag check — invited users typically have `False` and must still be able to log in
+
+**Backend: callback catches `NotInvitedError`:**
+- `GET /auth/callback`: wrap `seed_household_if_needed` in `try/except NotInvitedError` → do NOT create session → redirect to `{FRONTEND_URL}/login?error=not_invited`
+- Person row IS persisted (valid Google account, no household rights — correct state)
+- Integration test: uninvited Google sub → redirects to `not_invited`; no Session row; Person row exists with `can_create_household = False`
+
+**Backend: `decline_invitation` — detach only:**
+- Remove `_create_and_seed_household` call; set `person.household_id = None`, `person.role = 'member'`; return `(person, None)`
+- Route response: `{ person, household: null, csrfToken, isFirstLogin: false }`
+- Integration test: decline → 200; `household_id = null`; no new household created
+
+**Backend: `PATCH /api/persons/{id}/household-creation` (owner-only):**
+- Request: `{ canCreateHousehold: bool }`; validates `requesting_person.role == 'owner'`; 403 otherwise
+- Owner cannot revoke their own flag → 400
+- Route declared before `/{person_id}` catch-all
+
+**Backend: `PersonResponse` schema:**
+- Add `can_create_household: bool`; exposes as `canCreateHousehold` via alias_generator
+- `/auth/me` hand-built dict: add `"canCreateHousehold": person.can_create_household` to `person` object
+
+**Frontend: `authStore` / types:**
+- `Person` type and `authStore.person` include `canCreateHousehold: boolean`
+- `setAuth` populates from `/auth/me` response
+
+**Frontend: `Settings.tsx` — Members tab:**
+- Member rows (owner's view): "Owner eligible" badge (`bg-accent-subtle text-accent`) when `canCreateHousehold = true`
+- Context menu for non-owner members: "Grant household creation" / "Revoke household creation" (owner-only view); calls `PATCH /api/persons/{id}/household-creation`; on success invalidates `['persons', householdId]`; shows success toast
+- Non-owner viewers: no badge, no action
+
+**Frontend: `JoinHousehold.tsx` — decline success:**
+- On 200 from decline: call `clearAuth()` → navigate to `/login` (same as leave flow)
+- Confirm dialog copy: "You will leave **[household name]**. You will need a new invitation to sign back in. This cannot be undone."
+
+**Frontend: `Settings.tsx` — Leave modal copy:**
+- If `authStore.person.canCreateHousehold === true`: "You will leave **[household name]**. A new household will be created for you when you next sign in. This cannot be undone."
+- If `false`: "You will leave **[household name]**. You will need a new invitation to sign back in. This cannot be undone."
+
+**Tests:**
+- `test_auth_flow.py`: first-user bootstrap → `can_create_household = True`; household created
+- `test_auth_flow.py`: uninvited user (DB has existing persons) → redirect to `not_invited`; no session; person row persisted
+- `test_auth_flow.py`: leave + re-login without flag → `not_invited`
+- `test_auth_flow.py`: leave + re-login with flag → new household created
+- `test_household_api.py`: grant/revoke via new endpoint; non-owner 403; self-revoke 400
+- `test_household_api.py`: decline → `household: null`; no new household
+
+**Dev Agent Record — Completed 2026-06-08:**
+- All ACs implemented. `can_create_household` column added via migration `4348438110ec`; bootstrap sets `True` for first person and dev-bypass person.
+- `seed_household_if_needed`: invitation check runs BEFORE flag check — owners with pending invitations are routed to Scenario A (accept dialog), not auto-household creation.
+- `isFirstLogin` fixed to use `household.created_at` (not `person.created_at`) — welcome toast fires correctly when an owner deletes their household and re-logs in.
+- `decline_invitation` is now detach-only; no new household is created. Declined invitations remain visible to the inviting household (status `"declined"`) and are deletable via "Delete invitation" context menu.
+- `PendingInvitationDialog` Scenario B rewritten: no inline delete/leave flow. All conflict scenarios (owner, admin, member) navigate to Settings via single "Go to Settings" button.
+- Focus ring fix: added `focus:outline-none` to `Input.tsx` and `Dropdown.tsx` trigger to suppress browser default outline. Custom `ring-2 ring-glow-primary` is the sole focus indicator.
+- Auth test cleanup: removed duplicate `test_dev_login_endpoint_enabled`; fixed 2 tests with wrong `401` assertions after household deletion (correct is `200 + household: null`, actor session preserved); replaced misnamed `test_member_cannot_invite_others` with correct `test_non_admin_cannot_invite_others` that actually verifies a `member`-role user gets `403` on invite.
+
+---
+
 ## Developer Tooling
 
 **Purpose:** One-off developer-experience stories that span multiple epics and do not belong to any domain epic. These are prerequisites for efficient feature development but deliver no user-facing functionality.
@@ -895,6 +996,71 @@ Colours map to the v1 financial tracker colour scheme. All values are from the C
 
 **`.env.example`:**
 - `AUTH_BYPASS_ENABLED=false` and `ENV=development` in root `.env.example` — single flag controls both backend bypass and frontend button; no separate `VITE_*` var needed
+
+---
+
+### DEV-002 — Security hardening patch
+
+**Size:** S · **Depends on:** CAT-005 (Epic 4 complete) · **FRs:** FR-SYS-002 · **Ref:** ARCH §7.5, §7.7
+
+**Context:** Security review identified six gaps in the current implementation — two critical, two high, two medium. This story fixes everything that can be addressed without touching unbuilt feature code, and adds constraint annotations to future stories (ACCT-002, IMPORT-001) so those gaps are closed at build-time rather than retrofitted later.
+
+**Risks addressed:**
+- **Critical:** `Content-Security-Policy` and `Permissions-Policy` headers are absent from `SecurityHeadersMiddleware` despite being specified in ARCH §7.5
+- **High:** No rate limiting on auth endpoints — brute-force and credential-stuffing attacks have no throttle
+- **Medium:** `/design-system` route is accessible without authentication (sits outside `AppShell` `requireAuth` loader)
+- **Medium:** No dependency CVE scanning — `bandit` covers static analysis but `pip-audit` is absent
+
+**Risks deferred to their owning stories (constraint notes added below):**
+- Account number masking → ACCT-002 constraint note
+- CSV injection + file size limit → IMPORT-001 constraint note
+- `simpleeval` formula evaluation → already documented in FORM-001
+
+**Files:**
+```
+~ backend/main.py
+~ backend/requirements.txt
+~ backend/routes/auth.py
+~ frontend/src/App.tsx
++ backend/tests/test_security_headers.py
+```
+
+**AC:**
+
+**CSP + Permissions-Policy (backend/main.py):**
+- `SecurityHeadersMiddleware.send_with_headers` adds both headers on every response:
+  - `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+  - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+- `style-src 'unsafe-inline'` is required for Tailwind v4's injected CSS — remove only when confirmed safe after build audit
+- `img-src https://lh3.googleusercontent.com` covers Google profile picture URLs stored in `Person.picture_url`
+- `frame-ancestors 'none'` supersedes `X-Frame-Options: DENY` — both headers remain (belt + suspenders)
+
+**Rate limiting (backend/requirements.txt + backend/main.py + backend/routes/auth.py):**
+- `slowapi>=0.1.9` added to `requirements.txt`
+- `Limiter` instance created in `main.py` with `key_func=get_remote_address`; `SlowAPIMiddleware` added to app; `_rate_limit_exceeded_handler` registered as exception handler returning standard error envelope `{"error": "Rate limit exceeded", "code": "RATE_LIMITED", "detail": {}}`
+- Limits applied in `routes/auth.py`:
+  - `POST /auth/login`: `@limiter.limit("20/minute")`
+  - `GET /auth/callback`: `@limiter.limit("20/minute")`
+  - `POST /auth/dev-login`: `@limiter.limit("20/minute")` (moot in prod but consistent)
+- Middleware order preserved: `SecurityHeaders → DevBypass → CSRF → SlowAPI → Route`
+
+**`/design-system` route guard (frontend/src/App.tsx):**
+- The `/design-system` route is wrapped with the same `requireAuth` loader as the `AppShell` routes — unauthenticated visitors are redirected to `/login`
+- Additionally: rendered only when `import.meta.env.DEV` is true; in production builds the route resolves to `<NotFound />` so the catalogue is not shipped to end users
+
+**Dependency scanning:**
+- `pip-audit` added to `requirements.txt` (dev dependency)
+- Document: `pip-audit --requirement requirements.txt` should be run as a CI step before deployment; any CRITICAL or HIGH CVE blocks the deploy
+
+**Constraint annotations added to future stories:**
+- ACCT-002: `account_number` must be masked to last 4 digits (`****1234`) in `create_account` and `update_account` before the value is written to the DB — the service layer enforces this, not the schema
+- IMPORT-001: `POST /api/import/csv` must enforce: (a) `Content-Type: multipart/form-data` with file `content_type in {"text/csv", "application/csv", "text/plain"}`; (b) file size ≤ 10MB (return 413 if exceeded); (c) strip CSV injection prefixes (`=`, `+`, `-`, `@`) from all string fields before storing (apply in `validate_rows`)
+
+**Tests (backend/tests/test_security_headers.py):**
+- `test_csp_header_present`: `GET /health` response includes `content-security-policy` header containing `default-src 'self'` and `frame-ancestors 'none'`
+- `test_permissions_policy_header_present`: `GET /health` response includes `permissions-policy` header containing `camera=()`
+- `test_auth_login_rate_limited`: 21 rapid `POST /auth/login` requests from the same IP → 21st returns 429 with `code: "RATE_LIMITED"`
+- `test_design_system_requires_auth`: unauthenticated `GET /design-system` redirects to `/login` (frontend router test via `AuthGuard` mock)
 
 ---
 
@@ -1095,6 +1261,10 @@ Asset valuations tracked. Account pages render with real data.
 - `common.py`: `MonetaryValueSchema` (7 fields), `PersonRefSchema`, `PaginationParams`
 - `AccountBase`, `AccountCreate`, `AccountUpdate`, `AccountResponse` schemas; `AccountCreate.account_type` required and validated against enum
 - Subtype field groups as `Optional` on base schema (e.g. `BankAccountFields`, `CreditCardFields`) — all nullable; subtype validation enforced in service, not schema
+- `BankAccountFields`: `fx_formula_id: UUID | None`, `reserved_amount: Decimal | None`
+- `CreditCardFields`: `fx_formula_id: UUID | None`, `reward_type: Literal["points","cashback","miles","none"]`, `bonus_limit: Decimal | None`, `points_expiry: date | None`
+- `AssetAccountFields`: `registration_no: str | None`
+- `InsuranceAccountFields`: `policy_no: str | None`, `policy_status: Literal["active","cancelled"]` (default `"active"`), `coverage_death/tpd/ci/early_ci/personal_accident: Decimal | None`, `coverage_hospital: str | None`, `surrender_value: Decimal | None`, `surrender_inquiry_date: date | None`; removes old `coverage_amount` and `coverage_types[]` fields
 - `ValuationRecordCreate` / `ValuationRecordResponse` schemas
 - `RecurringConfigCreate` / `RecurringConfigResponse` schemas
 - Round-trip test: `AccountCreate → Account model → AccountResponse` serialises without error for each of the 5 account types
@@ -1118,6 +1288,7 @@ Asset valuations tracked. Account pages render with real data.
 - `duplicate_account`: clones with new UUID; copies all fields EXCEPT monetary values which are ZEROED (balance, cost_basis, credit_limit, coverage_amount, purchase_value, etc.); appends " (copy)" to name; audit log. Follows universal entity duplicate pattern (EDP §13.4) — no confirmation dialog required.
 - `add_owner(account_id, person_id, is_primary)` / `remove_owner`: enforces minimum 1 primary owner
 - Unit tests: create, archive blocked when events exist, hard-delete succeeds when empty, duplicate zeroes monetary values
+- **Security constraint (DEV-002):** `account_number` must be masked to last 4 digits (`****1234`) in `create_account` and `update_account` before writing to DB — enforce in the service function, not in the schema or route
 
 ---
 
@@ -1164,7 +1335,8 @@ Asset valuations tracked. Account pages render with real data.
 - Create/edit `EntityModal` per UX §9.13 field layout: full-width fields (type selector, name, balance, account_number with show/hide toggle for bank, notes, RecurringConfig section); half-width subtype field pairs; section dividers (`─── BALANCE ───`, `─── DETAILS ───`, `─── [TYPE] SETTINGS ───`)
 - Month/year field uses DatePicker in month-only mode (no day selection); displays `MM-YYYY`; stores as `YYYY-MM`
 - RecurringConfig section (Capital, Asset, Insurance modals): `Toggle` labelled "Set up recurring payment" at the bottom; ON state reveals `RecurringDateInput` + category Dropdown + optional amount override `MonetaryValueInput` + payment method Input + payee Dropdown; toggling OFF in edit mode when config exists triggers `ConfirmationDialog`; confirmed deletion calls `DELETE /api/accounts/{id}/recurring-config`
-- Assets page: `AccountCard` secondary line shows asset type + latest valuation; card body includes a `Skeleton` chart placeholder with "Chart coming soon" label (same shimmer shape as `chart` Skeleton); "Add Valuation" in context menu opens modal with Date, `MonetaryValueInput` (value + currency), Source Dropdown (manual / market_appraisal / depreciation_formula; selecting depreciation_formula reveals a Formula Dropdown), and Notes field
+- Assets page: `AccountCard` secondary line shows `{asset_type} · {registration_no}` + latest valuation per UX §9.13; card body includes a `Skeleton` chart placeholder with "Chart coming soon" label; "Add Valuation" in context menu opens modal with Date, `MonetaryValueInput` (value + currency), Source Dropdown (manual / market_appraisal / depreciation_formula; selecting depreciation_formula reveals a Formula Dropdown), and Notes field
+- **Deferred to Epic 7:** Asset cards for mortgage-type assets (property) will show per-person monthly repayment split derived from linked `RecurringPayment` events once those exist. ACCT-004 shows only the current valuation; the repayment summary is added in RECUR-004.
 - Manage Owners modal (from context menu): multi-select `Dropdown` renders selected persons as chips; each chip has a ★ icon (gold = primary, outline = non-primary); clicking ★ reassigns primary; clicking × removes owner (blocked at 1 owner); saves via batched `POST`/`DELETE` owner API calls on confirm
 - `useAccounts` TanStack Query hooks: `useAccounts(type?)`, `useAccount(id)`, `useCreateAccount`, `useUpdateAccount`, `useArchiveAccount`, `useRestoreAccount`, `useDuplicateAccount`, `useAddOwner`, `useRemoveOwner`, `useAddValuation`, `useDeleteValuation`, `useSetRecurringConfig`, `useDeleteRecurringConfig`
 
@@ -1194,10 +1366,13 @@ CSV imports can map categories using CAT-004 service.
 **AC:**
 - `TransactionCreate`, `TransactionUpdate`, `TransactionResponse` schemas; `MonetaryValueSchema` embedded
 - `is_shared_expense` validator: `ValidationError` if `True` and `transaction_type != "outflow"`
-- `amount_base` is optional on create (server fills from current FX rate if absent)
+- `is_shared_expense` defaults to `True` on create when `transaction_type == "outflow"`
+- `source_account_id: UUID | None` — nullable; `null` when `payment_method = "cash"`
+- `payment_method: Literal["cash"] | None` — `"cash"` when no account; `None` for all account-based transactions
+- `amount_base` is optional on create; server fills using priority chain: account FX formula → spot rate (EDP §3.2)
 - `TransferCreate`: includes `destination_account_id`; optional `dest_currency` and `dest_amount`
 - `RecurringPaymentCreate`: includes `frequency_text`; `frequency_rule` is server-computed (not accepted on input)
-- `EventListParams`: `date_from`, `date_to`, `category_id`, `account_id`, `payee_person_id`, `transaction_type`, `transaction_status`, `is_shared_expense`, `page`, `per_page`, `sort`, `order`
+- `EventListParams`: `date_from`, `date_to`, `category_id`, `account_id`, `payee_person_id`, `transaction_type`, `transaction_status`, `is_shared_expense`, `search` (str, optional — `ILIKE %term%` on `name` and `notes`), `page`, `per_page`, `sort`, `order`; when `sort` is any field other than `event_date`, backend applies `event_date DESC` as implicit secondary sort
 
 ---
 
@@ -1212,9 +1387,9 @@ CSV imports can map categories using CAT-004 service.
 ```
 
 **AC:**
-- `create_transaction`: if `amount_base` absent, calls `currency_service.get_current_rate(household_id, currency)` and fills `amount_base_calculated` and `amount_base`; if `amount_base` provided, sets `fx_delta`; audit log
+- `create_transaction`: fills `amount_base_calculated` using priority chain — (1) if `source_account_id` set and account has `fx_formula_id`: evaluate formula with `{amount, rate, fee_pct, fee_fixed}`; (2) otherwise: `amount × spot_rate` via `currency_service.get_current_rate()`; if `amount_base` provided by user, sets `fx_delta = amount_base_calculated - amount_base`; if absent, `amount_base = amount_base_calculated`, `fx_delta = 0`; audit log
 - `currency_service.get_current_rate`: returns `rate_to_base` from `Currency` table for household; raises `ValueError` if currency not configured for household
-- `detect_duplicate(db, household_id, event)`: checks for existing events with same `account_id`, `amount`, `event_date ± 1 day`, `payee`; returns candidate `FinancialEvent` or `None`
+- `detect_duplicate(db, household_id, event)`: checks for existing events with same `household_id`, `amount (±0.01)`, `event_date ± 2 days`, `category_id`, `transaction_type`, `payee`; returns candidate `FinancialEvent` or `None`
 - `reconcile(event_id)`: sets `transaction_status = "reconciled"`, `reconciled_at = now()`; audit log
 - `archive_event` / `restore_event` / `duplicate_event`: standard patterns; hard-delete if no downstream references
 - Unit tests: duplicate detection returns correct candidate; `is_shared_expense` on non-outflow raises; FX fill correctly computes `amount_base_calculated`
@@ -1235,8 +1410,9 @@ CSV imports can map categories using CAT-004 service.
 - All CRUD endpoints per ARCH §6.2 `EVENTS` section for `event_type=transaction`
 - `GET /api/events` supports all `EventListParams` filters; paginated; sorted `event_date desc` by default
 - `POST /api/events/{id}/reconcile` returns 200 with updated event
-- 409 `"duplicate-detected"` returned when `detect_duplicate` finds a candidate; response includes `candidate_id` and `candidate_date`
-- Integration test: create transaction → create near-identical second → 409 returned with candidate; force-create (skip duplicate check with `?force=true`) succeeds
+- 409 `"duplicate-detected"` returned when `detect_duplicate` finds a candidate; response body includes `candidate_id`, `candidate_date`, `candidate_name`, `candidate_amount`
+- `?force=true` query param skips duplicate check and saves as independent record (`duplicate_of = null`); `?link_to=<UUID>` skips check and saves with `duplicate_of = <UUID>`
+- Integration test: create transaction → create near-identical second → 409 returned with candidate; `?force=true` succeeds; `?link_to=<UUID>` succeeds and sets `duplicate_of`
 
 ---
 
@@ -1261,10 +1437,21 @@ The ledger uses **offset-based pagination** — `?page=1&per_page=50` default, `
 - Default fetch: `?page=1&per_page=50&sort=event_date&order=desc`
 - Rows-per-page `Dropdown` in filter bar (options: 25 / 50 / 100; default 50)
 - `Pagination` component (§5.6) below table: prev / next / page numbers / total count
-- Create/edit `EntityModal`: all transaction fields; `MonetaryValueInput` for amount; `CategorySelect`; `is_shared_expense` checkbox shown only when `transaction_type == "outflow"`
-- Duplicate detection: modal shows 409 warning with candidate transaction details; user chooses Proceed / Cancel
+- Create/edit `EntityModal` field layout (two-column grid, labelled `Divider` sections per UX §9.13 pattern):
+  - Name (full width); if `linked_recurring_id` is set, show read-only info badge below: "Generated by: [recurring name]"
+  - Date (half) | Type SegmentedControl [Inflow / Outflow] (half)
+  - `─── AMOUNT ───`: `MonetaryValueInput` — two rows: (1) native currency amount + currency selector; (2) base-currency amount (auto-filled, overridable) + source indicator badge (`formula` / `spot rate` / `manual`); `fx_delta` shown inline beneath when non-zero
+  - Paid with (Account Dropdown + Cash option) (half) | `CategorySelect` (half)
+  - `─── ATTRIBUTION ───`: Payee person (half) | Status (half); Personal expense checkbox (full width, only when type = Outflow; default unchecked = shared expense)
+  - `─── NOTES ───`: Notes textarea (full width)
+  - `─── FLAGS ───`: GST Claimable checkbox | Is Gift checkbox (inline pair)
+  - Changing "Paid with" account recalculates base-currency auto-fill immediately using account's FX formula if set
+- Duplicate detection: modal shows 409 warning with candidate transaction details (name, date, amount); user chooses **Proceed** (save independently, `?force=true`), **Link** (save linked to candidate, `?link_to=<UUID>`), or **Cancel** (discard)
 - Reconcile action in ContextMenu and keyboard shortcut `R`; reconciled rows show muted styling (`text-text-muted`, strikethrough on name)
-- Filter bar: date range `DatePicker`, `CategorySelect` (multi), account `Dropdown`, status, type, shared expense toggle
+- Action bar: `+ Add Transaction` button; debounced search input (`?search=`; queries `name` and `notes`); `Filters` toggle button with active-filter dot indicator; rows-per-page `Dropdown` (25 / 50 / 100, default 50)
+- Filter bar: collapsible (hidden by default, animates open); controls: date range `DatePicker`, `CategorySelect` (multi), account `Dropdown`, payee person `Dropdown` (multi), type `Dropdown`, status `Dropdown`, shared expense `Dropdown`
+- Filter bar wiring: date range, category, account, type, and shared expense read from and write to `visualizationStore`; payee and status are local component state only
+- Active filter chips row below action bar: one chip per active filter; ✕ per chip clears that filter; "Clear all" when ≥2 active
 
 ---
 
@@ -1527,10 +1714,14 @@ a user-configurable formula registry for asset and capital computations.
 ```
 
 **AC:**
-- System formulas seeded at startup: `straight_line_depreciation`, `declining_balance_depreciation`, `fx_fee_calculation`; `is_system = True`; cannot be deleted
+- System formulas seeded at startup (`is_system = True`, cannot be deleted):
+  - `straight_line_depreciation`: `applies_to = "asset"`, expression `purchase_value × (1 - rate × years)`, variables `{rate, years}`
+  - `declining_balance_depreciation`: `applies_to = "asset"`, expression `purchase_value × (1 - rate)^years`, variables `{rate, years}`
+  - `fx_fee_calculation`: `applies_to = "bank,credit_card"`, expression `amount × rate × (1 + fee_pct / 100) + fee_fixed`, variables `{amount, rate, fee_pct: 0, fee_fixed: 0}` — the core multi-currency accuracy formula; assigned to accounts via `fx_formula_id`
 - `evaluate_formula(formula_id, variables: dict) → Decimal`: safely evaluates `formula.expression` using `simpleeval` (no `eval`); raises `FormulaEvaluationError` on invalid expression or missing variables
 - `GET /api/formulas`: lists all formulas (system + household); `POST /api/formulas`: creates user formula; `DELETE /api/formulas/{id}`: hard-delete if user formula; 403 if system
-- Unit test: straight-line depreciation formula evaluates to expected value for known inputs
+- `event_service.create_transaction` calls `formula_service.evaluate_formula` when `source_account.fx_formula_id` is set — formula service must be importable from event service without circular dependency
+- Unit tests: `fx_fee_calculation` with `fee_pct=1.5` on NZD 100 at rate 0.75 → SGD 76.125; straight-line depreciation evaluates to expected value for known inputs
 
 ---
 
@@ -1548,6 +1739,7 @@ a user-configurable formula registry for asset and capital computations.
 - System formulas: read-only; no edit/delete actions
 - User formulas: edit name/expression in inline form; delete with `ConfirmationDialog`
 - "Test Formula" button opens modal with variable inputs and evaluates live via `POST /api/formulas/evaluate` (pass `{ expression, variables }`)
+- Account edit modal (ACCT-004) for BankAccount and CreditCard includes an "FX Fee Formula" Dropdown field showing formulas with `applies_to` containing `"bank"` or `"credit_card"`; nullable (no formula = spot rate fallback); selecting a formula reveals its variable defaults (e.g. `fee_pct: 0`) as editable fields stored as account-level overrides
 
 ---
 
@@ -1673,6 +1865,7 @@ CAT-004 category mapping service. CSV export of filtered transaction data.
 ```
 
 **AC:**
+- **Security constraint (DEV-002):** `POST /api/import/csv` must enforce: (a) `content_type in {"text/csv", "application/csv", "text/plain"}` — return 415 if not; (b) file size ≤ 10MB — return 413 if exceeded; (c) strip CSV injection prefixes (`=`, `+`, `-`, `@`) from all parsed string fields in `validate_rows` before any storage or preview
 - `parse_csv(file_bytes) → ParsedCsv`: detects encoding (UTF-8 with BOM fallback); returns `{ headers, rows, row_count }`; max 10,000 rows (returns 400 if exceeded)
 - `detect_columns(headers, sample_rows) → ColumnMapping`: heuristic matching for `date`, `amount`, `description`, `category`, `account`; returns confidence score per column; user can override
 - `validate_rows(rows, column_mapping) → ValidationResult`: checks date format (multiple formats → ISO), amount parseable (handles currency symbols, commas), required fields present; returns `{ valid_rows, invalid_rows: [{row, error}] }`
@@ -1826,6 +2019,12 @@ Phase C — Auth & Household (after Phase A; FE-007 for AUTH-003+)
 Phase C.1 — Developer tooling (after AUTH-001; recommended before Phase D)
   DEV-001 (standalone; no blocking dependencies on later epics)
 
+Phase C.2 — Auth security patch (after AUTH-006, DEV-001; run before Epic 4 resumes)
+  AUTH-007 (standalone; fixes invite-only household creation gap)
+
+Phase D.1 — Security hardening (after Epic 4 complete)
+  DEV-002 (depends on CAT-005; run before Epic 5 begins)
+
 Phase D — Categories (after Phase C)
   CAT-001 → CAT-002 → CAT-003
   CAT-001 → CAT-004
@@ -1911,7 +2110,9 @@ Phase M — Settings & Currencies (after Phase C; can run parallel with K)
 | AUTH-004 | Household settings and members frontend | done |
 | AUTH-005 | Public layout, invitation join flow, household delete | done |
 | AUTH-006 | Enhanced member management and invitation flow | done |
+| AUTH-007 | Invite-only household creation (`can_create_household`) | done |
 | DEV-001 | Dev auth bypass mode | done |
+| DEV-002 | Security hardening patch | backlog |
 | CAT-001 | Category schemas and service | pending |
 | CAT-002 | Category routes and hierarchy endpoints | pending |
 | CAT-003 | Category merge and duplicate detection | pending |
@@ -1964,3 +2165,5 @@ Phase M — Settings & Currencies (after Phase C; can run parallel with K)
 | 3.5 | 2026-06-06 | Ben + Claude | Added DEV-001 (dev auth bypass mode) as a standalone Developer Tooling story between Epic 3 and Epic 4. Sourced from Epic 3 retrospective HIGH-priority action item. Added to tracking table, implementation order (Phase C.1), and Epic 4 pre-conditions. |
 | 3.6 | 2026-06-06 | Ben + Claude | DEV-001 simplification: dropped `VITE_AUTH_BYPASS_ENABLED` as a separate flag. `AUTH_BYPASS_ENABLED=true` is now the single flag for both backend bypass and frontend dev button (exposed to Vite via `envPrefix`). Updated DEV-001 AC, Epic 4 pre-conditions, and `.env.example`. |
 | 3.7 | 2026-06-06 | Ben + Claude | DEV-001 complete. All ACs checked off, tracking table updated to done. Code review complete (4 findings: 1 Critical test isolation, 1 High dev session staleness, 1 Medium `__import__` anti-pattern, 1 Low missing currency seed — all addressed). Backend 118 passed, frontend 446 passed. |
+| 3.8 | 2026-06-07 | Ben + Claude | Added DEV-002 (security hardening patch) to Developer Tooling section. Scheduled after Epic 4 complete (depends on CAT-005). Covers: missing CSP + Permissions-Policy headers, no rate limiting on auth endpoints, unauthenticated /design-system route, no pip-audit in CI. Constraint annotations added to ACCT-002 (account number masking) and IMPORT-001 (CSV injection + file size). Added Phase D.1 to implementation order. |
+| 3.9 | 2026-06-07 | Ben + Claude | Added AUTH-007 (invite-only household creation) to Epic 3 section as a security patch story. Introduces `can_create_household: bool` on Person; only the first-ever user gets the flag automatically; owners grant/revoke for others. Fixes the leave-household re-login bug where detached members silently auto-created new households. `decline_invitation` becomes detach-only (no longer creates a household). Added Phase C.2 to implementation order — run before Epic 4 resumes. |

@@ -14,6 +14,7 @@ import {
   useDeleteHousehold,
   useDeclineInvitation,
   useLeaveHousehold,
+  useGrantHouseholdCreation,
   type HouseholdData,
   type MemberData,
   type InvitationData,
@@ -33,7 +34,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { Copy, UserPlus, XCircle, Trash2, Shield, User, UserMinus, Link } from 'lucide-react';
+import { Copy, UserPlus, XCircle, Trash2, Shield, User, UserMinus, Link, Home } from 'lucide-react';
 
 // --- Date Formatting ---
 
@@ -220,7 +221,7 @@ const HouseholdDangerZone: React.FC = () => {
         });
         setDeleteModalOpen(false);
         setConfirmName('');
-        const errorMsg = error?.body?.detail || error?.message || 'Could not delete the household. Please try again.';
+        const errorMsg = (error as ApiError)?.details?.detail || error?.message || 'Could not delete the household. Please try again.';
         enqueue({ variant: 'error', title: 'Delete failed', message: errorMsg });
       },
     });
@@ -294,12 +295,14 @@ const MembersTab: React.FC = () => {
   const currentPerson = useAuthStore((s) => s.currentPerson);
   const enqueue = useAlertStore((s) => s.enqueue);
   const setAuth = useAuthStore((s) => s.setAuth);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
   const navigate = useNavigate();
 
   const updateRole = useUpdatePersonRole();
   const removePerson = useRemovePerson();
   const inviteMember = useInviteMember();
   const cancelInvitation = useCancelInvitation();
+  const grantHouseholdCreation = useGrantHouseholdCreation();
 
   // Invite modal state
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -369,20 +372,30 @@ const MembersTab: React.FC = () => {
       key: 'member',
       header: 'Member',
       render: (member) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Avatar
             name={member.displayName}
             pictureUrl={member.pictureUrl ?? undefined}
             size="sm"
           />
-          <div>
-            <div className="font-medium text-text-primary">
-              {member.displayName}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 font-medium text-text-primary min-w-0">
+              <Tooltip content={member.displayName}>
+                <span className="truncate max-w-[160px] inline-block align-bottom">{member.displayName}</span>
+              </Tooltip>
               {member.id === currentPerson?.personId && (
-                <span className="text-text-secondary ml-1 text-sm">(You)</span>
+                <span className="text-text-secondary text-sm font-normal shrink-0">(You)</span>
+              )}
+              {isOwner && member.canCreateHousehold && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-accent-subtle text-accent shrink-0">
+                  <Home size={10} />
+                  Owner eligible
+                </span>
               )}
             </div>
-            <div className="text-sm text-text-secondary">{member.email}</div>
+            <Tooltip content={member.email}>
+              <div className="text-sm text-text-secondary truncate max-w-[200px]">{member.email}</div>
+            </Tooltip>
           </div>
         </div>
       ),
@@ -390,6 +403,7 @@ const MembersTab: React.FC = () => {
     {
       key: 'role',
       header: 'Role',
+      width: '100px',
       render: (member) => {
         const variant =
           member.role === 'owner'
@@ -435,6 +449,25 @@ const MembersTab: React.FC = () => {
             icon: Shield,
             onClick: () => updateRole.mutate({ id: member.id, role: 'admin' }),
             disabled: updateRole.isPending,
+          });
+        }
+
+        if (isOwner) {
+          items.push({
+            label: member.canCreateHousehold ? 'Revoke household creation' : 'Grant household creation',
+            icon: Home,
+            onClick: () => grantHouseholdCreation.mutate(
+              { id: member.id, canCreateHousehold: !member.canCreateHousehold },
+              {
+                onSuccess: () => {
+                  enqueue({ variant: 'success', title: member.canCreateHousehold ? 'Household creation right revoked' : 'Household creation right granted' });
+                },
+                onError: (error: ApiError) => {
+                  enqueue({ variant: 'error', title: 'Failed to update', message: error.detail ?? 'Failed to update household creation right' });
+                },
+              },
+            ),
+            disabled: grantHouseholdCreation.isPending,
           });
         }
 
@@ -490,10 +523,11 @@ const MembersTab: React.FC = () => {
         )}
       </div>
 
-      {/* Pending Invitations Section — filter to only pending status */}
+      {/* Pending & Declined Invitations Section */}
       {(() => {
         const pending = invitations?.filter((i) => i.status === 'pending') ?? [];
-        if (pending.length === 0) return null;
+        const declined = invitations?.filter((i) => i.status === 'declined') ?? [];
+        if (pending.length === 0 && declined.length === 0) return null;
 
         const inviteColumns: Column<InvitationData>[] = [
           {
@@ -501,6 +535,16 @@ const MembersTab: React.FC = () => {
             header: 'Email',
             render: (inv) => (
               <span className="text-text-primary text-sm font-medium">{inv.invitedEmail}</span>
+            ),
+          },
+          {
+            key: 'status',
+            header: 'Status',
+            width: '110px',
+            render: (inv) => (
+              inv.status === 'declined'
+                ? <Badge variant="error">Declined</Badge>
+                : <Badge variant="neutral">Pending</Badge>
             ),
           },
           {
@@ -513,7 +557,20 @@ const MembersTab: React.FC = () => {
           {
             key: 'actions',
             header: 'Actions',
+            width: '60px',
             render: (inv) => {
+              if (inv.status === 'declined') {
+                const items: ContextMenuItem[] = [
+                  {
+                    label: 'Delete invitation',
+                    icon: Trash2,
+                    destructive: true,
+                    onClick: () => cancelInvitation.mutate(inv.id),
+                    disabled: cancelInvitation.isPending,
+                  },
+                ];
+                return <ContextMenu items={items} />;
+              }
               const items: ContextMenuItem[] = [
                 {
                   label: 'Copy invitation link',
@@ -537,14 +594,19 @@ const MembersTab: React.FC = () => {
           },
         ];
 
+        const allInvitations = [
+          ...pending,
+          ...declined,
+        ];
+
         return (
           <div className="bg-surface-raised border border-border rounded-lg p-6">
             <h2 className="text-lg font-semibold text-text-primary mb-4">
-              Pending Invitations
+              Invitations
             </h2>
             <Table
               columns={inviteColumns}
-              data={pending}
+              data={allInvitations}
               rowKey={(inv) => inv.id}
             />
           </div>
@@ -669,7 +731,10 @@ const MembersTab: React.FC = () => {
       >
         <div className="space-y-4">
           <p className="text-text-secondary text-sm">
-            You will leave <strong>{household?.name}</strong>. A new household will be created for you when you next sign in. This cannot be undone.
+            You will leave <strong>{household?.name}</strong>.{' '}
+            {currentPerson?.canCreateHousehold
+              ? 'A new household will be created for you when you next sign in.'
+              : 'You will need to be re-invited by a household owner to rejoin. This cannot be undone.'}
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setLeaveConfirmOpen(false)}>
@@ -699,6 +764,7 @@ const MembersTab: React.FC = () => {
                         defaultView: response.person.defaultView as 'household' | 'personal',
                         displayCurrency: response.person.displayCurrency,
                         pictureUrl: response.person.pictureUrl,
+                        canCreateHousehold: response.person.canCreateHousehold ?? false,
                       },
                       response.household.householdId,
                       response.csrfToken,

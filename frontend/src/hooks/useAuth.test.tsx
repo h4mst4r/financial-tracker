@@ -104,7 +104,8 @@ describe('useAuth', () => {
           pictureUrl: 'https://example.com/photo.jpg',
         }),
         'hh-1',
-        'test-token'
+        'test-token',
+        'Test Household'
       );
     });
   });

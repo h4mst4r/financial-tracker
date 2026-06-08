@@ -26,10 +26,10 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def _extract_header(headers: list, name: str) -> str | None:
-    """Parse a single header value from raw ASGI headers."""
-    name_bytes = name.encode("latin-1")
+    """Parse a single header value from raw ASGI headers (case-insensitive)."""
+    name_bytes = name.lower().encode("latin-1")
     for key, value in headers:
-        if key == name_bytes:
+        if key.lower() == name_bytes:
             return value.decode("latin-1", errors="replace").strip()
     return None
 
@@ -66,9 +66,19 @@ class CSRFMiddleware:
 
         # Mutating request: require a valid session + matching CSRF token.
         # Primary: HttpOnly cookie. Fallback: X-Session-Token header (dev mode).
+        # If cookie session is stale (not in DB), fall back to header session.
         headers = scope.get("headers", [])
-        session_id = _extract_cookie(headers, SESSION_COOKIE_NAME) \
-            or _extract_header(headers, "x-session-token")
+        cookie_session_id = _extract_cookie(headers, SESSION_COOKIE_NAME)
+        header_session_id = _extract_header(headers, "x-session-token")
+
+        # Try cookie first; if it doesn't exist in DB, fall back to header
+        session_id = None
+        if cookie_session_id:
+            exists = await self._session_exists(cookie_session_id)
+            if exists:
+                session_id = cookie_session_id
+        if session_id is None and header_session_id:
+            session_id = header_session_id
 
         if not session_id:
             response = JSONResponse(
@@ -98,6 +108,19 @@ class CSRFMiddleware:
             return
 
         await self.app(scope, receive, send)
+
+    async def _session_exists(self, session_id: str) -> bool:
+        """Check if a session ID exists in the database."""
+        try:
+            session_uuid = UUID(session_id)
+        except (ValueError, AttributeError):
+            return False
+
+        async with backend.database.async_session_factory() as s:
+            result = await s.execute(
+                select(SessionModel).where(SessionModel.id == session_uuid)
+            )
+            return result.scalar_one_or_none() is not None
 
     async def _validate_csrf(self, session_id: str, csrf_header: str | None) -> bool:
         """Look up the session by ID and compare its CSRF token to the header."""

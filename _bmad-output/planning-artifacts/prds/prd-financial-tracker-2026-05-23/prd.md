@@ -318,13 +318,17 @@ the duplicate's name, date, and amount. User may: proceed (ignore warning), link
 as duplicate (sets `duplicate_of`), or cancel.
 
 **FR-E-008 — MonetaryValue Entry**
-When entering a transaction in a foreign currency, the user enters `currency` and
-`amount`. The system auto-fills `amount_base_calculated` using today's FX rate.
-The user may override `amount_base` with the actual bank statement figure.
-`fx_delta` is shown immediately on override.
-*Acceptance:* `amount_base_calculated` is read-only after auto-fill. `amount_base`
-is editable. `fx_delta = amount_base_calculated - amount_base` shown inline.
+When entering a transaction in a foreign currency, the user enters `currency`, `amount`,
+and selects a "Paid with" account (or Cash). The system auto-fills `amount_base_calculated`
+using the following priority chain: (1) account's assigned FX formula if set, (2) spot rate
+from EntityCurrencies. A source indicator (`formula` / `spot rate` / `manual`) is displayed
+next to the base-currency field. The user may override `amount_base` with the exact bank
+statement figure; the indicator switches to `manual` and `fx_delta` is shown immediately.
+*Acceptance:* `amount_base_calculated` is read-only after auto-fill. `amount_base` is
+editable. Source indicator updates on account selection and on manual override.
+`fx_delta = amount_base_calculated - amount_base` shown inline.
 When `currency == base_currency`, forex fields are hidden.
+When Cash is selected, spot rate is used and `source_account_id` is null.
 
 **FR-E-009 — GST and Gift Flags**
 Any transaction may be flagged as `is_gst_claimable` or `is_gift`.
@@ -558,10 +562,16 @@ entity type, and variable definitions.
 of the target entity type.
 
 **FR-F-003 — Assign Formula to Account**
-Admin or Owner may assign a formula to an account that supports it
-(e.g. assign "Straight-Line Depreciation" to a Property asset).
-*Acceptance:* `depreciation_formula_id` set on the AssetAccount. Formula is
-evaluated using that account's `purchase_value`, `purchase_date`, and rate variable.
+Admin or Owner may assign a formula to an account that supports it.
+Two assignment types:
+- **Depreciation formula** (Asset accounts): `depreciation_formula_id` set on AssetAccount;
+  evaluated using `purchase_value`, `purchase_date`, and rate variable.
+- **FX fee formula** (Bank and CreditCard accounts): `fx_formula_id` set on BankAccount or
+  CreditCard; evaluated during transaction creation to produce `amount_base_calculated`.
+  Variables: `amount`, `rate`, `fee_pct`, `fee_fixed`.
+*Acceptance:* Formula assignment visible and editable in the account's edit modal.
+FX formula dropdown shows only formulas with `applies_to = "bank" or "credit_card"`.
+When assigned, all subsequent foreign transactions on that account auto-fill using the formula.
 
 **FR-F-004 — Hover-Reveal Formula Results**
 Formula computation results are shown only on hover — not displayed by default
@@ -569,6 +579,17 @@ to avoid cluttering card views.
 *Acceptance:* Hovering over an AssetCard or CapitalCard reveals a tooltip
 containing: formula name, current variable inputs, computed result, and
 the data source date.
+
+**FR-F-006 — FX Formula Auto-Fill in Transaction Entry**
+When a user selects a "Paid with" account that has an FX formula assigned, the system
+immediately evaluates the formula against the entered amount and current FX rate and
+populates `amount_base_calculated`. The user sees the indicator `formula` next to the
+base-currency field, identifying how the figure was derived. The user may still override
+with the exact bank statement figure (indicator becomes `manual`).
+*Acceptance:* Changing the "Paid with" account during entry recalculates
+`amount_base_calculated` immediately if the new account has a different formula (or none).
+Selecting Cash always uses spot rate. Formula evaluation uses the formula's stored variable
+defaults unless the account has overridden them (e.g. `fee_pct = 1.5`).
 
 **FR-F-005 — Generate Valuation from Formula**
 From an AssetAccount's detail view, Admin or Owner may run the assigned

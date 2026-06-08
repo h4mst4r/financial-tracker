@@ -21,15 +21,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add 'declined' to the invitation status CHECK constraint."""
-    with op.batch_alter_table('household_invitations') as batch_op:
-        # Drop existing constraint (if any) — initial migration had no CHECK
-        try:
-            batch_op.drop_constraint('ck_invitation_status', type_='check')
-        except sa.exc.OperationalError:
-            pass  # Constraint didn't exist in original schema
+    """Add 'declined' to the invitation status CHECK constraint.
 
-        # Recreate with 'declined' included
+    The initial schema had no named CHECK constraint on this column, so we
+    only add the new one. SQLite batch mode rebuilds the table, so this is safe.
+    """
+    with op.batch_alter_table('household_invitations') as batch_op:
         batch_op.create_check_constraint(
             'ck_invitation_status',
             "status IN ('pending', 'accepted', 'expired', 'cancelled', 'declined')",

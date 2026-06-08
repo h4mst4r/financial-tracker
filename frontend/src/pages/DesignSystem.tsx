@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import {
   Bell, Settings, DollarSign, Plus, Info,
   Trash2, Archive, Download,
@@ -253,6 +253,7 @@ export const DesignSystem: React.FC = () => {
 
   // Multi-select demo state (for standalone BulkActionBar demo)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
 
   // Segmented control demo state
   const [demoViewMode, setDemoViewMode] = useState<'household' | 'personal'>('household')
@@ -829,7 +830,7 @@ export const DesignSystem: React.FC = () => {
               />
             </Wide>
             <Wide label="disabled with pre-selected emoji" maxWidth="200px">
-              <EmojiIconPicker value="💰" onChange={() => {}} disabled />
+              <EmojiIconPicker value="ðŸ’°" onChange={() => {}} disabled />
             </Wide>
           </Sub>
 
@@ -1431,25 +1432,18 @@ export const DesignSystem: React.FC = () => {
           <Sub
             title="BulkActionBar — standalone demo (click cards to select)"
           >
-            <Wide label="click cards to toggle selection; BulkActionBar appears when ≥1 selected">
+            <Wide label="EntityCard selection = ring-2 ring-primary. Click cards to select; BulkActionBar appears when ≥1 selected">
               <div className="space-y-2">
                 {DEMO_ENTITIES.filter((e) => !e.archived).map((entity) => (
-                  <button
+                  <EntityCard
                     key={entity.id}
-                    type="button"
-                    className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer
-                      ${selectedIds.has(entity.id)
-                        ? 'border-primary bg-primary-muted'
-                        : 'border-border bg-surface hover:bg-surface-hover'}`}
-                    onClick={() => toggleSelect(entity.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-text-primary">{entity.name}</span>
-                      {selectedIds.has(entity.id) && (
-                        <Badge variant="entity" entityAccent="var(--color-primary)">Selected</Badge>
-                      )}
-                    </div>
-                  </button>
+                    entity={entity}
+                    entityAccent="var(--color-entity-account)"
+                    selected={selectedIds.has(entity.id)}
+                    onSelect={(id) => toggleSelect(id)}
+                    onEdit={() => enqueue({ variant: 'info', title: `Edit ${entity.name}` })}
+                    onArchive={() => enqueue({ variant: 'warning', title: `Archive ${entity.name}` })}
+                  />
                 ))}
 
                 <BulkActionBar

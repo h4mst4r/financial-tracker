@@ -29,6 +29,7 @@ export interface MemberData {
   defaultView: 'household' | 'personal';
   pictureUrl: string | null;
   createdAt: string;       // ISO datetime — use as "Joined" date
+  canCreateHousehold: boolean;
 }
 
 /** GET /api/persons/invitations items */
@@ -40,7 +41,7 @@ export interface InvitationData {
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
-  status: 'pending' | 'accepted' | 'cancelled' | 'expired';
+  status: 'pending' | 'accepted' | 'cancelled' | 'expired' | 'declined';
 }
 
 /** PATCH /api/household body */
@@ -179,6 +180,18 @@ export function useDeclineInvitation() {
   return useMutation({
     mutationFn: (token: string) =>
       api.post(`/api/invitations/${token}/decline`).then(r => r.data),
+  });
+}
+
+/** PATCH /api/persons/{id}/household-creation */
+export function useGrantHouseholdCreation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, canCreateHousehold }: { id: string; canCreateHousehold: boolean }) =>
+      api.patch<MemberData>(`/api/persons/${id}/household-creation`, { canCreateHousehold }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['persons'] });
+    },
   });
 }
 

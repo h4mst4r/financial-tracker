@@ -7,6 +7,29 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Spinner } from './components/ui/Spinner'
 import { JoinHousehold } from './pages/JoinHousehold'
 import { NotFound } from './pages/NotFound'
+import { PublicPage } from './components/layout/PublicPage'
+import { AlertBanner } from './components/ui/AlertBanner'
+import { PendingInvitationDialog } from './components/ui/PendingInvitationDialog'
+import { useAuthStore } from './store/authStore'
+import { useCallback } from 'react'
+
+function ConnectionError() {
+  return (
+    <PublicPage title="Unable to Connect" subtitle="The server is not responding">
+      <AlertBanner
+        variant="error"
+        message="Unable to reach the server. Check that the backend is running, then refresh."
+      />
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="w-full mt-4 text-sm text-primary hover:underline"
+      >
+        Refresh
+      </button>
+    </PublicPage>
+  )
+}
 
 // --- Placeholder Pages ---
 import { Dashboard } from './pages/Dashboard'
@@ -26,6 +49,25 @@ import { Settings } from './pages/Settings'
 function App() {
   const { currentPerson, isLoading, authError } = useAuth()
   const location = useLocation()
+  const pendingInvitation = useAuthStore((s) => s.pendingInvitation)
+  const householdId = useAuthStore((s) => s.householdId)
+  const householdName = useAuthStore((s) => s.householdName)
+  const setPendingInvitation = useAuthStore((s) => s.setPendingInvitation)
+
+  const handleDismissInvitation = useCallback(() => {
+    setPendingInvitation(null);
+  }, [setPendingInvitation]);
+
+  // /login is always a public page — rendered before any auth gating.
+  // This allows the user to reach it even when the dev bypass has auto-authenticated
+  // them, so they can click "Sign in with Google" to switch to a real OAuth account.
+  if (location.pathname === '/login') {
+    return (
+      <ErrorBoundary>
+        {authError ? <ConnectionError /> : <Login />}
+      </ErrorBoundary>
+    )
+  }
 
   // While auth is initializing, show a minimal loading state
   if (isLoading) {
@@ -37,44 +79,16 @@ function App() {
   }
 
   // Not authenticated (or auth failed for a non-auth reason) — show public routes.
-  // authError=true means the server returned a non-401 error (500, network failure);
-  // in that case we show an error banner on the login page rather than silently
-  // redirecting — users are not logged out, they just can't reach authenticated routes.
   if (!currentPerson) {
     return (
       <ErrorBoundary>
         <Routes>
-          <Route path="/login" element={
-            authError ? (
-              <div className="flex items-center justify-center min-h-screen bg-bg">
-                <div className="w-full max-w-md mx-4 text-center space-y-4">
-                  <p className="text-text-secondary text-sm">
-                    Unable to connect to the server. Please refresh the page to try again.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                    className="text-primary text-sm hover:underline"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            ) : <Login />
-          } />
           <Route path="/design-system" element={<DesignSystem />} />
           <Route path="/join/:token" element={<JoinHousehold />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </ErrorBoundary>
     )
-  }
-
-  // Authenticated — if on /login, redirect based on default_view (AC 3)
-  // Both 'household' and 'personal' resolve to /dashboard for now; branch exists for future routing split
-  if (location.pathname === '/login') {
-    const destination = currentPerson.defaultView === 'personal' ? '/dashboard' : '/dashboard';
-    return <Navigate to={destination} replace />
   }
 
   // Authenticated — design-system always standalone; all other routes inside AppShell
@@ -108,6 +122,18 @@ function App() {
           </AppShell>
         } />
       </Routes>
+
+      {/* PendingInvitationDialog — rendered at the app root, outside routes */}
+      {pendingInvitation && (
+        <PendingInvitationDialog
+          isOpen={!!pendingInvitation}
+          onClose={handleDismissInvitation}
+          invitation={pendingInvitation}
+          currentHouseholdId={householdId ?? undefined}
+          currentHouseholdName={householdName ?? undefined}
+          userRole={currentPerson?.role}
+        />
+      )}
     </ErrorBoundary>
   )
 }

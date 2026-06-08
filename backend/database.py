@@ -1,5 +1,7 @@
 """Async SQLAlchemy engine, session factory, and base model."""
 
+from typing import AsyncGenerator
+
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -38,7 +40,7 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ARG001
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession)
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields an async DB session.
 
     Commits on success, rolls back on exception, and always closes.

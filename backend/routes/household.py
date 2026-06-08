@@ -35,6 +35,7 @@ from backend.dependencies import (
 from backend.models.person import Person
 from backend.schemas.household import HouseholdDelete, HouseholdResponse, HouseholdUpdate, InvitationPreviewResponse
 from backend.schemas.person import (
+    HouseholdCreationUpdate,
     InvitationCreate,
     InvitationResponse,
     PersonResponse,
@@ -155,11 +156,12 @@ async def leave_household_route(
             "pictureUrl": db_person.picture_url,
             "defaultView": db_person.default_view,
             "displayCurrency": db_person.display_currency,
+            "canCreateHousehold": db_person.can_create_household,
         },
-        "household": None,  # No household — person is "booted"
+        "household": None,
         "csrfToken": session_obj.csrf_token if session_obj else None,
         "isFirstLogin": False,
-        "pendingInvitationToken": None,
+        "pendingInvitation": None,
     }
 
 
@@ -219,6 +221,21 @@ async def update_role(
     return PersonResponse.model_validate(person)
 
 
+@router.patch("/persons/{person_id}/household-creation", response_model=PersonResponse)
+async def update_household_creation(
+    person_id: UUID,
+    data: HouseholdCreationUpdate,
+    actor: Person = Depends(require_role("owner")),
+    household_id: UUID = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> PersonResponse:
+    """Grant or revoke can_create_household (owner-only)."""
+    person = await household_service.update_household_creation(
+        db, household_id, actor.id, person_id, data.can_create_household
+    )
+    return PersonResponse.model_validate(person)
+
+
 # ---------------------------------------------------------------------------
 # Invitation preview (public — no auth) — BEFORE /invitations/{inv_id}/accept
 # ---------------------------------------------------------------------------
@@ -246,8 +263,11 @@ async def decline_invitation_route(
     person: Person = Depends(get_current_person),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Decline invitation — creates new household for the person."""
-    db_person, new_household = await household_service.decline_invitation(db, token, person)
+    """Decline invitation — detach-only; no new household created (AUTH-007).
+
+    Frontend should call clearAuth() and navigate to /login on 200.
+    """
+    db_person = await household_service.decline_invitation(db, token, person)
 
     session_obj = getattr(request.state, "session", None)
     return {
@@ -259,15 +279,11 @@ async def decline_invitation_route(
             "pictureUrl": db_person.picture_url,
             "defaultView": db_person.default_view,
             "displayCurrency": db_person.display_currency,
+            "canCreateHousehold": db_person.can_create_household,
         },
-        "household": {
-            "householdId": str(new_household.id),
-            "name": new_household.name,
-            "baseCurrency": new_household.base_currency,
-            "timezone": new_household.timezone,
-        },
+        "household": None,
         "csrfToken": session_obj.csrf_token if session_obj else None,
-        "isFirstLogin": True,
+        "isFirstLogin": False,
         "pendingInvitationToken": None,
     }
 

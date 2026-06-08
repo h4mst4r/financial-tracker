@@ -6,7 +6,7 @@ const variantMap = {
 	warning: 'bg-warning-muted text-warning',
 	error: 'bg-error-muted text-error',
 	info: 'bg-info-muted text-info',
-	neutral: 'bg-surface-hover text-text-secondary',
+	neutral: 'bg-surface-active text-text-primary',
 	entity: '',
 } as const;
 

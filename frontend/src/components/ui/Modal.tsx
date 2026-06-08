@@ -124,7 +124,7 @@ export const Modal = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className={`relative z-modal bg-surface-overlay shadow-xl border border-border flex flex-col ${
+        className={`relative z-modal bg-surface-overlay shadow-xl border border-border flex flex-col focus:outline-none ${
           size === 'fullscreen'
             ? 'w-full h-full rounded-none'
             : `${sizeClasses[size]} w-full max-h-modal rounded-t-xl md:rounded-xl`

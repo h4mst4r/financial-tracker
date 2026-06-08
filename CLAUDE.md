@@ -36,6 +36,11 @@ Before marking any frontend story done, verify the delivered component(s) either
 
 Tests going green is necessary but not sufficient. A story with passing tests but unverified visual output is not Done.
 
+**Design System Page Rule (enforced here, authoritative in EDP §14.8 and UX §9.10):**
+- If a story ships a new reusable UI component, add a demo section to `/design-system` using the **real exported component**. No synthetic `<div>` approximations. This is part of Done.
+- If a component does not exist yet, do NOT add its section. Add only after the component is real and exported.
+- If a story removes a component, remove its design-system section in the same change.
+
 ### P2 — Document CSS / Architecture Nuances at Story-Close
 Every frontend story file must include a **"Known CSS / Architecture Nuances"** section in its Dev Agent Record. Capture:
 - Non-obvious CSS behaviour (cascade, specificity, shorthand interactions)
@@ -85,7 +90,9 @@ Every story, every time, in this order:
 
 ---
 
-## 4. Frontend — Design Token Rules
+## 4. Frontend — Design Token Quick Reference
+
+> Full token tables are in UX §1. This section captures only the most commonly confused tokens.
 
 All design decisions live in `frontend/src/index.css` as `@theme` CSS variables and `@utility` classes.
 **Never use raw hex values, px sizes, opacity decimals, or z-index integers in TSX components.**
@@ -143,7 +150,9 @@ bg-accent-active    — Active tab INSIDE picker panels (ColourPicker, EmojiIcon
 
 ---
 
-## 5. Frontend — Component Patterns
+## 5. Frontend — Component Patterns (Common Mistakes)
+
+> Full component library is in UX §2-4. This section captures only patterns agents commonly get wrong.
 
 ### 5.1 Picker / Dropdown Trigger Button (EXACT pattern — no deviation)
 
@@ -155,6 +164,7 @@ className={`
   bg-surface-raised border text-text-primary
   transition-colors duration-150
   flex items-center gap-2
+  focus:outline-none
   ${disabled
     ? 'opacity-50 cursor-not-allowed'
     : open
@@ -166,6 +176,7 @@ className={`
 
 **DO NOT** split into two separate ternaries — the `focus:ring-*` classes on the closed-but-focused state are lost.
 **DO NOT** put `border-border` in the base classes — it belongs only in the ternary's closed branch.
+**ALWAYS** include `focus:outline-none` in the base classes — omitting it causes the browser's default focus outline to appear alongside the custom ring (see §5.7).
 
 ### 5.2 Picker Panel Tab Buttons (EXACT pattern)
 
@@ -254,6 +265,8 @@ For secondary interactive elements inside a trigger button (e.g., a clear/X butt
 
 ### 5.7 Text Input Focus Ring
 
+**`focus:outline-none` is mandatory on every focusable form element with a custom ring.** Without it, the browser adds its own focus outline (yellow/gold on Windows, blue on Mac) ON TOP of the custom ring, producing a double-border effect. The custom `ring-2` IS the accessible focus indicator — the browser default must be suppressed.
+
 Text inputs (Input component, search fields, hex input) use `ring-glow-primary` (indigo):
 
 ```
@@ -316,9 +329,53 @@ className="shimmer-gradient animate-shimmer rounded"
 
 Stat and chart skeleton shapes need a `bg-surface` container frame or they appear as floating bars.
 
+### 5.11 CategoryTree Row Pattern
+
+Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so the drag handle can appear on hover.
+
+**Row interaction rules (non-negotiable):**
+- **Selection is clearable:** state machine is `none → selected → none`. Never a sticky selected state with no escape.
+- **onClick → lift + shadow:** clicking a row applies `shadow-md -translate-y-px` (or equivalent lift token) to signal interactivity. Use `transition-all duration-100`.
+- **⋮ context menu only — never inline action buttons.** All row actions (Edit, Duplicate, Archive, Delete…) go in a ContextMenu triggered by a `⋮` (`MoreVertical`) button. No icon buttons rendered directly in the row.
+- **Default ⋮ trigger:** the `⋮` button is always visible (not hover-only). It uses `opacity-60 hover:opacity-100` for visual weight, not `opacity-0 group-hover:opacity-100`.
+
+**Row element classes (top-level or parent rows):**
+```tsx
+<div
+  className="group flex items-center gap-2 h-11 pl-3 pr-3 hover:bg-surface-hover transition-all duration-100 cursor-pointer"
+  style={{ borderLeft: '4px solid {category.color || var(--color-entity-category)}' }}
+>
+  <GripVertical size={14} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-grab" />
+  {hasChildren
+    ? <ChevronRight size={14} className={`text-text-secondary shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
+    : <Minus size={14} className="text-text-muted shrink-0" />}
+  <span className="text-base shrink-0">{icon}</span>
+  <span className="text-sm font-medium text-text-primary flex-1 truncate min-w-0">{name}</span>
+  {/* badges, sub-count, + Add Sub */}
+  <ContextMenu trigger={<MoreVertical size={14} className="text-text-muted opacity-60 hover:opacity-100 shrink-0" />} items={rowMenuItems} />
+</div>
+```
+
+**Subcategory group wrapper** — creates the vertical connector line and indent:
+```tsx
+<div className="ml-7 border-l border-border divide-y divide-border">
+  {/* subcategory rows use pl-4 instead of pl-3 — connector border is on the wrapper */}
+</div>
+```
+
+**Expand/collapse:** conditional render (show/hide children), not `display:none`. Animate with `overflow-hidden` + `max-h-0`/`max-h-[9999px]` if transition is needed.
+
+**Archived rows:** `opacity-60 grayscale` + `borderLeft: '4px dashed var(--color-border-strong)'` + `[Archived]` Badge.
+
+**Selected rows:** `bg-primary-muted` replaces `hover:bg-surface-hover` when selected (multi-select).
+
+**Design system reference:** `/design-system` → Category Components section — added when CategoryTree component ships (CAT-005).
+
 ---
 
-## 6. Backend Architecture Rules
+## 6. Backend Gotchas (Common Mistakes)
+
+> Full backend architecture is in ARCH §5-7. This section captures only patterns agents commonly get wrong.
 
 ### 6.0 — Always Activate the Venv First
 
@@ -331,58 +388,51 @@ Bash / WSL:          source .venv/bin/activate
 
 The venv is at `.venv/` in the project root. Never run `python` or `pip` without it active.
 
-### 6.1 Database & ORM
+### 6.0a — Always Run Alembic Against the Root Database
 
-- Always use async SQLAlchemy engine + async sessions
-- Set `PRAGMA journal_mode=WAL` and `PRAGMA foreign_keys=ON` via `event.listen(engine.sync_engine, 'connect', ...)` — not in migration
-- All models inherit `BaseEntity` (id UUID PK, created_at, updated_at, household_id FK, is_archived bool)
-- Monetary values: use `MonetaryValueMixin` — stores `amount_minor_units` INTEGER and `currency_code` VARCHAR(3); never store floats
-- STI: `Account.account_type` discriminator; `FinancialEvent.event_type` discriminator
-- Case-insensitive uniqueness: **always** `func.lower(Model.name) == func.lower(name)` — never Python `.lower()`
+**The app uses `./financial_tracker.db` at the project root.** `alembic.ini` lives in `backend/` and resolves `./financial_tracker.db` relative to `backend/` — a **different file**.
 
-### 6.2 Dependency Injection Chain
+**Never** run `alembic upgrade head` from `backend/` bare. Always override the URL (see ARCH §4.1 for full command).
 
-```python
-get_db              → AsyncSession
-get_current_session → Session model row (validates cookie, 401 if missing/expired)
-get_current_household_id → household_id UUID (extracted from session)
-```
+### 6.1 — Model Column Gotchas
 
-Service layer always receives `household_id` as first positional arg. **Never** trust request body for household scoping.
+**Not all models inherit `BaseEntity`.** `Session` and `HouseholdInvitation` inherit `Base` directly — they have NO `updated_at` column. Use `expires_at` for recency filtering. See ARCH §4.4 for full model schemas.
 
-### 6.3 Error Responses — RFC 7807 Problem Details
+**`Session` has NO `household_id`.** Session → Person → Household. Join through `person_id`.
 
-```python
-{"type": "...", "title": "...", "status": 422, "detail": "...", "instance": "/path"}
-```
+**Case-insensitive uniqueness:** Always `func.lower(Model.name) == func.lower(name)` — never Python `.lower()`.
 
-Use `raise HTTPException(status_code=..., detail={...})` — the global handler formats it.
+### 6.2 — DI Chain
 
-### 6.4 CSRF
+`get_db` → `get_current_person` → `get_household_id`. Service layer always receives `household_id` as first positional arg. **Never** trust request body for household scoping. See ARCH §5.2 for full code.
 
-- One CSRF token per session (not single-use — it lives until session expires)
-- Middleware validates `X-CSRF-Token` header on POST/PUT/PATCH/DELETE
-- Frontend sends token via `api/client.ts` interceptor — don't reimplement this
+### 6.3 — Error Responses
 
-### 6.5 Category Archiving
+Use `raise HTTPException(status_code=..., detail={...})` — the global handler formats RFC 7807 Problem Details. See ARCH §6.4 for the canonical format table.
 
-Archiving a category auto-promotes its children to top-level (`parent_id = NULL`). Return 200, not 409. The `depth` column (0 = top-level, 1 = child) is simpler than walking the parent chain at query time.
+### 6.4 — CSRF
 
-### 6.6 Session Tokens
+One token per session (not single-use). Frontend sends via `api/client.ts` interceptor — don't reimplement. See ARCH §7.3 for full spec.
 
-Session sliding window uses `last_activity_at` (updated on every request). CSRF token has a `used: bool` field but is **not** single-use in middleware — the field exists for audit purposes only.
+### 6.5 — Household Deletion → Person Detachment
 
-### 6.7 Dev Auth Bypass (local development only)
+When a household is deleted, all member `Person` rows survive (`household_id` becomes `NULL`). On re-login, `seed_household_if_needed` checks `can_create_household`: owner gets a new household, members get `NotInvitedError`.
 
-Set `AUTH_BYPASS_ENABLED=true` in `.env` to skip Google OAuth during local development. No Google credentials are needed when this is enabled.
+**Do NOT treat "person survives household deletion" as a bug.** It is the designed flow. See ARCH §7.1 for the full truth table.
 
-- `DevBypassMiddleware` auto-injects a session for all localhost requests before the CSRF check
-- Middleware order: `SecurityHeaders → DevBypass → CSRF → Route`
-- Fixed dev identity: `dev@localhost` / `google_sub=dev-bypass-user-001` / household "Dev Household"
-- Dev sessions have 24h expiry and are exempt from the 30-min sliding-window staleness check
-- `POST /auth/dev-login` is the programmatic entry point — public endpoint, no CSRF required
-- **NEVER** set `AUTH_BYPASS_ENABLED=true` in production — startup fires a `CRITICAL` log if `ENV != development`
-- Do not add OAuth credential checks or bypass fallback paths in application code — the bypass is entirely middleware-level
+### 6.6 — Category Archiving
+
+Archiving a category auto-promotes children to top-level (`parent_id = NULL`). Return 200, not 409.
+
+### 6.7 — OAuth Callback Flow
+
+`seed_household_if_needed` is called AFTER `get_or_create_person` but BEFORE `create_session`. A pending invitation produces a session with `household_id=NULL` — this is intentional. The frontend shows `PendingInvitationDialog`.
+
+**Do NOT treat "pending invitation + NULL household session" as a bug.** See ARCH §7.1 for the full algorithm.
+
+### 6.8 — Dev Auth Bypass
+
+Set `AUTH_BYPASS_ENABLED=true` in `.env` for local dev. Middleware auto-injects a dev session. **NEVER** enable in production. See ARCH §7.6 for full mechanism.
 
 ---
 

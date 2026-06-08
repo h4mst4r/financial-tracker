@@ -9,6 +9,8 @@ export interface Column<T> {
   key: string;
   header: string;
   sortable?: boolean;
+  /** Fixed column width — applied to both th and td as inline style */
+  width?: string;
   render: (item: T) => ReactNode;
 }
 
@@ -81,7 +83,7 @@ export const Table = <T,>({
         <thead className="sticky top-0 bg-surface-raised z-sticky border-b-2 border-border-light">
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className="px-4 py-3 text-left text-sm font-medium text-text-secondary">
+              <th key={col.key} className="px-4 py-3 text-left text-sm font-medium text-text-secondary" style={col.width ? { width: col.width } : undefined}>
                 {col.sortable ? (
                   <button
                     type="button"
@@ -118,7 +120,7 @@ export const Table = <T,>({
                 onClick={() => onRowClick?.(item)}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className="px-4 py-3 text-sm text-text-primary">
+                  <td key={col.key} className="px-4 py-3 text-sm text-text-primary" style={col.width ? { width: col.width } : undefined}>
                     {col.render(item)}
                   </td>
                 ))}

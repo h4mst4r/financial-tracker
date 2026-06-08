@@ -58,10 +58,10 @@ export const Input: React.FC<InputProps> = ({
 
 	const stateClasses = (() => {
 		if (disabled) return 'opacity-50 cursor-not-allowed bg-surface';
-		if (readOnly) return 'bg-transparent border-dashed focus:ring-0 focus:border-border';
-		if (error) return 'border-border-error focus:ring-2 focus:ring-glow-error focus:border-border-error';
-		// Focus ring: --color-glow-primary (indigo/20) per EDP §14.5 --color-border-focus [G-09]
-		return 'hover:border-border-strong focus:ring-2 focus:ring-glow-primary focus:border-border-focus';
+		if (readOnly) return 'bg-transparent border-dashed focus:outline-none focus:ring-0 focus:border-border';
+		if (error) return 'border-border-error focus:outline-none focus:ring-2 focus:ring-glow-error focus:border-border-error';
+		// focus:outline-none suppresses browser default outline; ring-2 + ring-glow-primary is the sole focus indicator
+		return 'hover:border-border-strong focus:outline-none focus:ring-2 focus:ring-glow-primary focus:border-border-focus';
 	})();
 
 	return (

@@ -25,6 +25,7 @@ from backend.models.household import Household
 from backend.models.person import HouseholdInvitation, Person, Session as SessionModel
 from backend.models.base import utcnow
 from backend.services import auth_service
+from backend.services.auth_service import NotInvitedError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -82,107 +83,60 @@ async def callback(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Exchange authorization code for tokens, validate ID token, create session."""
-    # Check for OAuth error from Google
-    if error:
-        error_description = request.query_params.get("error_description", "Unknown error")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "type": "oauth_error",
-                "title": "OAuth authorization failed",
-                "status": 400,
-                "detail": error_description,
-                "instance": str(request.url),
-            },
+    frontend_url = getattr(settings, "FRONTEND_URL", None) or "http://localhost:5173"
+
+    def _oauth_error_redirect() -> Response:
+        return Response(
+            content=f'<script>window.location.href="{frontend_url}/login?error=oauth_error"</script>',
+            media_type="text/html",
         )
+
+    # Check for OAuth error from Google (e.g. user denied access)
+    if error:
+        return _oauth_error_redirect()
 
     if not code or not state:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "type": "missing_params",
-                "title": "Missing authorization code or state",
-                "status": 400,
-                "detail": "The OAuth callback is missing required parameters.",
-                "instance": str(request.url),
-            },
-        )
+        return _oauth_error_redirect()
 
-    # Verify signed state from cookie
+    # Verify signed state from cookie — missing cookie means the flow was broken
+    # (e.g. cookie expired, wrong port/domain, cross-site navigation).
     if not oauth_state:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "type": "invalid_state",
-                "title": "OAuth state verification failed",
-                "status": 403,
-                "detail": "No OAuth state cookie found.",
-                "instance": str(request.url),
-            },
-        )
+        return _oauth_error_redirect()
 
     original_state = auth_service.verify_state(oauth_state)
     if not original_state or original_state != state:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "type": "invalid_state",
-                "title": "OAuth state verification failed",
-                "status": 403,
-                "detail": "The OAuth state does not match the expected value.",
-                "instance": str(request.url),
-            },
-        )
+        return _oauth_error_redirect()
 
     # Exchange code for tokens
     redirect_uri = settings.GOOGLE_REDIRECT_URI
     try:
         tokens = await auth_service.exchange_code_for_tokens(code, redirect_uri)
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "type": "token_exchange_failed",
-                "title": "Token exchange failed",
-                "status": 400,
-                "detail": f"Google token endpoint returned {e.response.status_code}.",
-                "instance": str(request.url),
-            },
-        )
+    except httpx.HTTPStatusError:
+        return _oauth_error_redirect()
 
     # Validate ID token
     id_token_str = tokens.get("id_token")
     if not id_token_str:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "type": "missing_id_token",
-                "title": "No ID token in response",
-                "status": 400,
-                "detail": "Google token response did not include an ID token.",
-                "instance": str(request.url),
-            },
-        )
+        return _oauth_error_redirect()
 
     try:
         claims = auth_service.validate_id_token(id_token_str)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "type": "invalid_id_token",
-                "title": "ID token validation failed",
-                "status": 400,
-                "detail": str(e),
-                "instance": str(request.url),
-            },
-        )
+    except Exception:
+        return _oauth_error_redirect()
 
     # Get or create Person
     person = await auth_service.get_or_create_person(db, claims)
 
-    # Seed household on first login or re-login after leaving a household
-    await auth_service.seed_household_if_needed(db, person)
+    # Seed household — may raise NotInvitedError for uninvited users
+    try:
+        await auth_service.seed_household_if_needed(db, person)
+    except NotInvitedError:
+        # Person row is intentionally persisted (valid Google account, no rights).
+        # No session created — redirect to login with error code.
+        return Response(
+            content=f'<script>window.location.href="{frontend_url}/login?error=not_invited"</script>',
+            media_type="text/html",
+        )
 
     # Create session
     session = await auth_service.create_session(db, person, request)
@@ -192,7 +146,6 @@ async def callback(
     # via hash fragment instead. The frontend reads it from window.location.hash
     # and stores it in sessionStorage, then sends it as X-Session-Token on all
     # API requests. The backend accepts it in get_current_person as a fallback.
-    frontend_url = getattr(settings, "FRONTEND_URL", None) or "http://localhost:5173"
     response = Response(
         content=f'<script>window.location.href="{frontend_url}#session={session.id}"</script>',
         media_type="text/html",
@@ -236,29 +189,55 @@ async def me(
     )
     household = hh_result.scalar_one_or_none()
 
-    # If this person was added to a household via invitation but hasn't explicitly
-    # accepted yet (status still "pending"), surface the token so the frontend can
-    # redirect them to /join/:token regardless of how they arrived (direct login or
-    # via the join link flow).
+    # If this person has any pending invitation (to any household), surface the token
+    # so the frontend can notify them. Remove the `household_id == person.household_id`
+    # filter — invitations to a DIFFERENT household are the common case (user already
+    # in Household A gets invited to Household B).
+    # Multiple invitations can exist — take the most recent one.
     pending_inv_result = await db.execute(
-        select(HouseholdInvitation).where(
+        select(HouseholdInvitation)
+        .where(
             HouseholdInvitation.invited_email == person.email,
-            HouseholdInvitation.household_id == person.household_id,
             HouseholdInvitation.status == "pending",
             HouseholdInvitation.expires_at > utcnow(),
         )
+        .order_by(HouseholdInvitation.created_at.desc())
+        .limit(1)
     )
     pending_inv = pending_inv_result.scalar_one_or_none()
 
-    # Compute isFirstLogin: owner who was created within the last 2 minutes
-    # SQLite may store naive datetimes; normalize to UTC-aware before comparing.
-    created_at = person.created_at
-    if created_at is not None and created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+    # If there's a pending invitation, load the target household and inviter details
+    pending_invitation = None
+    if pending_inv:
+        target_hh_result = await db.execute(
+            select(Household).where(Household.id == pending_inv.household_id)
+        )
+        target_hh = target_hh_result.scalar_one_or_none()
+        inviter_result = await db.execute(
+            select(Person).where(Person.id == pending_inv.invited_by)
+        )
+        inviter = inviter_result.scalar_one_or_none()
+
+        pending_invitation = {
+            "token": str(pending_inv.id),
+            "householdId": str(pending_inv.household_id),
+            "householdName": target_hh.name if target_hh else "Unknown Household",
+            "invitedByDisplayName": inviter.display_name if inviter else "Unknown",
+            "invitedEmail": pending_inv.invited_email,
+            "expiresAt": pending_inv.expires_at.isoformat(),
+            "status": pending_inv.status,
+        }
+
+    # Compute isFirstLogin: owner whose household was created within the last 2 minutes.
+    # Using household.created_at (not person.created_at) so the welcome toast fires
+    # for owners who deleted their household and created a new one on re-login.
+    hh_created_at = household.created_at if household else None
+    if hh_created_at is not None and hh_created_at.tzinfo is None:
+        hh_created_at = hh_created_at.replace(tzinfo=timezone.utc)
     is_first_login = (
         person.role == "owner"
-        and created_at is not None
-        and (utcnow() - created_at) < timedelta(minutes=2)
+        and hh_created_at is not None
+        and (utcnow() - hh_created_at) < timedelta(minutes=2)
     )
 
     return {
@@ -270,6 +249,7 @@ async def me(
             "pictureUrl": person.picture_url,
             "defaultView": person.default_view,
             "displayCurrency": person.display_currency,
+            "canCreateHousehold": person.can_create_household,
         },
         "household": None if person.household_id is None else {
             "householdId": str(person.household_id),
@@ -278,7 +258,7 @@ async def me(
             "timezone": household.timezone if household else None,
         },
         "csrfToken": session_obj.csrf_token,
-        "pendingInvitationToken": str(pending_inv.id) if pending_inv else None,
+        "pendingInvitation": pending_invitation,
         "isFirstLogin": is_first_login,
     }
 
@@ -320,6 +300,7 @@ async def dev_login(
             "pictureUrl": person.picture_url,
             "defaultView": person.default_view,
             "displayCurrency": person.display_currency,
+            "canCreateHousehold": person.can_create_household,
         },
         "household": None if household is None else {
             "householdId": str(household.id),
@@ -328,7 +309,7 @@ async def dev_login(
             "timezone": household.timezone,
         },
         "csrfToken": session.csrf_token,
-        "pendingInvitationToken": None,
+        "pendingInvitation": None,
         "isFirstLogin": False,
     }
 

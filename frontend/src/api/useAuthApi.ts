@@ -6,6 +6,7 @@
  */
 
 import { api } from './client';
+import type { PendingInvitation } from '../types/auth';
 
 // --- Response Types ---
 
@@ -19,16 +20,17 @@ export interface AuthMeResponse {
     defaultView: string;
     displayCurrency: string;
     pictureUrl: string | null;
+    canCreateHousehold: boolean;
   };
   household: {
     householdId: string;
     name: string;
     baseCurrency: string;
     timezone: string;
-  };
+  } | null;
   csrfToken: string;
-  /** Set when the person joined via invitation but hasn't explicitly accepted yet */
-  pendingInvitationToken: string | null;
+  /** Pending invitation details (populated when person has an unaccepted invitation) */
+  pendingInvitation: PendingInvitation | null;
   /** True when the person is an owner who was created within the last 2 minutes */
   isFirstLogin: boolean;
 }

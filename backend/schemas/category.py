@@ -8,10 +8,10 @@ Schemas:
 
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _CATEGORY_TYPE_VALUES = ("income", "expense", "both")
@@ -100,3 +100,111 @@ class CategoryResponse(BaseModel):
     updated_at: datetime
     children_count: int = 0
     parent_name: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Merge request schema
+# ---------------------------------------------------------------------------
+
+
+class MergeCategoriesRequest(BaseModel):
+    """Request body for merging source categories into a target category."""
+
+    target_id: UUID
+    source_ids: list[UUID] = Field(..., min_length=1)
+
+    @field_validator("source_ids")
+    @classmethod
+    def _no_duplicate_sources(cls, v: list[UUID]) -> list[UUID]:
+        if len(v) != len(set(v)):
+            raise ValueError("source_ids must not contain duplicates")
+        return v
+
+    @model_validator(mode="after")
+    def _target_not_in_source_ids(self):
+        if self.target_id in self.source_ids:
+            raise ValueError("target_id must not be in source_ids")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Duplicate detection response schemas
+# ---------------------------------------------------------------------------
+
+
+class DuplicateCategoryResponse(BaseModel):
+    """Single category within a duplicate group."""
+
+    id: UUID
+    name: str
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    transaction_count: int = 0
+
+
+class DuplicateGroupResponse(BaseModel):
+    """Group of potential duplicate categories."""
+
+    group_id: str
+    match_type: Literal["exact", "fuzzy"]
+    match_score: float
+    categories: list[DuplicateCategoryResponse]
+
+
+class DuplicateGroupsResponse(BaseModel):
+    """Top-level response for duplicate detection endpoint."""
+
+    groups: list[DuplicateGroupResponse]
+
+
+# ---------------------------------------------------------------------------
+# Merge response schema
+# ---------------------------------------------------------------------------
+
+
+class MergeSourceCategoryResponse(BaseModel):
+    """Per-source-category result within merge response."""
+
+    id: UUID
+    name: str
+    transactions_reassigned: int
+    subcategories_reassigned: int
+
+
+class MergeResponse(BaseModel):
+    """Response body for category merge endpoint."""
+
+    success: bool
+    target_id: UUID
+    source_categories: list[MergeSourceCategoryResponse]
+    total_transactions_reassigned: int
+    total_subcategories_reassigned: int
+    message: str
+
+
+# ---------------------------------------------------------------------------
+# Import preview schemas
+# ---------------------------------------------------------------------------
+
+
+class ImportPreviewRequest(BaseModel):
+    """Request body for import category mapping preview."""
+
+    category_values: list[str] = Field(..., min_length=1, max_length=500)
+
+
+class ImportMappingResponse(BaseModel):
+    """Single mapping suggestion for one input name."""
+
+    original_name: str
+    mapped_to_id: UUID | None = None
+    mapped_to_name: str | None = None
+    match_type: Literal["exact", "trimmed", "fuzzy", "unmapped"]
+    transaction_count: int = 0
+    suggested_action: Literal["map", "create_new"] = "map"
+
+
+class ImportPreviewResponse(BaseModel):
+    """Response body for import preview endpoint."""
+
+    mappings: list[ImportMappingResponse]

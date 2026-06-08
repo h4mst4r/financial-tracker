@@ -7,18 +7,19 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import type { PersonInfo } from '../store/authStore';
 import { useAlertStore } from '../store/alertStore';
 import { ApiError } from '../api/client';
-import { fetchMe, logout as logoutApi } from '../api/useAuthApi';
+import { fetchMe, logout as logoutApi, type AuthMeResponse } from '../api/useAuthApi';
 
 export function useAuth() {
   const navigate = useNavigate();
   const currentPerson = useAuthStore((s) => s.currentPerson);
   const setAuth = useAuthStore((s) => s.setAuth);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const setPendingInvitation = useAuthStore((s) => s.setPendingInvitation);
 
   const [isLoading, setIsLoading] = useState(true);
   // authError is true when /auth/me fails for a non-auth reason (500, network, etc.)
@@ -35,6 +36,16 @@ export function useAuth() {
     // two concurrent /auth/me requests. The cancelled flag ensures only one result is
     // applied; the second is discarded. Both requests complete but neither causes issues
     // because setAuth is idempotent. Production is unaffected (no StrictMode double-invoke).
+
+    // Skip /auth/me entirely on the login page.
+    // - Prevents the dev bypass from silently re-authenticating the user after
+    //   a failed OAuth attempt (which would redirect them away from the error).
+    // - Keeps currentPerson=null so the !currentPerson branch in App.tsx always
+    //   shows the Login component when the user is on /login.
+    if (window.location.pathname === '/login') {
+      setIsLoading(false);
+      return () => { cancelled = true; controller.abort(); };
+    }
 
     let authSucceeded = false;
     let response: AuthMeResponse | null = null;
@@ -60,26 +71,30 @@ export function useAuth() {
           defaultView,
           displayCurrency: response.person.displayCurrency,
           pictureUrl: response.person.pictureUrl,
+          canCreateHousehold: response.person.canCreateHousehold ?? false,
         };
 
         if (!response.household) {
-          // Person exists but has no household — clear auth and send to login.
-          // This happens if a session outlived a leave_household call without
-          // the client clearing it (e.g. tab was open in background).
-          clearAuth();
-          navigate('/login', { replace: true });
-          return;
-        }
-        setAuth(person, response.household.householdId, response.csrfToken);
-        authSucceeded = true;
-        // Capture pendingInvitationToken here (inside the try block while
-        // response is still in scope) for use in the finally redirect below.
-        if (response.pendingInvitationToken) {
-          // Prefer the sessionStorage token set by JoinHousehold (already has
-          // the correct token); only fall back to the server-provided one when
-          // the user logged in directly without visiting the join link first.
-          if (!sessionStorage.getItem('pendingInviteToken')) {
-            sessionStorage.setItem('pendingInviteToken', response.pendingInvitationToken);
+          // Person exists but has no household.
+          // If they have a pending invitation, show the dialog (Scenario 1: no household).
+          // Otherwise, clear auth and send to login.
+          if (response.pendingInvitation) {
+            // Set auth without household — dialog will handle acceptance
+            setAuth(person, null, response.csrfToken);
+            setPendingInvitation(response.pendingInvitation);
+            authSucceeded = true;
+          } else {
+            // No household, no invitation — clear auth and send to login.
+            clearAuth();
+            navigate('/login?error=not_invited', { replace: true });
+            return;
+          }
+        } else {
+          setAuth(person, response.household.householdId, response.csrfToken, response.household.name);
+          authSucceeded = true;
+          // Handle pending invitation — set in store for PendingInvitationDialog
+          if (response.pendingInvitation) {
+            setPendingInvitation(response.pendingInvitation);
           }
         }
       } catch (err) {
@@ -102,24 +117,15 @@ export function useAuth() {
       } finally {
         if (!cancelled) {
           setIsLoading(false);
-          // If auth succeeded and there's a pending invitation, redirect to join page.
-          // pendingInviteToken is set by JoinHousehold before the OAuth redirect.
-          if (authSucceeded) {
-            const pendingToken = sessionStorage.getItem('pendingInviteToken');
-            if (pendingToken) {
-              sessionStorage.removeItem('pendingInviteToken');
-              navigate(`/join/${pendingToken}`, { replace: true });
-            }
-            // Welcome toast for first-time household creators
-            if (response && response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')) {
-              sessionStorage.setItem('hasSeenWelcome', '1');
-              useAlertStore.getState().enqueue({
-                variant: 'success',
-                title: 'Household created',
-                message: `Your household "${response.household.name}" has been created. Invite members to get started.`,
-                action: { label: 'Invite Members', onClick: () => { window.location.href = '/settings?tab=members'; } },
-              });
-            }
+          // Welcome toast for first-time household creators
+          if (authSucceeded && response && response.isFirstLogin && !sessionStorage.getItem('hasSeenWelcome')) {
+            sessionStorage.setItem('hasSeenWelcome', '1');
+            useAlertStore.getState().enqueue({
+              variant: 'success',
+              title: 'Household created',
+              message: `Your household "${response.household?.name}" has been created. Invite members to get started.`,
+              action: { label: 'Invite Members', onClick: () => { window.location.href = '/settings?tab=members'; } },
+            });
           }
         }
       }
@@ -141,7 +147,6 @@ export function useAuth() {
     } catch {
       // Logout API call may fail if session is already expired — still clear locally
     }
-    sessionStorage.removeItem('dev_session_token');
     clearAuth();
     navigate('/login', { replace: true });
   };

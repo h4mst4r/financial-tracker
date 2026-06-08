@@ -184,6 +184,16 @@ async def get_or_create_person(
         person = result.scalar_one_or_none()
 
     if person is None:
+        # Bootstrap: first-ever REAL person in the DB gets can_create_household=True.
+        # Exclude the dev-bypass sentinel so the first Google OAuth user still gets
+        # bootstrap rights even when AUTH_BYPASS_ENABLED=true created the dev user first.
+        count_result = await db.execute(
+            select(func.count()).select_from(Person).where(
+                Person.google_sub != DEV_GOOGLE_SUB
+            )
+        )
+        is_first = count_result.scalar() == 0
+
         # Pre-generate UUID so person.id is available immediately in Python,
         # before any flush — needed because seed_household_if_needed passes it
         # to Household(created_by=person.id) before the person is inserted.
@@ -196,8 +206,22 @@ async def get_or_create_person(
             role="owner",
             display_currency="SGD",
             default_view="household",
+            can_create_household=is_first,
         )
         db.add(person)
+
+    elif not person.can_create_household and person.household_id is None:
+        # Existing person without household or creation rights — recheck bootstrap.
+        # Handles the case where Person was created before this exclusion logic existed
+        # and was incorrectly denied bootstrap rights (e.g., dev user was created first).
+        recheck_result = await db.execute(
+            select(func.count()).select_from(Person).where(
+                Person.google_sub != DEV_GOOGLE_SUB,
+                Person.id != person.id,
+            )
+        )
+        if recheck_result.scalar() == 0:
+            person.can_create_household = True
 
     return person
 
@@ -275,17 +299,21 @@ async def seed_household_if_needed(
     db: AsyncSession,
     person: Person,
 ) -> None:
-    """If person has no household, create one with defaults.
+    """If person has no household, check for pending invitation or create one.
 
-    Checks for pending invitations first — if one exists, join that household
-    instead of creating a new one. Otherwise, creates a fresh household so any
-    authenticated user can operate the app solo or after leaving a previous one.
+    Priority order:
+    1. Pending invitation found → leave person without household; frontend will
+       show the PendingInvitationDialog for explicit acceptance.
+    2. can_create_household = True → create a fresh household.
+    3. can_create_household = False → raise NotInvitedError.
+
+    The invitation check MUST run before the flag check: invited members
+    typically have can_create_household=False and must still be able to log in.
     """
     if person.household_id is not None:
         return
 
-    # Check for pending invitation — if found, join that household instead
-    # Case-insensitive email match + expiry check + .limit(1) for determinism
+    # 1. Pending invitation check — case-insensitive, expiry-aware
     now = utcnow()
     inv_result = await db.execute(
         select(HouseholdInvitation).where(
@@ -297,24 +325,19 @@ async def seed_household_if_needed(
     pending_inv = inv_result.scalar_one_or_none()
 
     if pending_inv is not None:
-        # Assign to invited household — do NOT accept yet.
-        # Acceptance is explicit: the user must visit /join/:token and click
-        # "Accept Invitation". The accept_invitation service is idempotent when
-        # the person is already in the target household, so it will just mark
-        # the invitation accepted without changing household_id again.
-        person.household_id = pending_inv.household_id
-        person.role = "member"
-        await db.flush()
+        # Pending invitation exists — do NOT auto-assign the household.
+        # The frontend will show the PendingInvitationDialog (Scenario 1: no household)
+        # and the user must explicitly accept via /join/:token flow.
+        # This keeps the person without a household so the dialog can render correctly.
         return
 
-    # No pending invite — create a fresh household for this person.
-    # Any authenticated Google user without a household gets one; the invite
-    # system gates joining an *existing* household, not creating a new one.
-    # Step 1: flush person with household_id=NULL so the INSERT completes and
-    # person.id satisfies the households.created_by FK below.
-    await db.flush()
+    # 2. Flag check — only authorised persons may auto-create a household
+    if not person.can_create_household:
+        raise NotInvitedError("User is not authorised to create a household")
 
-    # Step 2: create household and seed defaults.
+    # 3. Create household — flush person row first so the FK from
+    # Household.created_by to persons.id is satisfied before the INSERT.
+    await db.flush()
     await _create_and_seed_household(db, person)
 
 
@@ -403,6 +426,7 @@ async def get_or_create_dev_session(
             household_id=household_id,
             display_currency="SGD",
             default_view="household",
+            can_create_household=True,
         )
         db.add(dev_person)
         await db.flush()
@@ -426,6 +450,44 @@ async def get_or_create_dev_session(
         await db.flush()
 
         logger.info("dev_session_person_created", extra={"person_id": str(person_id)})
+    elif dev_person.household_id is None:
+        # Dev person exists but has no household (e.g., household was deleted).
+        # Recreate the dev household so the dev user can continue working.
+        household_id = uuid4()
+
+        household = Household(
+            id=household_id,
+            name=DEV_HOUSEHOLD_NAME,
+            base_currency="SGD",
+            timezone="Asia/Singapore",
+            created_by=dev_person.id,
+        )
+        db.add(household)
+        await db.flush()
+
+        dev_person.household_id = household_id
+        dev_person.role = "owner"
+        dev_person.can_create_household = True
+
+        # Seed default currency
+        currency = Currency(
+            household_id=household_id,
+            code="SGD",
+            name="Singapore Dollar",
+            symbol="S$",
+            is_base=True,
+            is_display_active=True,
+            rate_to_base=1.0,
+        )
+        db.add(currency)
+
+        # Seed default categories
+        from backend.services.category_service import seed_default_categories
+
+        await seed_default_categories(db, household_id, dev_person.id)
+        await db.flush()
+
+        logger.info("dev_household_recreated", extra={"person_id": str(dev_person.id), "household_id": str(household_id)})
 
     # Step 2 — find or create dev session
     now = utcnow()

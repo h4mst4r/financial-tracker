@@ -42,17 +42,19 @@ export function Login() {
   const [searchParams] = useSearchParams();
   const error = searchParams.get('error');
   const deleted = searchParams.get('deleted') === '1';
+  const declined = searchParams.get('declined') === '1';
   const [devLoading, setDevLoading] = useState(false);
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const errorMessage = useMemo(() => {
     if (!error) return null;
-    // Special-case: not_invited error from backend (no encoding needed)
     if (error === 'not_invited') {
-      return 'You need an invitation to sign in. Contact an existing household member to receive an invitation link.';
+      return "You haven't been invited to any household. Ask a household member to send you an invitation link.";
     }
-    // Decode URL-encoded error message from backend
+    if (error === 'oauth_error') {
+      return 'Sign-in failed. Please try again. If the problem persists, check that your Google account is allowed to access this app.';
+    }
     try {
       return decodeURIComponent(error);
     } catch {
@@ -71,7 +73,7 @@ export function Login() {
       const data = await devLogin();
       setAuth(
         { ...data.person, defaultView: data.person.defaultView as 'household' | 'personal' },
-        data.household.householdId,
+        data.household?.householdId ?? null,
         data.csrfToken,
       );
       navigate('/');
@@ -83,13 +85,22 @@ export function Login() {
   return (
     <PublicPage
       title="Financial Tracker"
-      subtitle={deleted ? undefined : 'Sign in to manage your finances'}
+      subtitle={deleted || declined ? undefined : 'Sign in to manage your finances'}
     >
       {deleted && (
         <div className="mb-4">
           <AlertBanner
             variant="success"
             message="Your household has been deleted. Sign in to create a new one."
+          />
+        </div>
+      )}
+
+      {declined && (
+        <div className="mb-4">
+          <AlertBanner
+            variant="info"
+            message="Invitation declined. You'll need a new invitation from a household member to join."
           />
         </div>
       )}

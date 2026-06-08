@@ -85,9 +85,15 @@ async def validate_session(session_id: str | None) -> "tuple[Person, SessionMode
         if expires_at < now:
             return None
 
-        # Dev sessions (user_agent='dev-bypass') are exempt from the 30-min staleness check.
-        # They have a 24h expiry instead, which is the appropriate timeout for dev work.
+        # Dev sessions (user_agent='dev-bypass') are only valid while AUTH_BYPASS_ENABLED=true.
+        # When the flag is off, reject dev sessions so a stale browser cookie cannot
+        # authenticate as the dev user after bypass is disabled.
+        from backend.config import settings as _settings
         is_dev_session = session_rec.user_agent == "dev-bypass"
+        if is_dev_session and not _settings.AUTH_BYPASS_ENABLED:
+            return None
+
+        # Dev sessions are exempt from the 30-min staleness check (24h expiry instead).
         if not is_dev_session and (now - last_activity).total_seconds() > STALE_THRESHOLD_SECONDS:
             return None
 

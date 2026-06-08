@@ -52,6 +52,41 @@ people) that:
 
 ---
 
+## What Sets This Apart
+
+Most personal finance applications convert foreign currency amounts using spot exchange rates.
+This gives you a theoretically correct figure — but not the figure that actually appears on
+your bank statement.
+
+Real-world credit card and bank transactions include:
+- **Card network fees** (Visa/Mastercard typically 1–1.5%)
+- **Issuer FX margins** (varies per bank and card product)
+- **GST on conversion fees** (applicable in some jurisdictions)
+
+These charges mean the SGD amount on your statement is consistently higher than
+`NZD amount × spot rate`. The difference — tracked per transaction as `fx_delta` — accumulates
+into a meaningful annual cost that most apps make invisible.
+
+Financial Tracker v2 solves this with **per-account FX formulas**. Each bank account or credit
+card can have an FX fee formula assigned (e.g. `amount × rate × 1.015` for a card with a 1.5%
+foreign transaction fee). When you enter a foreign currency transaction on that card, the system
+auto-fills the base-currency amount using the formula rather than the raw spot rate — producing
+a figure that matches your actual bank statement without manual correction.
+
+Manual override is always available: enter the exact SGD figure from your statement and the
+system records the delta. Over time, the dashboard surfaces your true total forex cost — not
+a theoretical one.
+
+**This is not a feature added for completeness. It is the reason this app was built.**
+The Google Sheets setup this replaces accumulated years of manual corrections to spot-rate
+conversions. This application makes those corrections automatic, transparent, and measurable.
+
+The full multi-currency architecture — `MonetaryValue` block, `fx_delta` tracking, per-account
+formula assignment, display-currency switching — is specified in `entity-design-philosophy.md §3.2`
+and `§11`.
+
+---
+
 ## Target Users
 
 | Role | Person | Description |

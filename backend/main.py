@@ -6,9 +6,9 @@ error handlers, and security headers.
 
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, Request, status  # Request kept for exception handlers
+from fastapi import FastAPI, HTTPException, Request, status  # Request kept for exception handlers
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
@@ -22,6 +22,11 @@ from backend.routes import categories as categories_routes
 from backend.routes import household as household_routes
 
 logger = logging.getLogger(__name__)
+
+
+def _is_json_safe(value: Any) -> bool:
+    """Check if a value is safe for JSON serialization."""
+    return isinstance(value, (str, int, float, bool, type(None), list, dict))
 
 
 # ---------------------------------------------------------------------------
@@ -65,24 +70,47 @@ async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Convert Pydantic validation errors to a consistent JSON response."""
+    errors = []
+    for err in exc.errors():
+        safe_err = {}
+        for key, value in err.items():
+            if key == "ctx":
+                # Drop Pydantic internal context — not needed by client and
+                # could leak internal exception messages or types.
+                continue
+            if isinstance(value, (list, tuple)):
+                # Serialize each element; loc, input, etc. can contain non-JSON types
+                safe_err[key] = [str(v) if not _is_json_safe(v) else v for v in value]
+            elif not _is_json_safe(value):
+                safe_err[key] = str(value)
+            else:
+                safe_err[key] = value
+        errors.append(safe_err)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "Validation failed",
             "code": "VALIDATION_ERROR",
-            "detail": exc.errors(),
+            "detail": errors,
         },
     )
 
 
 async def http_exception_handler(
-    request: Request, exc: Exception  # FastAPI HTTPException
+    request: Request, exc: HTTPException
 ) -> JSONResponse:
-    """Wrap FastAPI HTTPExceptions in our standard error envelope."""
+    """Handle HTTPExceptions — preserve RFC 7807 Problem Details when detail is a dict."""
+    if isinstance(exc.detail, dict):
+        # Already an RFC 7807 Problem Details dict — pass through directly
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail,
+        )
+    # String detail — wrap in standard envelope
     return JSONResponse(
-        status_code=exc.status_code,  # type: ignore[attr-defined]
+        status_code=exc.status_code,
         content={
-            "error": getattr(exc, "detail", "Unknown error"),
+            "error": exc.detail if isinstance(exc.detail, str) else "Unknown error",
             "code": "HTTP_ERROR",
             "detail": {},
         },
@@ -117,6 +145,7 @@ def create_app() -> FastAPI:
 
     # --- Exception handlers ---
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)
 
     # --- Auth routes (public + protected) ---
     app.include_router(auth_routes.router)

@@ -56,12 +56,16 @@ async def get_current_person(
     """
     from .middleware.auth_middleware import validate_session, SESSION_COOKIE_NAME
 
-    # Primary: HttpOnly cookie. Fallback: X-Session-Token header (dev mode —
-    # Vite proxy strips Set-Cookie, so session is passed as header instead of cookie).
-    # Session UUIDs are 122-bit random values and effectively unguessable in production.
-    session_id = request.cookies.get(SESSION_COOKIE_NAME) \
-        or request.headers.get("X-Session-Token")
-    result = await validate_session(session_id)
+    # Cookie takes priority over header, matching CSRFMiddleware's resolution order.
+    # The X-Session-Token header is a dev-mode fallback (Vite proxy strips Set-Cookie).
+    # In production: cookie always used, header never sent.
+    # In dev: if cookie exists (OAuth login), use it. Fall back to header only when
+    # no cookie is present (pure dev-bypass flow where proxy stripped the cookie).
+    cookie_session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    header_session_id = request.headers.get("X-Session-Token")
+    result = await validate_session(cookie_session_id) if cookie_session_id else None
+    if result is None and header_session_id:
+        result = await validate_session(header_session_id)
 
     if result is None:
         raise HTTPException(

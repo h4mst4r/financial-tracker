@@ -9,6 +9,7 @@ import { PublicPage } from '../components/layout/PublicPage';
 import { Skeleton } from '../components/ui/Skeleton';
 import { AlertBanner } from '../components/ui/AlertBanner';
 import { Button } from '../components/ui/Button';
+import { ConfirmationDialog } from '../components/ui/ConfirmationDialog';
 
 interface QueryError extends Error {
   status?: number;
@@ -36,6 +37,7 @@ export function JoinHousehold() {
   const navigate = useNavigate();
   const currentPerson = useAuthStore((s) => s.currentPerson);
   const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [showDeclineDialog, setShowDeclineDialog] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['invitation-preview', token],
@@ -156,11 +158,24 @@ export function JoinHousehold() {
 
           {/* Accept error banner (AC 5) */}
           {acceptError && (
-            <AlertBanner
-              variant="error"
-              message={acceptError}
-              onDismiss={() => setAcceptError(null)}
-            />
+            <div className="space-y-2">
+              <AlertBanner
+                variant="error"
+                message={acceptError}
+                onDismiss={() => setAcceptError(null)}
+              />
+              {acceptError.includes('already belong') && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/settings')}
+                  >
+                    Go to Settings
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* CTAs — authenticated (AC 5) */}
@@ -178,35 +193,24 @@ export function JoinHousehold() {
               </Button>
               <Button
                 variant="secondary"
-                loading={declineMutation.isPending}
                 onClick={() => {
-                  if (!token) return;
                   setAcceptError(null);
+                  setShowDeclineDialog(true);
+                }}
+              >
+                Decline
+              </Button>
+
+              {/* Decline confirmation dialog (UX §9.7) */}
+              <ConfirmationDialog
+                isOpen={showDeclineDialog}
+                onClose={() => setShowDeclineDialog(false)}
+                onConfirm={() => {
+                  if (!token) return;
                   declineMutation.mutate(token, {
-                    onSuccess: (resp: any) => {
-                      const setAuth = useAuthStore.getState().setAuth;
-                      const person = resp.person;
-                      setAuth(
-                        {
-                          personId: person.personId,
-                          displayName: person.displayName,
-                          email: person.email,
-                          role: person.role,
-                          defaultView: person.defaultView,
-                          displayCurrency: person.displayCurrency,
-                          pictureUrl: person.pictureUrl,
-                        },
-                        resp.household.householdId,
-                        resp.csrfToken,
-                      );
-                      sessionStorage.setItem('hasSeenWelcome', '1');
-                      useAlertStore.getState().enqueue({
-                        variant: 'success',
-                        title: 'Household created',
-                        message: `Your household "${resp.household.name}" has been created.`,
-                        action: { label: 'Invite Members', onClick: () => { window.location.href = '/settings?tab=members'; } },
-                      });
-                      navigate('/dashboard', { replace: true });
+                    onSuccess: () => {
+                      useAuthStore.getState().clearAuth();
+                      navigate('/login?declined=1', { replace: true });
                     },
                     onError: (err: unknown) => {
                       const apiErr = err as ApiError;
@@ -218,9 +222,13 @@ export function JoinHousehold() {
                     },
                   });
                 }}
-              >
-                Decline
-              </Button>
+                variant="warning"
+                title="Decline Invitation"
+                message={`You will leave ${data?.householdName}. You will need a new invitation to sign back in. This cannot be undone.`}
+                confirmLabel="Decline"
+                cancelLabel="Cancel"
+                isConfirming={declineMutation.isPending}
+              />
             </div>
           ) : (
             // CTAs — unauthenticated (AC 4)

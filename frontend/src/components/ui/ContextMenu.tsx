@@ -150,7 +150,7 @@ export const ContextMenu = ({ items, trigger }: ContextMenuProps) => {
                   {item.icon && (
                     <Icon icon={item.icon} size="sm" className="shrink-0" />
                   )}
-                  <span>{item.label}</span>
+                  <span className="whitespace-nowrap">{item.label}</span>
                 </button>
               )}
             </div>

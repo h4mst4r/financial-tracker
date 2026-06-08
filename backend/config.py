@@ -1,6 +1,7 @@
 """Application settings loaded from environment variables / .env file."""
 
 import logging
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +24,7 @@ class Settings(BaseSettings):
     # --- Google OAuth ---
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
+    GOOGLE_REDIRECT_URI: str = "http://localhost:5173/auth/callback"
 
     # --- Session / Security ---
     SESSION_SECRET: str = "dev-secret-change-me"
@@ -50,13 +51,14 @@ class Settings(BaseSettings):
     AUTH_BYPASS_ENABLED: bool = False
     ENV: str = "development"
 
-    def __post_init__(self) -> None:
-        """Warn when default secrets are used."""
+    @model_validator(mode='after')
+    def _warn_default_secret(self) -> 'Settings':
         if self.SESSION_SECRET == "dev-secret-change-me" and not self.DEBUG:
             logging.warning(
                 "SESSION_SECRET is still set to the development default. "
                 "Generate a real secret for production."
             )
+        return self
 
 
 settings = Settings()

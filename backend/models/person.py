@@ -9,7 +9,7 @@ from typing import Any
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -56,6 +56,9 @@ class Person(BaseEntity):
     default_view: Mapped[str] = mapped_column(String(20), nullable=False, default=lambda: "household")
     google_sub: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
     last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    can_create_household: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     # Relationships — string targets to avoid circular imports with household.py
     household: Mapped["Household"] = relationship("Household", back_populates="persons")

@@ -108,24 +108,20 @@ async def test_auth_login_generates_state_and_redirects():
 
 
 @pytest.mark.asyncio
-async def test_auth_callback_missing_params_returns_400():
-    """GET /auth/callback without code/state should return 400."""
+async def test_auth_callback_missing_params_redirects_to_error():
+    """GET /auth/callback without code/state should redirect to /login?error=oauth_error."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/auth/callback")
 
-    assert resp.status_code == 400
-    # FastAPI wraps HTTPException detail in {"detail": ...}
-    detail = resp.json().get("detail", {})
-    # detail is our RFC 7807 dict
-    assert detail.get("title") == "Missing authorization code or state" or (
-        isinstance(detail, dict) and detail.get("title") == "Missing authorization code or state"
-    )
+    # Returns an HTML page with a JS redirect rather than a raw JSON 400
+    assert resp.status_code == 200
+    assert "oauth_error" in resp.text
 
 
 @pytest.mark.asyncio
-async def test_auth_callback_invalid_state_returns_403():
-    """GET /auth/callback with invalid signed state should return 403."""
+async def test_auth_callback_invalid_state_redirects_to_error():
+    """GET /auth/callback with invalid signed state should redirect to /login?error=oauth_error."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get(
@@ -134,10 +130,8 @@ async def test_auth_callback_invalid_state_returns_403():
             cookies={"oauth_state": "invalid.signature"},
         )
 
-    assert resp.status_code == 403
-    detail = resp.json().get("detail", {})
-    title = detail.get("title", "")
-    assert "state" in title.lower()
+    assert resp.status_code == 200
+    assert "oauth_error" in resp.text
 
 
 @pytest.mark.asyncio
@@ -278,7 +272,7 @@ async def test_auth_me_returns_correct_contract():
     assert "household" in body
     assert "csrfToken" in body
     assert "isFirstLogin" in body
-    assert "pendingInvitationToken" in body
+    assert "pendingInvitation" in body
 
     person_data = body["person"]
     assert person_data["personId"] == str(person_id)
@@ -292,7 +286,7 @@ async def test_auth_me_returns_correct_contract():
 
     assert body["csrfToken"] == csrf_token
     assert body["isFirstLogin"] is True  # Person created now, role=owner → within 2-min window
-    assert body["pendingInvitationToken"] is None
+    assert body["pendingInvitation"] is None
 
 
 @pytest.mark.asyncio
@@ -484,31 +478,6 @@ async def test_dev_bypass_disabled_returns_401():
 
 
 @pytest.mark.asyncio
-async def test_dev_login_endpoint_enabled():
-    """POST /auth/dev-login with bypass enabled → 200 + full auth payload + Set-Cookie."""
-    import backend.config
-
-    original = backend.config.settings.AUTH_BYPASS_ENABLED
-    backend.config.settings.AUTH_BYPASS_ENABLED = True
-    try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
-            resp = await client.post("/auth/dev-login")
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["person"]["email"] == "dev@localhost"
-        assert body["csrfToken"] != ""
-        assert body["pendingInvitationToken"] is None
-        assert body["isFirstLogin"] is False
-        assert body["household"]["householdId"] is not None
-        set_cookie = resp.headers.get("set-cookie", "")
-        assert "session_id" in set_cookie
-    finally:
-        backend.config.settings.AUTH_BYPASS_ENABLED = original
-
-
-@pytest.mark.asyncio
 async def test_dev_login_endpoint_disabled_returns_404():
     """POST /auth/dev-login with bypass disabled → 404."""
     import backend.config
@@ -557,7 +526,7 @@ async def test_dev_login_full_flow():
         assert body["household"]["baseCurrency"] == "SGD"
         csrf_token = body["csrfToken"]
         assert csrf_token and len(csrf_token) > 0
-        assert body["pendingInvitationToken"] is None
+        assert body["pendingInvitation"] is None
         assert body["isFirstLogin"] is False
 
         # Step 4: GET /auth/me with the session token from X-Session-Id (X-Session-Token header)

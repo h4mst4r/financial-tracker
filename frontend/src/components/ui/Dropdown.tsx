@@ -278,7 +278,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
 				className={`
 					w-full h-10 rounded-md px-3 text-sm text-left
 					bg-surface-raised border text-text-primary
-					transition-colors duration-150
+					transition-colors duration-150 focus:outline-none
 					flex items-center justify-between gap-2
 					${error
 						? 'border-error focus:ring-2 focus:ring-glow-error focus:border-error'

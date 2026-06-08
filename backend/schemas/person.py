@@ -23,6 +23,7 @@ class PersonResponse(BaseModel):
     default_view: str
     picture_url: Optional[str] = None
     created_at: datetime
+    can_create_household: bool = False
 
 
 class PersonUpdate(BaseModel):
@@ -58,3 +59,9 @@ class InvitationResponse(BaseModel):
 
 class RoleUpdate(BaseModel):
     role: str  # validated in service: must be "admin" or "member"
+
+
+class HouseholdCreationUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    can_create_household: bool

@@ -11,7 +11,7 @@ from datetime import timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.base import StatusEnum, utcnow
@@ -277,9 +277,14 @@ async def list_invitations(
     result = await db.execute(
         select(HouseholdInvitation).where(
             HouseholdInvitation.household_id == household_id,
-            HouseholdInvitation.status == "pending",
-            HouseholdInvitation.expires_at > now,
-        )
+            or_(
+                # Pending and not yet expired
+                (HouseholdInvitation.status == "pending") & (HouseholdInvitation.expires_at > now),
+                # Declined — visible for up to 7 days after expiry so the inviter knows,
+                # then they disappear to avoid cluttering the list forever.
+                (HouseholdInvitation.status == "declined") & (HouseholdInvitation.expires_at > now - timedelta(days=7)),
+            ),
+        ).order_by(HouseholdInvitation.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -301,11 +306,17 @@ async def cancel_invitation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invitation not found",
         )
-    if inv.status != "pending":
+    if inv.status not in ("pending", "declined"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only pending invitations can be cancelled",
+            detail="Only pending or declined invitations can be cancelled",
         )
+
+    if inv.status == "declined":
+        # Declined invitations are deleted outright — removes them from the list
+        await db.delete(inv)
+        await db.flush()
+        return inv
 
     inv.status = "cancelled"
     await db.flush()
@@ -397,16 +408,20 @@ async def decline_invitation(
     db: AsyncSession,
     token: UUID,
     person: Person,
-) -> tuple[Person, Household]:
-    """Decline an invitation — creates a new household for the person.
+) -> Person:
+    """Decline an invitation — detach-only, no new household created (AUTH-007).
 
     Steps:
     1. Fetch invitation by token; raise 404 if not found
     2. Raise 409 if status != "pending"
     3. Raise 403 if person.email != invited_email
     4. Mark invitation as "declined"
-    5. If person is already in the invited household, detach and create new household
-    6. Return (person, new_household)
+    5. If person is in the invited household, detach (household_id → null)
+    6. Return detached person (household is null)
+
+    On next login: seed_household_if_needed applies the can_create_household
+    check — person may get a new household if they have the flag, or they will
+    see the not_invited error and need a re-invitation.
     """
     result = await db.execute(
         select(HouseholdInvitation).where(HouseholdInvitation.id == token)
@@ -444,17 +459,13 @@ async def decline_invitation(
             detail="Person not found",
         )
 
-    # If person was already assigned to the invited household, detach them
+    # Detach from the invited household if assigned there
     if db_person.household_id == inv.household_id:
         db_person.household_id = None
         db_person.role = "member"
         await db.flush()
 
-    # Create new household for the person
-    from backend.services.auth_service import _create_and_seed_household
-    new_household = await _create_and_seed_household(db, db_person)
-
-    return (db_person, new_household)
+    return db_person
 
 
 async def leave_household(
@@ -562,6 +573,50 @@ async def update_role(
         before={"role": before_role},
         after={"role": data.role},
     )
+    return target
+
+
+# ---------------------------------------------------------------------------
+# Household Creation Flag
+# ---------------------------------------------------------------------------
+
+
+async def update_household_creation(
+    db: AsyncSession,
+    household_id: UUID,
+    actor_id: UUID,
+    target_id: UUID,
+    can_create: bool,
+) -> Person:
+    """Grant or revoke can_create_household for a member (owner-only).
+
+    Owner cannot revoke their own flag.
+    """
+    # Re-fetch actor to verify owner role
+    actor_result = await db.execute(
+        select(Person).where(
+            Person.id == actor_id,
+            Person.household_id == household_id,
+        )
+    )
+    actor = actor_result.scalar_one_or_none()
+    if actor is None or actor.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the household owner can grant or revoke household creation rights",
+        )
+
+    if actor_id == target_id and not can_create:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot revoke your own household creation right",
+        )
+
+    target = await get_person(db, household_id, target_id)
+
+    target.can_create_household = can_create
+    target.updated_by = actor_id
+    await db.flush()
     return target
 
 
@@ -825,10 +880,15 @@ async def delete_household(
     # 10. Formulas (FK → persons via BaseEntity)
     await db.execute(sa_delete(Formula).where(Formula.household_id == household_id))
 
-    # 11. Sessions (FK → persons)
+    # 11. Sessions (FK → persons) — skip the actor's own session so it survives
+    # long enough for the invitation accept call to complete after delete.
     if person_ids:
         await db.execute(
-            sa_delete(PersonSession).where(PersonSession.person_id.in_(person_ids))
+            sa_delete(PersonSession)
+            .where(
+                PersonSession.person_id.in_(person_ids),
+                PersonSession.person_id != actor_id,
+            )
         )
 
     # 12. Invitations (FK → household)
@@ -849,8 +909,19 @@ async def delete_household(
     )
     await db.execute(sa_delete(Currency).where(Currency.household_id == household_id))
 
-    # 15. Persons (FK → household)
-    await db.execute(sa_delete(Person).where(Person.household_id == household_id))
+    # 15. Detach persons — retain Person rows so they can re-authenticate.
+    # Owner gets can_create_household=true so they can create a new household on next login.
+    # Members get household_id=null but keep can_create_household unchanged (need re-invitation).
+    await db.execute(
+        sa_update(Person)
+        .where(Person.id == actor_id)
+        .values(household_id=None, can_create_household=True, role="owner")
+    )
+    await db.execute(
+        sa_update(Person)
+        .where(Person.household_id == household_id, Person.id != actor_id)
+        .values(household_id=None, role="member")
+    )
 
     # 16. Household — all dependencies cleared
     await db.execute(sa_delete(Household).where(Household.id == household_id))

@@ -7,10 +7,14 @@ Services:
     archive_category         — soft-delete; auto-promotes children to top-level
     delete_category          — hard-delete; blocked if downstream references exist
     restore_category         — unarchive archived category
+    detect_duplicates        — find potential duplicate top-level categories
+    merge_categories         — merge source categories into a target category
 
 References: EDP §9, ARCH §4.4
 """
 
+import asyncio
+import difflib
 import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -22,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.base import StatusEnum, utcnow
 from backend.models.category import Category
 from backend.models.budget import Budget
+from backend.models.event import FinancialEvent
 from backend.schemas.category import CategoryCreate, CategoryUpdate
 from backend.services.audit_service import AuditService
 
@@ -463,4 +468,503 @@ async def _get_category_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "NOT_FOUND", "detail": "Category not found"},
         )
+    return category
+
+
+# ---------------------------------------------------------------------------
+# Duplicate Detection
+# ---------------------------------------------------------------------------
+
+
+async def detect_duplicates(
+    db: AsyncSession,
+    household_id: UUID,
+) -> List[Dict[str, Any]]:
+    """Find groups of potential duplicate top-level categories.
+
+    Two categories are duplicates if their names match exactly (case-insensitive,
+    whitespace-trimmed) or have a SequenceMatcher ratio >= 0.85.
+
+    Returns a list of group dicts sorted by highest average transaction count.
+    """
+    # 1. Fetch all top-level non-archived categories
+    result = await db.execute(
+        select(Category).where(
+            Category.household_id == household_id,
+            Category.archived == False,
+            Category.depth == 0,
+        )
+    )
+    categories = list(result.scalars().all())
+
+    if len(categories) < 2:
+        return []
+
+    # 2. Build transaction counts via single aggregated query
+    count_result = await db.execute(
+        select(FinancialEvent.category_id, func.count()).where(
+            FinancialEvent.category_id.in_([c.id for c in categories]),
+        ).group_by(FinancialEvent.category_id)
+    )
+    tx_counts: Dict[UUID, int] = dict(count_result.all())
+
+    # 3. Compute matching pairs off the event loop (CPU-bound)
+    def _find_matches() -> List[tuple]:
+        """O(n²) SequenceMatcher — runs in a thread to avoid blocking the event loop."""
+        matches = []
+        for i in range(len(categories)):
+            for j in range(i + 1, len(categories)):
+                name_a = categories[i].name.strip().lower()
+                name_b = categories[j].name.strip().lower()
+
+                if not name_a or not name_b:
+                    continue
+
+                if name_a == name_b:
+                    matches.append((categories[i].id, categories[j].id, "exact", 1.0))
+                elif name_a[0] == name_b[0]:
+                    # Fast gate: different first char → ratio can't reach 0.85
+                    score = difflib.SequenceMatcher(None, name_a, name_b).ratio()
+                    if score >= 0.85:
+                        matches.append((categories[i].id, categories[j].id, "fuzzy", score))
+        return matches
+
+    matches = await asyncio.to_thread(_find_matches)
+
+    # 4. Union-find: build groups from matching pairs
+    #    Uses tombstone markers (None) instead of del to avoid index corruption
+    cat_by_id = {c.id: c for c in categories}
+    category_groups: Dict[UUID, int] = {}
+    groups: List[Optional[List[Category]]] = []
+    group_match_types: List[Optional[str]] = []
+    group_match_scores: List[Optional[float]] = []
+
+    for id_a, id_b, match_type, match_score in matches:
+        group_a = category_groups.get(id_a)
+        group_b = category_groups.get(id_b)
+
+        if group_a is None and group_b is None:
+            new_idx = len(groups)
+            groups.append([cat_by_id[id_a], cat_by_id[id_b]])
+            group_match_types.append(match_type)
+            group_match_scores.append(match_score)
+            category_groups[id_a] = new_idx
+            category_groups[id_b] = new_idx
+        elif group_a is not None and group_b is None:
+            groups[group_a].append(cat_by_id[id_b])
+            category_groups[id_b] = group_a
+            if match_type == "exact":
+                group_match_types[group_a] = "exact"
+                group_match_scores[group_a] = 1.0
+        elif group_a is None and group_b is not None:
+            groups[group_b].append(cat_by_id[id_a])
+            category_groups[id_a] = group_b
+            if match_type == "exact":
+                group_match_types[group_b] = "exact"
+                group_match_scores[group_b] = 1.0
+        elif group_a != group_b:
+            groups[group_a].extend(groups[group_b])
+            for cat_id in [c.id for c in groups[group_b]]:
+                category_groups[cat_id] = group_a
+            if group_match_types[group_b] == "exact":
+                group_match_types[group_a] = "exact"
+                group_match_scores[group_a] = max(group_match_scores[group_a], group_match_scores[group_b])
+            # Tombstone — keeps indices stable
+            groups[group_b] = None
+            group_match_types[group_b] = None
+            group_match_scores[group_b] = None
+
+    # 5. Format groups with transaction counts (skip tombstoned entries)
+    formatted = []
+    for idx, group_cats in enumerate(groups):
+        if group_cats is None:
+            continue
+        avg_tx = sum(tx_counts.get(c.id, 0) for c in group_cats) / len(group_cats)
+        # Deterministic group_id from sorted category IDs — stable across calls
+        sorted_ids = sorted(str(c.id) for c in group_cats)
+        group_id = "-".join(sorted_ids[:2]) + ("-" + str(len(group_cats)) if len(group_cats) > 2 else "")
+        formatted.append({
+            "group_id": group_id,
+            "match_type": group_match_types[idx],
+            "match_score": round(group_match_scores[idx], 2),
+            "categories": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "color": c.color,
+                    "icon": c.icon,
+                    "transaction_count": tx_counts.get(c.id, 0),
+                }
+                for c in group_cats
+            ],
+            "_avg_tx": avg_tx,
+        })
+
+    # 5. Sort by highest average transaction count first
+    formatted.sort(key=lambda g: g["_avg_tx"], reverse=True)
+
+    # Remove internal sort key
+    for group in formatted:
+        del group["_avg_tx"]
+
+    return formatted
+
+
+# ---------------------------------------------------------------------------
+# Category Merge
+# ---------------------------------------------------------------------------
+
+
+async def merge_categories(
+    db: AsyncSession,
+    household_id: UUID,
+    actor_id: UUID,
+    target_id: UUID,
+    source_ids: List[UUID],
+) -> Dict[str, Any]:
+    """Merge source categories into target category (transactional).
+
+    Reassigns events, reassigns subcategories (with name-clash cascade),
+    then archives source categories.
+    """
+    # --- Validation ---
+
+    # Fetch target
+    target_result = await db.execute(
+        select(Category).where(
+            Category.id == target_id,
+            Category.household_id == household_id,
+            Category.archived == False,
+        )
+    )
+    target = target_result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "not_found", "title": "Target Not Found",
+                    "status": 404, "detail": "Target category not found or not in this household"},
+        )
+    if target.depth != 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"type": "validation_error", "title": "Invalid Target",
+                    "status": 422, "detail": "Target category must be top-level (depth=0)"},
+        )
+
+    # Fetch sources
+    sources_result = await db.execute(
+        select(Category).where(
+            Category.id.in_(source_ids),
+            Category.household_id == household_id,
+            Category.archived == False,
+        )
+    )
+    sources = list(sources_result.scalars().all())
+    if len(sources) != len(source_ids):
+        found_ids = {s.id for s in sources}
+        missing = sorted(str(uid) for uid in source_ids if uid not in found_ids)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "not_found", "title": "Sources Not Found",
+                    "status": 404, "detail": f"Source categories not found: {', '.join(missing)}"},
+        )
+    for source in sources:
+        if source.depth != 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"type": "validation_error", "title": "Invalid Source",
+                        "status": 422, "detail": f"Source category '{source.name}' must be top-level (depth=0)"},
+            )
+
+    # --- Reassign events ---
+    source_results: List[Dict[str, Any]] = []
+    total_events_reassigned = 0
+    total_subcats_reassigned = 0
+
+    for source in sources:
+        # Count events per source before reassignment
+        event_count_result = await db.execute(
+            select(func.count()).select_from(FinancialEvent).where(
+                FinancialEvent.category_id == source.id,
+            )
+        )
+        event_count = event_count_result.scalar()
+
+        # Bulk reassign events
+        await db.execute(
+            FinancialEvent.__table__.update()
+            .where(FinancialEvent.category_id == source.id)
+            .values(category_id=target_id)
+        )
+        total_events_reassigned += event_count
+
+        # --- Reassign subcategories (including archived — don't leave orphans) ---
+        children_result = await db.execute(
+            select(Category).where(
+                Category.parent_id == source.id,
+            )
+        )
+        children = children_result.scalars().all()
+
+        subcats_reassigned = 0
+        for child in children:
+            new_name = await _resolve_name_clash(
+                db, target.id, child.name
+            )
+            child.parent_id = target_id
+            child.depth = 1
+            if new_name != child.name:
+                child.name = new_name
+            subcats_reassigned += 1
+            # Flush after each child so subsequent clash checks see renamed siblings
+            await db.flush()
+
+        total_subcats_reassigned += subcats_reassigned
+
+        source_results.append({
+            "id": source.id,
+            "name": source.name,
+            "transactions_reassigned": event_count,
+            "subcategories_reassigned": subcats_reassigned,
+        })
+
+        # Archive source
+        source.archived = True
+        source.archived_at = utcnow()
+        source.archived_by = actor_id
+        source.status = StatusEnum.archived
+
+    await db.flush()
+
+    # --- Audit log ---
+    await audit.log(
+        db=db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="merge_categories",
+        entity_type="category",
+        entity_id=target_id,
+        after={
+            "source_ids": [str(s.id) for s in sources],
+            "transactions_reassigned": total_events_reassigned,
+            "subcategories_reassigned": total_subcats_reassigned,
+        },
+    )
+
+    return {
+        "success": True,
+        "target_id": target_id,
+        "source_categories": source_results,
+        "total_transactions_reassigned": total_events_reassigned,
+        "total_subcategories_reassigned": total_subcats_reassigned,
+        "message": f"Successfully merged {len(sources)} category{'s' if len(sources) != 1 else ''} into '{target.name}'",
+    }
+
+
+async def _resolve_name_clash(
+    db: AsyncSession,
+    target_parent_id: UUID,
+    child_name: str,
+) -> str:
+    """Resolve subcategory name clash by appending (2), (3), etc.
+
+    Checks if a child of target_parent_id already has the same name
+    (case-insensitive). If so, appends (N) until unique.
+
+    Includes archived children in clash check — merge reassigns archived
+    subcategories too, so they must not collide.
+    """
+    # Check if name already exists under target (including archived)
+    result = await db.execute(
+        select(func.count()).where(
+            Category.parent_id == target_parent_id,
+            func.lower(Category.name) == func.lower(child_name),
+        )
+    )
+    if result.scalar() == 0:
+        return child_name
+
+    counter = 2
+    while counter <= 1000:
+        candidate = f"{child_name} ({counter})"
+        result = await db.execute(
+            select(func.count()).where(
+                Category.parent_id == target_parent_id,
+                func.lower(Category.name) == func.lower(candidate),
+            )
+        )
+        if result.scalar() == 0:
+            return candidate
+        counter += 1
+    # Fallback — should never be reached in practice
+    return f"{child_name} ({counter})"
+
+
+# ---------------------------------------------------------------------------
+# Import Category Mapping
+# ---------------------------------------------------------------------------
+
+# 14 entity accent colours (from frontend/src/index.css)
+ENTITY_ACCENT_COLORS: List[str] = [
+    "#6366f1",  # 0: account (indigo)
+    "#ef4444",  # 1: credit (red)
+    "#10b981",  # 2: capital (green)
+    "#f59e0b",  # 3: asset (amber)
+    "#06b6d4",  # 4: insurance (cyan)
+    "#8b5cf6",  # 5: event (purple)
+    "#ec4899",  # 6: recurring (pink)
+    "#14b8a6",  # 7: transfer (teal)
+    "#f97316",  # 8: budget (orange)
+    "#06b6d4",  # 9: category (cyan)
+    "#a78bfa",  # 10: currency (violet)
+    "#6ee7b7",  # 11: formula (mint)
+    "#ef4444",  # 12: debt (red)
+    "#38bdf8",  # 13: person (sky)
+]
+
+
+async def preview_import_mappings(
+    db: AsyncSession,
+    household_id: UUID,
+    category_values: List[str],
+) -> List[Dict[str, Any]]:
+    """Preview category mappings for import data.
+
+    For each unique input name, find the best matching existing category
+    using exact → trimmed → fuzzy → unmapped priority.
+    """
+    # 1. Fetch all non-archived categories for household
+    result = await db.execute(
+        select(Category).where(
+            Category.household_id == household_id,
+            Category.archived == False,
+        )
+    )
+    categories = list(result.scalars().all())
+
+    # 2. Build lookup: lowered+trimmed name → category
+    cat_lookup: Dict[str, Category] = {}
+    for cat in categories:
+        key = cat.name.strip().lower()
+        if key not in cat_lookup:
+            cat_lookup[key] = cat
+
+    # 3. Deduplicate input names (case-insensitive, whitespace-trimmed)
+    seen: Dict[str, str] = {}  # normalized → first raw occurrence
+    for raw_name in category_values:
+        normalized = raw_name.strip().lower()
+        if normalized and normalized not in seen:
+            seen[normalized] = raw_name
+
+    # 4. Match each unique name
+    mappings: List[Dict[str, Any]] = []
+    for normalized, original_name in seen.items():
+        mapping = _match_category(normalized, original_name, categories, cat_lookup)
+        mappings.append(mapping)
+
+    return mappings
+
+
+def _match_category(
+    normalized: str,
+    original_name: str,
+    categories: List[Category],
+    cat_lookup: Dict[str, Category],
+) -> Dict[str, Any]:
+    """Match a single normalized name to an existing category."""
+    had_whitespace = original_name.strip() != original_name
+
+    # Priority 1: Exact match (lowered+trimmed)
+    if normalized in cat_lookup:
+        cat = cat_lookup[normalized]
+        # If original had extra whitespace, it's a "trimmed" match
+        match_type = "trimmed" if had_whitespace else "exact"
+        return {
+            "original_name": original_name,
+            "mapped_to_id": cat.id,
+            "mapped_to_name": cat.name,
+            "match_type": match_type,
+            "transaction_count": 0,
+            "suggested_action": "map",
+        }
+
+    # Priority 2: Fuzzy match
+    best_score = 0.0
+    best_cat: Optional[Category] = None
+    for cat in categories:
+        cat_name = cat.name.strip().lower()
+        if not cat_name or not normalized:
+            continue
+        score = difflib.SequenceMatcher(None, normalized, cat_name).ratio()
+        if score > best_score:
+            best_score = score
+            best_cat = cat
+
+    if best_cat and best_score >= 0.85:
+        return {
+            "original_name": original_name,
+            "mapped_to_id": best_cat.id,
+            "mapped_to_name": best_cat.name,
+            "match_type": "fuzzy",
+            "transaction_count": 0,
+            "suggested_action": "map",
+        }
+
+    # Priority 3: Unmapped
+    return {
+        "original_name": original_name,
+        "mapped_to_id": None,
+        "mapped_to_name": None,
+        "match_type": "unmapped",
+        "transaction_count": 0,
+        "suggested_action": "create_new",
+    }
+
+
+async def auto_create_category(
+    db: AsyncSession,
+    name: str,
+    household_id: UUID,
+    actor_id: UUID,
+) -> Category:
+    """Create a category with auto-assigned colour (idempotent).
+
+    Colour cycles through ENTITY_ACCENT_COLORS based on
+    count(household categories) % 14.
+    """
+    # Idempotency check: return existing if name already exists
+    result = await db.execute(
+        select(Category).where(
+            func.lower(Category.name) == func.lower(name),
+            Category.household_id == household_id,
+            Category.archived == False,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        return existing
+
+    # Count existing categories for colour cycling
+    count_result = await db.execute(
+        select(func.count()).where(
+            Category.household_id == household_id,
+            Category.archived == False,
+        )
+    )
+    count = count_result.scalar()
+    color = ENTITY_ACCENT_COLORS[count % 14]
+
+    category = Category(
+        household_id=household_id,
+        name=name,
+        color=color,
+        icon=None,
+        category_type="expense",
+        parent_id=None,
+        depth=0,
+        created_by=actor_id,
+    )
+    db.add(category)
+    await db.flush()
+
     return category

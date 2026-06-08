@@ -1,8 +1,10 @@
-"""Category CRUD and hierarchy endpoints.
+"""Category CRUD, hierarchy, duplicate detection and merge endpoints.
 
 Endpoints:
     GET    /api/categories                  — Flat list with filters
     GET    /api/categories/tree             — Nested tree structure
+    GET    /api/categories/duplicates       — Detect duplicate categories
+    POST   /api/categories/merge            — Merge categories
     POST   /api/categories                  — Create category
     GET    /api/categories/{id}/spending-summary — Spending totals (stub)
     PATCH  /api/categories/{id}/reassign-children — Bulk reassign subcategories
@@ -11,8 +13,8 @@ Endpoints:
     POST   /api/categories/{id}/restore     — Restore archived category
     DELETE /api/categories/{id}             — Hard delete
 
-Route ordering: static paths (/tree) are declared BEFORE parameterized /{id}
-to prevent FastAPI matching static segments as UUID values.
+Route ordering: static paths (/tree, /duplicates, /merge) are declared BEFORE
+parameterized /{id} to prevent FastAPI matching static segments as UUID values.
 """
 
 from datetime import date
@@ -27,11 +29,24 @@ from backend.database import get_db
 from backend.dependencies import get_current_person, get_household_id
 from backend.models.category import Category
 from backend.models.person import Person
-from backend.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate, ReassignChildrenRequest
+from backend.schemas.category import (
+    CategoryCreate,
+    CategoryResponse,
+    CategoryUpdate,
+    ReassignChildrenRequest,
+    MergeCategoriesRequest,
+    DuplicateGroupsResponse,
+    MergeResponse,
+    ImportPreviewRequest,
+    ImportPreviewResponse,
+)
 from backend.services.category_service import (
     archive_category,
     create_category,
     delete_category,
+    detect_duplicates,
+    merge_categories,
+    preview_import_mappings,
     restore_category,
     update_category,
 )
@@ -160,6 +175,56 @@ async def get_category_tree(
                 tree.append(cat_dict)
 
     return tree
+
+
+# ---------------------------------------------------------------------------
+# Duplicate Detection (static path — before /{id})
+# ---------------------------------------------------------------------------
+
+
+@router.get("/categories/duplicates")
+async def get_duplicates(
+    household_id: UUID = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> DuplicateGroupsResponse:
+    """Detect duplicate top-level categories using exact + fuzzy matching."""
+    groups = await detect_duplicates(db, household_id)
+    return DuplicateGroupsResponse(groups=groups)
+
+
+# ---------------------------------------------------------------------------
+# Merge (static path — before /{id})
+# ---------------------------------------------------------------------------
+
+
+@router.post("/categories/merge", response_model=MergeResponse)
+async def merge_categories_route(
+    data: MergeCategoriesRequest,
+    person: Person = Depends(get_current_person),
+    household_id: UUID = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> MergeResponse:
+    """Merge source categories into target category."""
+    result = await merge_categories(
+        db, household_id, person.id, data.target_id, data.source_ids
+    )
+    return MergeResponse(**result)
+
+
+# ---------------------------------------------------------------------------
+# Import Preview (static path — before /{id})
+# ---------------------------------------------------------------------------
+
+
+@router.post("/categories/import/preview", response_model=ImportPreviewResponse)
+async def import_preview_route(
+    data: ImportPreviewRequest,
+    household_id: UUID = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> ImportPreviewResponse:
+    """Preview category mappings for import data."""
+    mappings = await preview_import_mappings(db, household_id, data.category_values)
+    return ImportPreviewResponse(mappings=mappings)
 
 
 # ---------------------------------------------------------------------------

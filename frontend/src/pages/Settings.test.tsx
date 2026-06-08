@@ -46,6 +46,8 @@ vi.mock('../api/usePersons', () => ({
   useCancelInvitation: vi.fn(),
   useDeleteHousehold: vi.fn(),
   useLeaveHousehold: vi.fn(),
+  useDeclineInvitation: vi.fn(),
+  useGrantHouseholdCreation: vi.fn(),
 }));
 
 const mockMemberData = (overrides = {}): any => ({
@@ -142,6 +144,11 @@ describe('Settings Page', () => {
     });
 
     (usePersonsModule.useLeaveHousehold as vi.Mock).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+
+    (usePersonsModule.useGrantHouseholdCreation as vi.Mock).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
     });
