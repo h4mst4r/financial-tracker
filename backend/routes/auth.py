@@ -16,11 +16,12 @@ from sqlalchemy import select
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from backend.config import settings
 from backend.database import get_db
 from backend.dependencies import get_current_person
+from backend.limiter import limiter
 from backend.models.household import Household
 from backend.models.person import HouseholdInvitation, Person, Session as SessionModel
 from backend.models.base import utcnow
@@ -36,7 +37,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/login")
-async def login() -> Response:
+@limiter.limit("20/minute")
+async def login(request: Request) -> RedirectResponse:
     """Generate OAuth state and redirect to Google authorization endpoint."""
     state = auth_service.generate_oauth_state()
     signed_state = auth_service.sign_state(state)
@@ -44,17 +46,7 @@ async def login() -> Response:
     redirect_uri = settings.GOOGLE_REDIRECT_URI
     auth_url = auth_service.build_google_auth_url(state, redirect_uri)
 
-    # Store signed state in cookie (short-lived, httpOnly).
-    # The HTML page uses a dark background to avoid a white flash before the JS
-    # redirect fires (the page has no stylesheet of its own).
-    response = Response(
-        content=(
-            '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-            '<style>html,body{margin:0;background:#09090f}</style></head>'
-            f'<body><script>window.location.href="{auth_url}"</script></body></html>'
-        ),
-        media_type="text/html",
-    )
+    response = RedirectResponse(url=auth_url, status_code=302)
     response.set_cookie(
         key="oauth_state",
         value=signed_state,
@@ -74,6 +66,7 @@ async def login() -> Response:
 
 
 @router.get("/callback")
+@limiter.limit("20/minute")
 async def callback(
     request: Request,
     code: Optional[str] = None,
@@ -81,14 +74,14 @@ async def callback(
     error: Optional[str] = None,
     oauth_state: Optional[str] = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
-) -> Response:
+) -> RedirectResponse:
     """Exchange authorization code for tokens, validate ID token, create session."""
     frontend_url = getattr(settings, "FRONTEND_URL", None) or "http://localhost:5173"
 
-    def _oauth_error_redirect() -> Response:
-        return Response(
-            content=f'<script>window.location.href="{frontend_url}/login?error=oauth_error"</script>',
-            media_type="text/html",
+    def _oauth_error_redirect() -> RedirectResponse:
+        return RedirectResponse(
+            url=f"{frontend_url}/login?error=oauth_error",
+            status_code=302,
         )
 
     # Check for OAuth error from Google (e.g. user denied access)
@@ -133,22 +126,27 @@ async def callback(
     except NotInvitedError:
         # Person row is intentionally persisted (valid Google account, no rights).
         # No session created — redirect to login with error code.
-        return Response(
-            content=f'<script>window.location.href="{frontend_url}/login?error=not_invited"</script>',
-            media_type="text/html",
+        return RedirectResponse(
+            url=f"{frontend_url}/login?error=not_invited",
+            status_code=302,
         )
 
     # Create session
     session = await auth_service.create_session(db, person, request)
 
-    # Redirect to frontend with session token in URL hash.
-    # Vite's dev proxy strips Set-Cookie headers, so we pass the session ID
-    # via hash fragment instead. The frontend reads it from window.location.hash
-    # and stores it in sessionStorage, then sends it as X-Session-Token on all
-    # API requests. The backend accepts it in get_current_person as a fallback.
-    response = Response(
-        content=f'<script>window.location.href="{frontend_url}#session={session.id}"</script>',
-        media_type="text/html",
+    # Redirect to frontend and set the session as an HttpOnly cookie.
+    # The OAuth callback is called directly by the browser (not via Vite proxy),
+    # so Set-Cookie lands correctly regardless of the dev proxy setup.
+    # HttpOnly prevents JavaScript from reading the token — XSS cannot steal it.
+    response = RedirectResponse(url=f"{frontend_url}/", status_code=302)
+    response.set_cookie(
+        key=auth_service.SESSION_COOKIE_NAME,
+        value=str(session.id),
+        httponly=True,
+        samesite="lax",
+        secure=not settings.DEBUG,
+        path="/",
+        max_age=auth_service.SESSION_EXPIRY_MINUTES * 60,
     )
     return response
 
@@ -269,7 +267,9 @@ async def me(
 
 
 @router.post("/dev-login")
+@limiter.limit("20/minute")
 async def dev_login(
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     """Create/reuse the fixed dev session and return /auth/me-shaped payload.

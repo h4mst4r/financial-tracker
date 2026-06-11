@@ -78,12 +78,11 @@ function App() {
     )
   }
 
-  // Not authenticated (or auth failed for a non-auth reason) — show public routes.
+  // Not authenticated — only public routes accessible.
   if (!currentPerson) {
     return (
       <ErrorBoundary>
         <Routes>
-          <Route path="/design-system" element={<DesignSystem />} />
           <Route path="/join/:token" element={<JoinHousehold />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -95,8 +94,11 @@ function App() {
   return (
     <ErrorBoundary>
       <Routes>
-        {/* Design system — always rendered without AppShell regardless of auth state */}
-        <Route path="/design-system" element={<DesignSystem />} />
+        {/* Design system — dev only, requires auth, rendered without AppShell */}
+        <Route
+          path="/design-system"
+          element={import.meta.env.DEV ? <DesignSystem /> : <NotFound />}
+        />
 
         {/* Join household — rendered without AppShell */}
         <Route path="/join/:token" element={<JoinHousehold />} />

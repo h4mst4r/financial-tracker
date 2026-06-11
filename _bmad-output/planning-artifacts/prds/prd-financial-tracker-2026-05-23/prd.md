@@ -1,25 +1,21 @@
 ---
 title: Financial Tracker — Product Requirements Document
-version: 2.0
+version: 3.0
 status: living
 created: 2026-05-23
-updated: 2026-05-26
-authority: Feature requirements and acceptance criteria. Derives from
-           entity-design-philosophy.md. Technical implementation in architecture.md.
-           UI component specs in ux-design-specification.md.
+updated: 2026-06-10
+authority: Feature requirements and acceptance criteria.
 ---
 
 # Financial Tracker — Product Requirements Document
 
-> **Design authority:** Entity definitions, field names, inheritance rules, and
-> architectural patterns are specified in `entity-design-philosophy.md` [EDP].
+> **Design authority:** 
 > This document specifies *what the system must do* — functional requirements,
 > acceptance criteria, and non-functional constraints.
-> Technical implementation detail belongs in `architecture.md`.
 
 ---
 
-## 0. Entity Philosophy Preamble
+## 0. Entity Philosophy
 
 All features in this PRD are expressed in terms of the entity hierarchy defined in
 `entity-design-philosophy.md`. Requirements are grouped by entity family. Each entity
@@ -29,7 +25,7 @@ The entity families in scope:
 
 | Prefix | Entity Family | Subtypes / Scope |
 |---|---|---|
-| FR-HH | EntityHousehold | Household settings, membership, base currency |
+| FR-HH | EntityHouseholds | Household settings, membership, timezone, region, date/time |
 | FR-P | EntityPersons | User + HouseholdMember combined; PersonDashboard |
 | FR-A | EntityAccounts | Bank, CreditCard, Capital, Asset, Insurance |
 | FR-E | EntityEvents | Transaction, RecurringPayment, Transfer |
@@ -37,18 +33,20 @@ The entity families in scope:
 | FR-C | EntityCategories | Household-specific hierarchy, max 2 levels |
 | FR-CU | EntityCurrencies | All ISO 4217; FX rates; multi-display |
 | FR-F | EntityFormulas | System defaults + user-configurable |
-| FR-D | EntityDebt | Computed only — never entered manually |
-| FR-V | EntityVisualization | VisualizationFilter; all charts; comparison modes |
+| FR-D | EntityDebt | Computed only |
+| FR-V | EntityVisualization | VisualizationFilter; chart viewer; comparison modes |
+| FR-DB | Dashboard | modules from all other entities can be pinned here |
 | FR-IE | Import/Export | CSV import (two-step) + export |
-| FR-SYS | System | Auth, scheduler, alerts, audit, backup |
+| FR-SYS | System | Authentication, scheduler, alerts, error pages, logging, themes, audit, backup |
 
 **Cross-cutting rules that apply to every FR below:**
 
 1. Every entity supports: Create, Edit, Archive, Restore, Hard-Delete-if-Empty, Duplicate.
 2. Every entity is scoped to `household_id` — no cross-household data access possible.
 3. Every mutation produces an audit log entry (except hard-delete of empty entities).
-4. Every monetary field uses the `MonetaryValue` block [EDP §3.2] — never ad-hoc amount fields.
+4. Every monetary field uses the `MonetaryValue` block — never ad-hoc amount fields.
 5. Dates are stored and transmitted in ISO 8601 (`YYYY-MM-DD`); displayed in `DD-MM-YYYY`.
+6. Timezone/regions of dates are based on EntityHousehold timezone settings.
 
 ---
 
@@ -60,8 +58,7 @@ This document does not repeat the brief. Summary only:
 - Self-hosted household financial tracker for 2–4 users
 - Replaces Google Sheets + Apps Script
 - Runs on Google Cloud Run at zero cost
-- Multi-currency (SGD base; NZD, USD, PHP, all ISO 4217 supported)
-- Two users: Ben (owner) and Kim (member)
+- Multi-currency (SGD; NZD, USD, PHP, all ISO 4217 supported)
 
 ---
 
@@ -79,6 +76,7 @@ This document does not repeat the brief. Summary only:
 | Change base currency | — | — | ✓ |
 | Delete household | — | — | ✓ |
 | Access settings | — | ✓ | ✓ |
+| Export/import/backup | — | ✓ | ✓ |
 
 ---
 
@@ -88,31 +86,45 @@ This document does not repeat the brief. Summary only:
 
 **FR-HH-001 — Household Creation**
 On first Google OAuth login, the system first checks whether the verified email matches
-a pending household invitation. If a match is found, the person joins the invited household
-as `member` and the invitation is accepted. If no match is found, a new household is created
-with the logged-in person as `owner`.
-*Acceptance:* New user with pending invitation → joins invited household (no new household created).
-New user without invitation → new household created; person has role `owner`; base currency
-defaults to SGD; timezone defaults to Asia/Singapore.
+a approved owners list/table. If a match is found, the person creates a brand new household and
+the New Household modal will show, allowing the user to set the timezone, date and base currency.
+If not on the approved owners list, the system then checks whether the email has a pending household invitation.
+If a match is found, the Pending Invitation modal will show, allowing the person to choose to accept or decline
+the invitation. If the invitation is accepted, the person joins the household as `member` and the invitation is marked as `accepted`.
+If the user declines, the No Invitation Error page will show and the invitation is marked as `declined`.
+*Acceptance:* New user with pending invitation → able to join invited household (no new household created).
+New user with pending invitation → able to decline.
+New user without invitation but on owner list → new household created; person has role `owner`; New Household modal will show,
+default timezone is Asia/Singapore and base currency is SGD.
 
-**FR-HH-002 — Household Configuration**
-Owner may update: household name, timezone, and base currency.
-*Acceptance:* Changes persist. Timezone change updates all future scheduler job times.
-Base currency change triggers background recalculation of all `amount_base` values
-(see FR-CU-005).
+**FR-HH-002 — Household Configuration and Management**
+Owner may update: household name, timezone, date/time and base currency, in the Profile tab of the Settings module. Other users may only view them.
+Users may also view both the members list and the invitations list, which is in a separate Household Managment tab in the Settings module.
+Owner and admin users can add, remove, archive, restore, promote and demote users in the members list, and invite, revoke invite and resend invite in the invitations list.
+All admin and member users also have a Leave Household button in the Profile tab, which will show a Leave Household confirmation, requiring them to click again
+*Acceptance:* Changes persist. Timezone and date/time change updates all future scheduler job times.
+Base currency change triggers background recalculation of all `amount_base` values.
+Can see members and invitations list and carry out the administrative functions.
 
 **FR-HH-003 — Member Invitation**
-Admin or Owner may invite a new member by entering their Google email address.
+Admin or Owner may invite a new member by entering their Google email address in the Invitation modal at the invitations list.
 The invitation is in-app only — no email is sent. The invitee must log in with the
-exact Google account matching the invited email; the system then links them to the household.
-*Acceptance:* Invitation record created with 7-day expiry. On matching login, person
-is created with role `member` and joined to the household.
+exact Google account matching the invited email; the system then links them to the household and shows the Pending Invitation modal and the person can accept or decline.
+Admin or Owner may invite a member that already belongs to an existing household. If an owner is invited, the Household Conflict modal will show, informing the owner has
+to delete the existing household to join, and two options will display - either to go to Settings or to decline the invitation.
+For admin and member users, the Household Conflict modal will show, informing the users that they will leave their existing household if they accept, and two options will display
+- go to Settings or to decline the invtation.
+*Acceptance:* Invitation record created with 7-day expiry. On matching login, the Pending Invitation modal will show, allowing the person to choose to accept or decline
+the invitation. If the invitation is accepted, the person joins the household as `member` and the invitation is marked as `accepted`.
+The full authentication flow for new and existing owner and member users must be tested to ensure it works.
 
 **FR-HH-004 — Invitation Management**
-Admin or Owner may view pending invitations and cancel any of them. Pending invitations
-display as a shareable join URL (`/join/<invitation_id>`) that invitees open to accept.
-*Acceptance:* Cancelled invitations change status to `cancelled`; visiting a cancelled
-or expired join URL shows a clear error message, not a blank screen.
+Admin or Owner may view pending invitations and revoke any of them, where upon they will disappear from the invitation list.
+Pending invitations display as a shareable join URL (`/join/<invitation_id>`) that invitees open to accept.
+If an invitation was accepted, the invitation status changes from `pending` to `accepted`, whereby it can then be deleted.
+IF an invitation was declined, the invitation status changes from `pending` to `declined`, whereby it can then be deleted.
+*Acceptance:* Pending, accepted and declined invitations change status appropriately; visiting a revoked
+or expired join URL shows the Invalid/Expired Error page.
 
 **FR-HH-005 — Household Permanent Deletion**
 The household owner may permanently and irreversibly delete the entire household and all
@@ -133,40 +145,53 @@ session cookie set → redirected to Dashboard.
 
 **FR-P-002 — Join Household**
 A person with a pending invitation may join the household by logging in with the
-invited Google account. If the email matches, they are added to the household.
-*Acceptance:* Invitation status changes to `accepted`; person record created with
-`member` role; person can access all household data.
+invited Google account. If the email matches, the Pending Invitation modal will show, 
+allowing the person to choose to accept or decline the invitation. If the invitation 
+is accepted, the person joins the household as `member` and the invitation is marked as `accepted`.
+If the user declines, the No Invitation Error page will show.
+*Acceptance:* Invitation status changes to `accepted`, it is removed from the invitations table;
+person record created with `member` role; person can access all household data.
 
-**FR-P-003 — Profile Management**
-Any person may update their own `display_name`.
-*Acceptance:* Change persists; `display_name` updates everywhere it appears
-(PersonRef, PersonCard, PersonDashboard header).
+**FR-P-003 — Profile & Appearance Management**
+Any person may update their own personal preferences (UX §5.1 Profile tab): `display_name`,
+`colour` (avatar fallback), and the **Appearance / App** set — `theme` (named palette per
+FR-P-003a), `font`, **density** (comfortable/compact), **reduce_motion**, and
+**notification_prefs** (per-alert-type opt-in: budget warnings/overruns, missed recurring,
+upcoming payments, FX stale, backups — feeds FR-SYS-007).
+*Acceptance:* Each change persists per person and applies only to that person's session;
+`display_name` updates everywhere it appears (PersonRef, PersonCard, PersonDashboard header);
+`theme`/`font`/`density`/`reduce_motion` re-render the UI live; `notification_prefs` gate which
+in-app alerts that person receives. Stored on `persons` (`theme, font, density, reduce_motion,
+notification_prefs(JSON), colour`).
 
 **FR-P-004 — Display Currency Preference**
-Any person may set their preferred display currency. This affects how all monetary
-values, charts, and dashboards are rendered for that person.
+Any person may set their preferred display currency. This affects how the dashboard is rendered for that person.
 *Acceptance:* Changing display currency from SGD to NZD immediately converts all
-dashboard values to NZD using current FX rate. Stored `amount_base` values are unchanged.
+dashboard values to NZD using current FX rate, while keeping existing NZD values. Stored `amount_base` values are unchanged.
 
 **FR-P-005 — Role Management**
 Owner may change any member's role (member ↔ admin). Owner role cannot be transferred
-via this interface (requires direct DB action for safety).
+via this interface (requires setting of the approved owners list manually).
 *Acceptance:* Role change takes effect on next request from that person.
 
 **FR-P-006 — PersonDashboard**
-Any person may filter the entire application to show only their own data. The
-default view is the household aggregate. A persistent toggle switches between
-"Household" and "My Finances" views. The chosen mode is stored as
-`Person.default_view` (`household` | `personal`) and persists across sessions.
+Any person may filter the entire application between the household aggregate and a single
+member. The default view is the household aggregate. A persistent toggle switches between
+"My Household" and "Individual" views, with a member dropdown in the topbar.
+**Member-selection permission:** **Admin/Owner may select ANY household member** in the dropdown;
+a **Member may only select themselves** (the dropdown shows only their own entry). This applies
+identically everywhere Individual mode is offered (Dashboard, every Visualization, ledger
+filters).
+The chosen mode is stored as `Person.default_view` (`household` | `personal`) and persists across sessions.
 *Acceptance:* On login, the app loads in the person's last-used view mode.
-In "My Finances" mode, all charts, lists, and summaries filter to
-`payee_person_id = current_person.id`. The VisualizationFilter is updated with
-`person_ids = [current_person.id]`.
+In "Individual" mode, all charts, lists, and summaries filter to the selected member; the
+VisualizationFilter is updated with `person_ids = [selected_member.id]`. A Member who attempts to
+target another member (e.g. via crafted request) receives 403.
 
 **FR-P-007 — Archive Member**
-Owner may archive a household member who has left. Archived members retain all
+Owner may archive a household member who has been removed or left. Archived members retain all
 their historical events and accounts — data is never deleted.
-*Acceptance:* Archived member cannot log in; their events and accounts remain visible
+*Acceptance:* Archived member cannot log in unless they are reinvited and accepted the invite; their events and accounts remain visible
 in household history; PersonRef resolves to their name + "(archived)" label.
 
 **FR-P-008 — Hard Delete Empty Person**
@@ -183,7 +208,8 @@ exist, hard delete is blocked and archiving is offered instead.
 Any Admin or Owner may create an account of any type. Account type is selected from
 a picker; the form adapts to show the relevant fields for that subtype.
 *Acceptance:* Account created with at least one owner (the creator, by default);
-MonetaryValue block populated; status = `active`.
+MonetaryValue block populated; status = `active`. Ledger-backed accounts (Bank, CreditCard)
+additionally require `opening_balance` + `opening_balance_date` (FR-A-008).
 
 **FR-A-002 — Edit Account**
 Any Admin or Owner may edit any account's fields.
@@ -201,7 +227,7 @@ An account with zero linked events and no FK references may be hard-deleted.
 only archiving is offered. INFO log entry written; no audit record.
 
 **FR-A-005 — Duplicate Account**
-Any account may be duplicated (clones all fields, new UUID, cleared monetary values).
+Any account may be duplicated (clones all fields and current values, new UUID).
 *Acceptance:* Duplicate appears in list; owner is the duplicating person; all
 subtype-specific fields copied.
 
@@ -214,13 +240,23 @@ the AccountCard.
 **FR-A-007 — Account Transaction History**
 Any user may view a filtered list of all events linked to a specific account
 (via `source_account_id`).
-*Acceptance:* History list is paginated, sortable by date, filterable by status.
+*Acceptance:* History list is paginated, sortable by date, filterable by field.
 
-**FR-A-008 — Month-Year Snapshot**
-For periodic account types (CreditCard, Capital, Asset), a `month_year` field
-records the statement month this balance represents.
-*Acceptance:* `month_year` shown on AccountCard; used in account-balance-history
-visualization grouping.
+**FR-A-008 — Account Value Snapshots & History (all account types)**
+Every account records its value over time through `AccountSnapshot` records:
+`{snapshot_date, value, currency, source: manual|formula|reconciliation|appraisal|import|computed, note}`.
+- **Ledger-backed accounts (Bank, CreditCard):** value is the running balance computed from
+  linked events, anchored by a required `opening_balance` + `opening_balance_date`. Manual
+  snapshots act as corrections/anchors that override the computed value from their date forward.
+  The scheduler writes a `source = computed` snapshot per account each month (FR-SYS-006) so the
+  history is materialised, not replayed.
+- **Asset-like accounts (Asset, Insurance, Capital):** snapshots ARE the value series; current
+  value = latest snapshot by date.
+
+`source = import` is reserved for future bank-feed ingestion.
+*Acceptance:* Current value resolves per the rules above. A month/year value-history chart is
+available on every AccountCard (mini-chart) and detail view via FR-V. Adding a manual snapshot
+updates current value and the chart immediately.
 
 **FR-A-009 — BankAccount: Interest Rate**
 A BankAccount may have an optional `interest_rate` and `interest_frequency`.
@@ -229,7 +265,7 @@ and used by relevant EntityFormulas.
 
 **FR-A-010 — CreditCard: Limit and Billing**
 A CreditCard must capture `credit_limit`, `billing_day`, `due_day`, and optionally
-`reward_points` and `annual_fee`.
+`rewards_type` and `annual_fee`.
 *Acceptance:* `billing_day` and `due_day` are used to compute the next billing cycle
 date shown on the CreditCard card view.
 
@@ -251,26 +287,32 @@ optionally a `depreciation_formula_id`.
 *Acceptance:* When formula is assigned, current estimated value is shown on hover
 using FR-F-004 formula hover reveal.
 
-**FR-A-014 — Asset: Valuation Records**
-Any Admin or Owner may add a valuation record to an asset at any time.
-Fields: `valuation_date`, `value`, `currency`, `source` (manual / appraisal / formula), `notes`.
-*Acceptance:* Valuation record persists; current value = latest record by date.
+**FR-A-014 — Add Manual Value Snapshot (all account types)**
+Any Admin or Owner may add a manual `AccountSnapshot` to any account at any time (FR-A-008).
+For asset-like accounts this is the primary way value is recorded; for ledger-backed accounts
+it acts as a balance correction/anchor.
+*Acceptance:* Snapshot persists; current value recomputed per FR-A-008; appears in the
+value-history chart immediately.
 
-**FR-A-015 — Asset: Valuation History Chart**
-The Asset detail view shows a line chart of valuation records over time.
-*Acceptance:* Chart shows all `ValuationRecord` entries sorted by `valuation_date`.
-Supports raw and converted currency modes.
+**FR-A-015 — Account Value History Chart (all account types)**
+Every account's detail view (and a mini-chart on its card) shows its value over time,
+grouped by month or year, sourced from `AccountSnapshot` records (FR-A-008) via FR-V.
+*Acceptance:* Chart plots all snapshots sorted by `snapshot_date`. Supports line/bar,
+raw and converted currency modes, and expands into the full visualization viewer (FR-V).
 
 **FR-A-016 — Insurance: Policy Details**
 An InsuranceAccount captures `policy_type`, `coverage_types[]`, `premium_frequency`,
 `purchase_date`, `coverage_amount`, and `insurer`.
 *Acceptance:* All fields visible on InsuranceCard. Coverage types rendered as tags.
 
-**FR-A-017 — RecurringEventSource Configuration**
-For Asset, Capital, and Insurance accounts, Admin or Owner may configure a
-`recurring_config` block (enabled, frequency_text, payee, category, amount override).
-*Acceptance:* When enabled, the scheduler picks up this account as a recurring
-payment source and generates transactions accordingly [EDP §6.4].
+**FR-A-017 — Account-Linked Recurring Payment**
+For Asset, Capital, and Insurance accounts, Admin or Owner may enable a recurring payment.
+Doing so creates a real `RecurringPayment` entity (FR-E-011) linked back to the account via
+`source_account_id`, with its own `frequency_text`, payee, category, and amount. It appears
+natively in the Recurring Payments module like any other recurring payment.
+*Acceptance:* Enabling creates a linked RecurringPayment; the scheduler processes it through
+the single recurring path (FR-SYS-006) — no separate account-source scanning. Disabling the
+account's recurring payment archives the linked RecurringPayment.
 
 ---
 
@@ -278,113 +320,155 @@ payment source and generates transactions accordingly [EDP §6.4].
 
 **FR-E-001 — Create Transaction**
 Any user may create a transaction (inflow or outflow). Required: name, event_date,
-transaction_type, MonetaryValue, payee, category. Optional: payment_method, notes,
+transaction_type, MonetaryValue, payee, payment_method, category. Optional: notes,
 is_gst_claimable, is_gift, source_account.
+The form pre-fills *context* fields — `paid_with` account, `currency`, `payment_method`,
+`category` — from the person's last successful entry (stored as `Person.last_tx_context`);
+`name`, `amount`, and `payee` are never pre-filled. Repeating a specific past transaction is
+done via Duplicate (FR-E-003) — there is no separate template concept.
+Every transaction stores provenance: `source` (`manual` | `csv_import` | `bank_feed`, default
+`manual`) and a nullable `external_ref` reserved for future bank-feed ingestion.
 *Acceptance:* Transaction created; `transaction_status` defaults to `completed`;
-event appears in ledger; budget actuals recomputed.
+event appears in ledger; budget actuals recomputed. Context defaults reflect the last entry;
+hand-entered transactions persist `source = manual`.
 
-**FR-E-002 — Edit Transaction**
+**FR-E-002 — Edit Transaction/s**
 Any Admin or Owner may edit any transaction. Member may edit their own.
 *Acceptance:* Changes persist; audit log entry created; budget actuals recomputed.
 
-**FR-E-003 — Archive / Restore Transaction**
+**FR-E-003 — Duplicate Transaction/s**
+Any Admin or Owner may duplicate a transaction. This copies all values and opens the edit modal.
+*Acceptance:* Duplicate; audit log entry created; budget actuals recomputed
+
+**FR-E-004 — Archive / Restore Transaction/s**
 *Acceptance:* Archived transaction excluded from budget actuals, reports, and
 default ledger view. Restoring reverses all exclusions.
 
-**FR-E-004 — Transaction Status**
+**FR-E-005 — Transaction Status**
 User may set `transaction_status` on any transaction:
 `pending` / `completed` / `cancelled` / `reconciled`.
 *Acceptance:* `pending` transactions appear in ledger with a distinct visual
 indicator. `cancelled` transactions are excluded from all budget actuals and
 aggregations. `reconciled` transactions show a checkmark.
 
-**FR-E-005 — Reconciliation**
+**FR-E-006 — Reconciliation**
 User may mark a transaction as `reconciled` — confirming it matches their bank
 or card statement.
 *Acceptance:* `reconciled = true`, `reconciled_at` set. Reconciliation status
 visible in ledger view. Filter for unreconciled transactions available.
 
-**FR-E-006 — Shared Household Expense Flag**
+**FR-E-007 — Shared Household Expense Flag**
 On any outflow transaction, user may set `is_shared_expense = true` to indicate
 that this personal payment covers a shared household cost.
 *Acceptance:* Flag only available when `transaction_type = outflow`. System
-immediately updates computed debt balance for the payee person [FR-D-001].
+immediately updates computed debt balance for the payee person.
 
-**FR-E-007 — Duplicate Detection**
-On save (create or edit), the system checks for duplicates using the criteria
-defined in [EDP §13.3].
+**FR-E-008 — Duplicate Detection**
+On save (create or edit), the system checks for duplicates.
 *Acceptance:* If a candidate duplicate is found, the user is shown a warning with
 the duplicate's name, date, and amount. User may: proceed (ignore warning), link
-as duplicate (sets `duplicate_of`), or cancel.
+as duplicate (sets `duplicate_of`), or cancel entry.
 
-**FR-E-008 — MonetaryValue Entry**
+**FR-E-009 — MonetaryValue Entry**
 When entering a transaction in a foreign currency, the user enters `currency`, `amount`,
 and selects a "Paid with" account (or Cash). The system auto-fills `amount_base_calculated`
 using the following priority chain: (1) account's assigned FX formula if set, (2) spot rate
-from EntityCurrencies. A source indicator (`formula` / `spot rate` / `manual`) is displayed
-next to the base-currency field. The user may override `amount_base` with the exact bank
-statement figure; the indicator switches to `manual` and `fx_delta` is shown immediately.
+from EntityCurrencies. A source (`formula` / `spot rate` / `manual`) indicated by border colour highlights the base-currency field.
+The user may override `amount_base` with the exact bank statement figure; the indicator switches to `manual` and `fx_delta` is shown immediately.
 *Acceptance:* `amount_base_calculated` is read-only after auto-fill. `amount_base` is
 editable. Source indicator updates on account selection and on manual override.
 `fx_delta = amount_base_calculated - amount_base` shown inline.
+The applied `fx_rate_used` and its `rate_date` are persisted on the event and are immutable —
+historical reports, the annual FX cost report, and tax exports use this stored rate, never a
+recomputed current rate.
 When `currency == base_currency`, forex fields are hidden.
 When Cash is selected, spot rate is used and `source_account_id` is null.
 
-**FR-E-009 — GST and Gift Flags**
+**FR-E-010 — GST and Gift Flags**
 Any transaction may be flagged as `is_gst_claimable` or `is_gift`.
-*Acceptance:* Flags visible as icons on TransactionCard. Filterable in ledger view.
+*Acceptance:* Flags visible as icons on Transaction item. Filterable in ledger view.
 
-**FR-E-010 — Create Recurring Payment**
+**FR-E-011 — Create Recurring Payment**
 Admin or Owner may create a recurring payment with a free-text `frequency_text`
-(e.g. "3rd of every month", "every Sunday").
+(e.g. "3rd of every month", "every Sunday", "every 4 weeks", "April 10").
 *Acceptance:* On entry, the UI displays the parsed next occurrence date alongside
 the raw text. User must confirm the parsed date before saving. `frequency_rule`
 stored as structured JSON. `frequency_text` stored as display reference.
 
-**FR-E-011 — Recurring Date Patterns**
-The system must support all nine date patterns from v1 [EDP §7.3]:
+**FR-E-012 — Recurring Date Patterns**
+The system must support all nine date patterns from v1:
 every [weekday], weekly, monthly, [N]th of every month, every [N] days,
 every [N] weeks, [Nth] [weekday] of [month], [month] [day], yearly.
 *Acceptance:* Each pattern produces the correct `next_occurrence` for at least
 three test cases each.
 
-**FR-E-012 — Occurrence History**
+**FR-E-013 — Occurrence History**
 The Recurring Payments module shows a history view of all expected occurrences for
-each recurring payment: their expected date, status (upcoming / processed / skipped /
+each recurring payment: their expected date, status (upcoming / processed / manual / skipped /
 missed / failed), and the linked transaction if processed.
 *Acceptance:* Occurrences computed from `frequency_rule` between `start_date` and today.
-Each occurrence has a distinct status badge. Missed occurrences show in red.
+Each occurrence has a distinct status badge. Missed occurrences show in red border highlight.
 
-**FR-E-013 — Skip Occurrence**
+**FR-E-014 — Skip Occurrence**
 User may manually skip an upcoming occurrence without deleting the recurring payment.
 *Acceptance:* OccurrenceRecord status = `skipped`. No transaction generated for
 that date. Subsequent occurrences continue as scheduled.
 
-**FR-E-014 — Missed Occurrence Alert**
+**FR-E-015 — Trigger Occurrence**
+User may manually trigger an occurrence without deleting the recurring payment on the current date
+*Acceptance:* OccurrenceRecord status = `manual`.
+
+**FR-E-016 — Missed Occurrence Alert**
 If an expected occurrence date passes without a processed transaction and no skip
 record, the system generates a RECURRING_MISSED alert on the next daily alert job run.
 *Acceptance:* Alert appears in the in-app alert panel. Alert links to the affected
 recurring payment. Can be dismissed.
 
-**FR-E-015 — Create Transfer**
+**FR-E-017 — Create Transfer**
 Admin or Owner may create a transfer between two accounts.
 Required: `source_account_id`, `destination_account_id`, MonetaryValue.
 If the accounts use different currencies, both the source amount and the destination
-amount may be entered separately.
+amount are entered separately; the system records `fx_rate_used`, `rate_date`, and `fx_delta`
+for the transfer exactly as for transactions (FR-E-009) — this makes future remittance-cost
+tracking a filter, not a schema change.
 *Acceptance:* Transfer event created. Source account balance decreases; destination
-account balance increases. Debt-clearing logic runs automatically [FR-D-004].
+account balance increases. For cross-currency transfers `fx_delta` is computed and stored.
+Debt-clearing logic runs automatically.
 
-**FR-E-016 — Debt Repayment Auto-Detection**
+**FR-E-018 — Debt Repayment Auto-Detection**
 When a transfer's `destination_account_id` belongs to a CreditCard account, the
 system automatically sets `is_debt_repayment = true`.
 *Acceptance:* Transfer saved with flag set. Computed credit card debt balance
 immediately decreases by `debt_cleared_amount`. User sees updated debt on the
-CreditCard card.
+CreditCard item.
 
-**FR-E-017 — Override Debt Repayment Flag**
+**FR-E-019 — Override Debt Repayment Flag**
 User may override `is_debt_repayment = false` on any transfer where it was
 auto-detected as true (e.g. topping up a card for spending, not repayment).
 *Acceptance:* Override persists. Debt balance is NOT reduced for this transfer.
+
+**FR-E-020 — Bulk Operations (generic multi-select)**
+Multi-select is a **generic capability** (a shared `useMultiSelect` hook + BulkActionBar, UX §12.4),
+available on the **Transactions ledger** and the **CategoryTree**, and extensible to any future
+entity list. With ≥1 items selected the user may bulk-edit shared fields, bulk archive/restore,
+bulk duplicate, and bulk delete-if-empty. Per surface the editable field set differs:
+- **Events:** category, payment_method, transaction_status, payee, is_shared_expense.
+- **Categories:** type (Expense/Income), archive/restore, **merge** (fold selected into one),
+  promote-out; archiving a parent archives its branch (FR-C-005).
+Permission rules apply per item (Member may bulk-act only on own events; Admin/Owner on any).
+*Acceptance:* Bulk-edit applies only the fields the user changed, leaving others untouched. A
+single confirmation precedes destructive bulk actions. Each affected item produces its own
+audit log entry. For events, budget actuals recompute once after the batch. The multi-select
+mechanism is shared, not re-implemented per module.
+
+**FR-E-021 — Favourite & Manual Sort (per-person)**
+On any EntityCard list (Accounts, Categories, Currencies, …) a person may **favourite** an item
+(the card's star, UX §2) and **manually drag-reorder** items. Both are stored **per person**, so
+one member's favourites/ordering never affect another's. Favourites sort to the front; manual
+order overrides default sort when "Custom" sort is active.
+*Acceptance:* Favourite + sort_order persist per `(person, entity_type, entity_id)` in
+`entity_preferences`; the star toggles favourite; drag writes sort_order; another member viewing
+the same household sees their own arrangement, not the actor's.
 
 ---
 
@@ -402,7 +486,7 @@ Admin or Owner may create a yearly budget for a category.
 budgets may coexist for the same category.
 
 **FR-B-003 — Real-Time Budget Actuals**
-Budget actual spending is computed live from matching events [EDP §8].
+Budget actual spending is computed live from matching events.
 It is never stored as a field — it is always derived at query time.
 *Acceptance:* Adding or editing a transaction in the relevant category immediately
 changes the displayed budget actual when the budget view is refreshed.
@@ -460,28 +544,33 @@ Max depth = 1 (no grandchildren).
 *Acceptance:* Subcategory created with `depth = 1`, `parent_id` set. System
 enforces depth constraint — attempting to create a child of a subcategory is rejected.
 
-**FR-C-003 — Edit Category**
+**FR-C-003 — Unparent Subcategory from Category**
+Admin or Owner may unparent a subcategory from any top-level category.
+*Acceptance:* Category created with `depth = 0` (top-level). Available in all
+entity dropdowns immediately.
+
+**FR-C-004 — Edit Category**
 Admin or Owner may edit name, color, icon, and category_type.
 *Acceptance:* Changes reflect immediately in all dropdowns and charts using that category.
 
-**FR-C-004 — Archive Category**
+**FR-C-005 — Archive Category**
 Archiving a category hides it from dropdowns but preserves it on all historical events.
 *Acceptance:* Archived category excluded from new event category picker.
 Existing events retain their `category_id`; the category name still resolves for display.
 If category has subcategories, they are archived together.
 
-**FR-C-005 — Hard Delete Empty Category**
+**FR-C-006 — Hard Delete Empty Category**
 A category with zero linked events, budgets, or recurring payments may be hard-deleted.
 *Acceptance:* Dependency scan runs. If any reference exists, hard delete is blocked.
 
-**FR-C-006 — Default Category Creation**
+**FR-C-007 — Default Category Creation**
 A one-click button in the Categories module creates 17 default categories
 (12 expense + 5 income) tailored to household use. This is idempotent — running
 it twice does not create duplicates.
 *Acceptance:* 17 categories created with predefined names, colors, and icons.
 Existing categories with matching names are skipped.
 
-**FR-C-007 — Category Spending Rollup**
+**FR-C-008 — Category Spending Rollup**
 When computing budget actuals or visualization totals for a parent category, all
 matching transactions from child categories are included.
 *Acceptance:* Total for "Food" = sum of transactions in "Food" + "Groceries" +
@@ -495,7 +584,7 @@ matching transactions from child categories are included.
 Any user may view all household currencies with their current FX rate,
 last-fetched timestamp, fee %, and whether they are the base or display-active.
 *Acceptance:* Currency list visible in Settings. Shows rate freshness (stale if
-> 48 hours old, shown with a warning indicator).
+48 hours old, shown with a warning indicator).
 
 **FR-CU-002 — Add Currency**
 Admin or Owner may add any ISO 4217 currency to the household.
@@ -504,7 +593,7 @@ currency available in all monetary value entry fields.
 
 **FR-CU-003 — Configure Display Currencies**
 Admin or Owner may toggle which currencies appear in the household currency
-switcher (up to 4 simultaneously active display currencies).
+switcher.
 *Acceptance:* `is_display_active` currencies appear in the global currency
 switcher in the top bar. Non-active currencies are still usable for transaction
 entry but not shown in the switcher.
@@ -512,8 +601,7 @@ entry but not shown in the switcher.
 **FR-CU-004 — Per-Person Display Currency**
 Any user may set their personal `display_currency` preference from among the
 display-active currencies.
-*Acceptance:* All of that person's charts, dashboards, and MonetaryValue displays
-render in their chosen display currency using the current FX rate. Stored
+*Acceptance:* All of that person's dashboard render in their chosen display currency using the current FX rate. Stored
 `amount_base` values are not modified.
 
 **FR-CU-005 — Change Base Currency (Owner)**
@@ -527,8 +615,22 @@ A system alert is shown while the job is running and on completion.
 The scheduler fetches FX rates daily for all non-base currencies with
 `is_display_active = true` or that have appeared in any event in the past 90 days.
 *Acceptance:* `Currency.rate_to_base` and `last_rate_at` updated. `FxRateHistory`
-record created. Circuit breaker: on API failure, last known rate is preserved;
-SYSTEM_ALERT generated after 3 consecutive failures.
+record created. Rates are fetched via the configured **provider fallback chain** (FR-CU-010).
+Circuit breaker: when **all** enabled providers fail, last known rate is preserved;
+SYSTEM_ALERT generated after 3 consecutive (all-provider) failures. (Architecture §5.7.)
+
+**FR-CU-010 — FX Provider Configuration**
+The household configures an **ordered list** of FX rate providers (UX §5.2 Integrations, owner-
+editable). Each provider has a type, base URL, an **API key stored only as a Secret Manager
+reference** (never persisted in plaintext or returned by the API), an enabled flag, and a
+priority. The daily fetch (FR-CU-006) and historical lookups walk enabled providers by priority
+and use the first that succeeds. **Resolution is per-currency** — providers differ in currency
+coverage, so each currency walks the chain independently and records its winning provider in
+`Currency.rate_source`; the breaker trips for a currency only when every provider fails for it.
+*Acceptance:* Providers persist in `fx_providers` (household-scoped, ordered). The create/edit
+endpoint writes the API key to Secret Manager and stores only the reference; GET responses mask
+the key. Reordering changes which provider is primary. A **Bank-connections** surface is present
+but disabled (post-MVP placeholder).
 
 **FR-CU-007 — Conversion Fee Configuration**
 Admin or Owner may set a `fee_pct` per currency (e.g. 1.5% for Visa foreign
@@ -543,6 +645,14 @@ All visualizations and summary views support a global toggle between:
 *Acceptance:* Toggle is part of the `VisualizationFilter` and changes all active
 charts simultaneously. No additional API call required — both modes are served
 in a single response.
+
+**FR-CU-009 — FX Rate History & Chart**
+Any user may view the historical FX rate trend for any non-base currency, sourced from
+`FxRateHistory` (FR-CU-006), as a line chart grouped by day or month, with the base currency
+as reference.
+*Acceptance:* Chart shows all `FxRateHistory` points for the currency in the selected range.
+Available on the currency's card (mini-chart) and in the Currencies module, expanding into the
+visualization viewer (FR-V). Sourced from `/api/visualizations/fx-rate-history`.
 
 ---
 
@@ -569,18 +679,20 @@ Two assignment types:
 - **FX fee formula** (Bank and CreditCard accounts): `fx_formula_id` set on BankAccount or
   CreditCard; evaluated during transaction creation to produce `amount_base_calculated`.
   Variables: `amount`, `rate`, `fee_pct`, `fee_fixed`.
+- **Compound interest formula** (Capital and Asset accounts): `interest_formula_id` set on
+  the account; evaluated using principal / current value, rate, and period variables.
 *Acceptance:* Formula assignment visible and editable in the account's edit modal.
 FX formula dropdown shows only formulas with `applies_to = "bank" or "credit_card"`.
 When assigned, all subsequent foreign transactions on that account auto-fill using the formula.
 
 **FR-F-004 — Hover-Reveal Formula Results**
 Formula computation results are shown only on hover — not displayed by default
-to avoid cluttering card views.
+to avoid cluttering views.
 *Acceptance:* Hovering over an AssetCard or CapitalCard reveals a tooltip
 containing: formula name, current variable inputs, computed result, and
 the data source date.
 
-**FR-F-006 — FX Formula Auto-Fill in Transaction Entry**
+**FR-F-005 — FX Formula Auto-Fill in Transaction Entry**
 When a user selects a "Paid with" account that has an FX formula assigned, the system
 immediately evaluates the formula against the entered amount and current FX rate and
 populates `amount_base_calculated`. The user sees the indicator `formula` next to the
@@ -591,21 +703,21 @@ with the exact bank statement figure (indicator becomes `manual`).
 Selecting Cash always uses spot rate. Formula evaluation uses the formula's stored variable
 defaults unless the account has overridden them (e.g. `fee_pct = 1.5`).
 
-**FR-F-005 — Generate Valuation from Formula**
+**FR-F-006 — Generate Value Snapshot from Formula**
 From an AssetAccount's detail view, Admin or Owner may run the assigned
-depreciation formula to generate a new `ValuationRecord` using today's date.
-*Acceptance:* ValuationRecord created with `source = "depreciation_formula"`,
-`formula_id` set, value = formula output. Appears immediately in valuation history chart.
+depreciation formula to generate a new `AccountSnapshot` (FR-A-008) using today's date.
+*Acceptance:* Snapshot created with `source = "formula"`, `formula_id` set,
+value = formula output. Appears immediately in the value-history chart.
 
 ---
 
 ### FR-D — EntityDebt
 
-**FR-D-001 — Debt is Always Computed, Never Entered**
+**FR-D-001 — Computered Debt**
 There is no "create debt" screen. Debt is derived at query time from:
-1. CreditCard outflow transactions minus repayment transfers [EDP §12.1]
+1. CreditCard outflow transactions minus repayment transfers
 2. Outflow transactions with `is_shared_expense = true` per person, minus
-   repayment transfers to that person [EDP §12.1]
+   repayment transfers to that person
 *Acceptance:* No debt entity exists in the data model. Debt figures update
 immediately when a relevant transaction is added or edited.
 
@@ -709,12 +821,13 @@ interest have changed over time.
 Sourced from `/api/visualizations/capital-history`.
 
 **FR-V-009 — PersonDashboard**
-In "My Finances" mode (FR-P-006), the Dashboard shows a personalised view:
+In "Individual" mode, the Dashboard shows a personalised view:
 net worth (own accounts only), personal spending by category, personal income
 sources, personal budget status, and personal debt contribution.
-*Acceptance:* All figures filtered to `person_ids = [current_person.id]`.
-Toggle between Household and My Finances is persistent across sessions
-(stored in `display_currency` settings — or a separate preference field).
+*Acceptance:* All figures filtered to `person_ids = [selected_member.id]` (Member may only
+select self; Admin/Owner may select any member — per FR-P-006).
+Toggle between Household and My Finances is persistent across sessions, stored in
+`Person.default_view` (`household` | `personal`) per FR-P-006.
 
 **FR-V-010 — Date Display Format**
 All dates displayed in the UI use `DD-MM-YYYY` format.
@@ -722,6 +835,80 @@ All date inputs accept `DD-MM-YYYY` format.
 All dates are stored and transmitted as ISO 8601 `YYYY-MM-DD`.
 *Acceptance:* A date entered as "27-05-2026" is stored as "2026-05-27".
 A date stored as "2026-01-15" is displayed as "15-01-2026" everywhere in the UI.
+
+**FR-V-011 — Universal Visualization Viewer**
+A single reusable viewer renders any chartable data set. It is opened either inline
+(expanded from a card mini-chart) or full-screen, and is always driven by a
+`VisualizationFilter` plus an aggregation spec (`metric: count|sum|avg`, `group_by:
+day|month|quarter|year`, `chart_type`). Every place that shows history (account cards,
+budget cards, currency cards, the ledger, the Dashboard) opens this same viewer — there
+is no bespoke per-module chart component.
+*Acceptance:* Opening the viewer from any card seeds it with that entity's filter.
+Changing metric, grouping, or chart type re-renders without leaving the viewer.
+The viewer is implemented once and reused everywhere (verified on `/design-system`).
+
+**FR-V-012 — Entity History Mini-Chart**
+Every entity with a value/usage history (accounts via FR-A-008, budgets via FR-B-008,
+currencies via FR-CU-009) shows a compact mini-chart on its card summarising its trend,
+which expands into the universal viewer (FR-V-011) on click.
+*Acceptance:* Mini-chart reflects the same data as the expanded viewer. Clicking it opens
+the viewer pre-seeded with that entity's filter and a sensible default grouping (month).
+
+**FR-V-013 — Event-Group Aggregation**
+The viewer charts an arbitrary filtered *set* of events aggregated over time — e.g. "every
+transaction named 'Netflix' in 2026, counted by month" or "Groceries spend summed by quarter".
+Supported metrics: `count`, `sum(amount_base)`, `avg(amount_base)`.
+*Acceptance:* Applying a ledger filter and opening the viewer produces a time series of the
+selected metric over the selected grouping. Switching metric re-aggregates the same filtered set.
+
+**FR-V-014 — Chart Type Selection**
+The viewer supports line, bar, pie, area, and stacked chart types. Not every type fits every
+data shape; the viewer offers only the types valid for the current data (e.g. pie only for a
+single-period categorical breakdown).
+*Acceptance:* Selecting a chart type re-renders the current data set in that type. Invalid
+types for the current data are disabled, not hidden.
+
+**FR-V-015 — Series Toggle & Auto Colour-Coding**
+When a chart has multiple series (currencies, categories, persons, accounts), each series is
+automatically assigned a stable colour and listed in a legend. The user may toggle individual
+series on and off; the chart rescales to the visible series.
+*Acceptance:* Colours are deterministic per series identity (same category = same colour across
+charts). Toggling a series off removes it and rescales; toggling on restores it.
+
+---
+
+### FR-DB — Dashboard
+
+**FR-DB-001 — Net Worth Computation**
+The Dashboard's headline net-worth figure is computed, never stored:
+`Σ(positive account values) − Σ(liabilities)`, all converted to the viewer's display
+currency at the current FX rate.
+- **Positive:** Bank, Capital, and Asset current values (latest value per FR-A-008).
+- **Negative:** CreditCard computed debt (FR-D-002) and any other liability balances.
+- **Insurance:** included only if the policy carries a surrender/cash value; pure-premium
+  policies contribute 0.
+- Archived accounts are excluded.
+*Acceptance:* Net worth = Σ positive values − Σ debts in the display currency. Changing
+display currency reconverts without altering stored values. Matches `/api/visualizations/net-worth`.
+
+**FR-DB-002 — Net Worth Over Time**
+The Dashboard shows net worth grouped by month/year, computed from the materialised monthly
+`AccountSnapshot` series (FR-A-008). For MVP, each period's value is converted at the current
+FX rate. (Per-period historical-rate replay against `FxRateHistory` is a post-MVP enhancement.)
+*Acceptance:* Timeline plots one point per month from monthly snapshots, in display currency.
+Uses the FR-V chart controls. Archived accounts excluded.
+
+**FR-DB-003 — Dashboard Pinning, Sizing & Add-Widget**
+A user composes their own Dashboard (UX §17) via **direct manipulation** in a `Customize` edit
+mode — widgets are **dragged to reorder** and **resized in place** to discrete spans (S = 1×1
+stat, M = 2×1 row, L = 2×2 chart — each type declares a default + min/max), and removed inline;
+⋮ → expand opens the full Viewer (FR-V-011). New widgets come from an **Add-Widget drawer**: a
+**fixed, curated catalog of widget types** (grouped by module, live mini-previews) whose instances
+**bind to data via an optional `scope`** chosen at add-time. Multiple instances of a type are
+allowed (e.g. two budget widgets scoped to different budgets).
+*Acceptance:* The full layout — `{widget_type, span, order, scope?}[]` — persists **per person**
+(`persons.dashboard_layout`, JSON) and renders with live data; on mobile the grid reflows to one
+column and spans clamp to full width.
 
 ---
 
@@ -743,45 +930,73 @@ Only after pressing "Confirm Import" are records created.
 During the preview step, the system suggests a category for each row based
 on the row's `category` field matching existing category names (case-insensitive).
 Unmatched rows are flagged for manual selection.
-*Acceptance:* Matched rows show a green indicator and the matched category.
-Unmatched rows show an amber indicator and a required category picker.
+*Acceptance:* Matched rows are highlighted green and the matched category.
+Unmatched rows are highlighted yellow and a required category picker.
 
 **FR-IE-004 — Duplicate Detection During Import**
 During import confirmation, each row is checked against existing transactions
-using the duplicate detection rules [EDP §13.3].
+using the duplicate detection rules. If there is a duplicate, a separate Conflicting Transactions
+modal will appear, indicating the number of conflicts, the incoming conflict and the existing conflicts,
+with the options to Keep Newer, Keep Existing, or Keep Both with `duplicate_of` set.
 *Acceptance:* Detected duplicates are shown in the preview with a warning.
-User may choose to include (with `duplicate_of` set), exclude, or review each.
+User may choose to Keep Newer, Keep Existing, or Keep Both with `duplicate_of` set.
 
 **FR-IE-005 — v1 Column Compatibility**
 The CSV importer must correctly parse exports from the v1 Google Sheets
-Financial Tracker, mapping v1 column names to v2 entity fields.
+Financial Tracker, mapping v1 column names to v4 entity fields.
 *Acceptance:* A v1 transaction CSV import produces correct records for all
 columns: Name, Transaction Date, Currency Type, Amount, Amount (SGD), Payee,
 Payment Method, Transaction Type, Category, Status.
 
 **FR-IE-006 — CSV Export**
 Any user may export transactions to CSV with all active `VisualizationFilter`
-parameters applied (time range, person, category, account).
-*Acceptance:* Export includes all fields defined in architecture.md §10.2.
+parameters applied (date range, person, category, account, etc).
+*Acceptance:* Export includes all fields defined in architecture.md.
 Dates exported in `YYYY-MM-DD` format (ISO 8601 for data interchange).
 File name: `financial-tracker-export-{YYYY-MM-DD}.csv`.
 
 ---
 
 ### FR-SYS — System Requirements
+**FR-SYS-001 — Public and Error Pages**
+A variety of pages including:
+initial Login page
+Access Denied page
+Forbidden Page
+Refused Connection Page (due to missing or down backend)
+Not Invited Page
+Logout Page
+Lost Connection Page
+Loading Page
+Generic Error Page
+And any other important pages
+Must appear at the right time to assist in development.
+*Acceptance:* These pages appear and not a default generic error page.
 
-**FR-SYS-001 — Google OAuth 2.0 Authentication**
-All login is via Google OAuth. No passwords stored. PKCE flow used.
+**FR-SYS-002 — Localhost Dev Account**
+Local dev account bypassing Google OAuth only when environment is set as "dev" and local dev account is set as "true".
+*Acceptance:* Local dev account button on the login page when flags are set, that when pressed, bypasses Google OAuth. This
+is to allow for faster dev work and time. If flags are set as "false", dev account and household is deleted.
+
+**FR-SYS-003 — Google OAuth 2.0 Authentication**
+Login is via Google OAuth. No passwords stored. The flow is the **Authorization Code flow
+with a confidential client** (server-side `client_secret`); the OAuth round-trip is
+CSRF-protected by an HMAC-signed `state` cookie. (PKCE is not used — it is for public
+clients without a secret; this backend is a confidential client. See ARCH §1.2.)
+Session is closed when idle for 30 minutes.
 *Acceptance:* Login → Google → callback → session cookie. Session idle timeout:
-30 minutes. Session survives browser refresh (cookie-based).
+30 minutes (sliding window). Session survives browser refresh (cookie-based).
 
-**FR-SYS-002 — CSRF Protection**
-All non-GET API requests require a valid `X-CSRF-Token` header.
-Token rotates after each successful mutation.
-*Acceptance:* Request without valid token returns 403. New token returned in
-`X-New-CSRF-Token` response header.
+**FR-SYS-004 — CSRF Protection**
+All non-GET API requests require a valid `X-CSRF-Token` header matching the session's
+token. The token is a **per-session synchronizer token** — one stable token for the
+session lifetime, minted fresh only when a new session is created at login. It does NOT
+rotate per request (rotation breaks concurrent requests / multi-tab and adds no real
+security over the HttpOnly + SameSite=Lax session cookie). See ARCH §1.4.
+*Acceptance:* Request without a valid token returns 403. The token is delivered to the
+frontend in the `/auth/me` payload (`csrfToken`) and remains valid for the session.
 
-**FR-SYS-003 — Audit Trail**
+**FR-SYS-005 — Audit Trail**
 Every create, update, archive, restore, and permanent delete operation produces
 an immutable audit log entry. Hard deletes of empty entities produce only an
 INFO application log entry, not an audit record.
@@ -789,13 +1004,17 @@ INFO application log entry, not an audit record.
 the `audit_log` table. Each entry captures actor, action, entity type/ID,
 before/after JSON snapshots, IP, and user agent.
 
-**FR-SYS-004 — Recurring Payment Scheduler**
-The scheduler runs daily at 00:05 UTC and processes all active recurring
-payment sources (explicit schedules + Capital + Asset + Insurance).
-*Acceptance:* Transactions generated for all due occurrences. Missed occurrences
-detected and flagged. Job is persisted in SQLAlchemy job store — survives restarts.
+**FR-SYS-006 — Recurring Payment Scheduler**
+A daily scheduled job processes all active recurring payment sources (explicit schedules +
+account-linked Capital/Asset/Insurance recurring payments per FR-A-017). Because the service
+scales to zero, the trigger is **Cloud Scheduler** (managed cron) hitting an authenticated job
+endpoint — not an in-process timer. See ARCH §5.6.
+*Acceptance:* Transactions generated for all due occurrences. The job is **idempotent and
+catch-up aware** — on each run it processes every occurrence due since the last processed
+point (not only "today"), so a scaled-to-zero gap never drops occurrences. Missed occurrences
+detected and flagged. Job endpoint is callable only by the scheduler (OIDC / shared secret).
 
-**FR-SYS-005 — In-App Alerts**
+**FR-SYS-007 — In-App Alerts**
 The system generates and displays the following in-app alerts (no emails):
 
 | Alert Type | Trigger | Dismissible |
@@ -805,21 +1024,44 @@ The system generates and displays the following in-app alerts (no emails):
 | RECURRING_MISSED | Occurrence expected, not processed, no skip | Yes |
 | FX_RATE_STALE | Rate not updated > 48 hours | Yes |
 | UPCOMING_PAYMENTS | Recurring due within 3 days | Yes |
-| SYSTEM_ALERT | FX API down 3+ consecutive days | Yes |
+| FX_API_DOWN | FX API down 3+ consecutive days | Yes |
+| BACKUP_CREATED | Database backed up | Yes |
 
 *Acceptance:* Alert panel accessible from top bar. Unread alerts shown as a count badge.
-Each alert links to the relevant entity or module.
+Each alert links to the relevant entity or module. Each alert stores `created_at`, `read_at`,
+and `dismissed_at` timestamps (nullable, not booleans) to support a future delivery layer
+(email/push) and dedup.
 
-**FR-SYS-006 — Daily Backup**
+**FR-SYS-008 — Daily Backup**
 SQLite database backed up daily to Google Cloud Storage. Retained 90 days.
 *Acceptance:* Backup file exists in GCS by 04:00 UTC daily. Cold-start container
 restores from latest backup if database file is absent.
 
-**FR-SYS-007 — Responsive UI**
+**FR-SYS-009 — Responsive UI**
 The application is usable on desktop (≥ 1280px), tablet (≥ 768px), and
 mobile (≥ 375px) browsers.
 *Acceptance:* All core workflows (transaction entry, ledger view, dashboard)
 function on mobile. No horizontal scrolling on mobile viewport.
+
+**FR-SYS-010 — Global Search & Command Palette**
+A keyboard-summoned (Cmd/Ctrl-K) and topbar-accessible palette searches **across entities**
+(transactions, accounts, categories, currencies, budgets, members) and offers **navigation
+commands** (jump to any module, "+ New {entity}" actions). Results are grouped by type and
+household-scoped; in Individual mode they respect the active member filter and FR-P-006
+member-selection permission.
+*Acceptance:* A single `GET /api/search?q=` endpoint returns grouped, household-scoped results
+(`{type, id, label, sublabel, href}`), capped per group. **Ranking (default):** exact match >
+prefix match > substring/fuzzy; tie-break by recency (`updated_at` desc); then a fixed entity-type
+weight (transactions > accounts > categories > currencies > budgets > members); archived items
+rank last. Selecting a result navigates to the entity (carrying filter state where relevant);
+selecting a command runs it. The palette is reachable by keyboard and pointer, and closes on Escape.
+
+**FR-SYS-011 — Branding Configuration** *(reserved — post-MVP)*
+App branding (name, logo, primary palette) is sourced from a single swappable `branding` config
+rather than hardcoded, to enable future white-labelling. MVP ships the default brand; no
+per-household branding UI. *Acceptance (MVP):* No brand strings/assets are hardcoded in
+components — all read from the `branding` config (UX §1.1). Per-household white-label is out of
+scope for MVP.
 
 ---
 
@@ -840,17 +1082,17 @@ function on mobile. No horizontal scrolling on mobile viewport.
 
 - Google OAuth 2.0 only — no password storage
 - All traffic HTTPS; HSTS enforced
-- CSRF protection on all mutations [FR-SYS-002]
+- CSRF protection on all mutations
 - All queries household-scoped at service layer
 - No raw SQL — SQLAlchemy ORM only
 - Secrets via Google Secret Manager only
-- Security headers: CSP, X-Frame-Options, Referrer-Policy [architecture.md §7.5]
+- Security headers: CSP, X-Frame-Options, Referrer-Policy
 - OWASP ZAP scan in CI on each release; zero critical findings required to deploy
 
 ### 4.3 Reliability
 
 - 99% uptime target (Cloud Run SLA)
-- Daily backup with 90-day retention [FR-SYS-006]
+- Daily backup with 90-day retention
 - Circuit breakers on all external API calls (FX rate, OAuth)
 - APScheduler with persisted job store — jobs survive container restart
 
@@ -875,38 +1117,6 @@ Mobile: Chrome for Android, Safari for iOS.
 - Category depth enforced at DB level (CHECK constraint, max = 1)
 - Audit trail is append-only — no mechanism for deletion
 
----
-
-## 5. Epic Mapping
-
-FRs are implemented across the following epics (detailed in `epics.md`):
-
-| Epic | Title | Primary FRs |
-|---|---|---|
-| Epic 0 | Entity Foundation Refactor | All cross-cutting FRs; EDP compliance for Epics 1–2 |
-| Epic 1 | Auth & Household *(complete)* | FR-HH-001–004, FR-P-001–002, FR-SYS-001–002 |
-| Epic 2 | Categories *(complete)* | FR-C-001–007 |
-| Epic 3 | Accounts | FR-A-001–018, FR-CU-001–008 |
-| Epic 4 | Transactions & Events | FR-E-001–017, FR-V-010 |
-| Epic 5 | Recurring Payments | FR-E-010–014, FR-A-017, FR-SYS-004 |
-| Epic 6 | Budgets | FR-B-001–009, FR-V-007 |
-| Epic 7 | Transfers & Debt | FR-E-015–017, FR-D-001–007 |
-| Epic 8 | Formulas | FR-F-001–005 |
-| Epic 9 | Visualizations & Dashboard | FR-V-001–009, FR-SYS-005 |
-| Epic 10 | Import / Export | FR-IE-001–006 |
-| Epic 11 | Persons & Settings | FR-P-003–008, FR-HH-002–004, FR-SYS-003, FR-SYS-006 |
-
----
-
-## 6. Open Questions
-
-| # | Question | Resolution | Status |
-|---|---|---|---|
-| OQ-001 | Should PersonDashboard "My Finances" mode persist across sessions? | **Resolved:** Yes. `Person.default_view` field added (`household` \| `personal`). Persists across sessions. FR-P-006 updated. EDP §5 updated. | Closed |
-| OQ-002 | Should comparison mode support external benchmarks (e.g. average NZ household spending)? | **Resolved:** Future consideration only. Requires additional external API support not in scope for MVP. Comparison mode limited to household members and household categories for now. Architecture left open for this extension. | Closed — Future |
-| OQ-003 | Base currency recalculation (FR-CU-005) — progress indicator or queued background job? | **Resolved:** Progress indicator sufficient. Background job with polling endpoint; UI shows progress bar while job runs; dismissible completion notification. | Closed |
-| OQ-004 | CSV export date format: ISO 8601 or DD-MM-YYYY? | **Resolved:** ISO 8601 (`YYYY-MM-DD`) for export. Data portability standard; compatible with Excel, Google Sheets, accounting tools. UI displays DD-MM-YYYY; wire and file formats use ISO. | Closed |
-| OQ-005 | Which alerts become email-capable in Phase 3? | **Resolved:** `FX_RATE_STALE`, `UPCOMING_PAYMENTS`, `SYSTEM_ALERT`, `RECURRING_MISSED`. `BUDGET_WARNING` and `BUDGET_EXCEEDED` remain in-app only (too frequent for email). | Closed — Phase 3 |
 
 ---
 
@@ -916,3 +1126,5 @@ FRs are implemented across the following epics (detailed in `epics.md`):
 |---|---|---|---|
 | 1.0 | 2026-05-23 | Ben + BMAD | Initial PRD — flat FR numbering, module-based organisation |
 | 2.0 | 2026-05-26 | Ben + Claude | Full rewrite — entity-family FR organisation, entity hierarchy preamble, Loans removed, Debt FRs rewritten as computed, FRs for EntityCurrencies / EntityFormulas / multi-owner accounts / comparison visualizations / budget history / capital history / DD-MM-YYYY display / hard delete / RFC 7807 error codes added. Epic mapping updated. |
+| 3.0 | 2026-06-10 | Ben | Modification to make it complete source of truth |
+| 3.1 | 2026-06-10 | Ben + Claude | Rebuild alignment pass. Consolidated FR-A-008/014/015 into general `AccountSnapshot` value-history (+ required `opening_balance` on ledger-backed accounts, hybrid computed+anchor model). FR-A-017 now spawns a real linked `RecurringPayment`. FR-E-001 rewritten (sticky per-person context defaults + provenance `source`/`external_ref`; removed "default button"). Persisted `fx_rate_used`/`rate_date` on events; transfers carry `fx_delta`. Added FR-E-020 bulk event ops; renumbered duplicate FR-E-016/017 → 018/019. FR-F-003 `interest_formula_id`; reordered FR-F-005/006. Added FR-CU-009 FX rate history. Fleshed out FR-V (FR-V-011–015: universal viewer, mini-charts, event-group aggregation, chart types, series toggle); fixed FR-V-009 storage to `Person.default_view`. Added FR-DB section (net worth computation + over-time + pinning). Alert read/dismiss timestamps. Brief: Formula module entity fix + account value-history + visualization layer prose. |

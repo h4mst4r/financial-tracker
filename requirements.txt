@@ -34,5 +34,9 @@ pytest>=8.0.0                             # Testing framework
 pytest-asyncio>=0.24.0                    # Async test support for pytest
 pytest-cov>=5.0.0                         # Code coverage reporting
 bandit>=1.7.0                             # Security linting for Python
+pip-audit>=2.7.0                          # CVE scanning for installed packages
 playwright>=1.44.0                        # End-to-end browser testing
 ruff>=0.4.0                               # Fast linter & formatter (replaces flake8 + black)
+
+# --- Rate limiting ---
+slowapi>=0.1.9                            # Per-IP rate limiting for FastAPI (wraps limits library)

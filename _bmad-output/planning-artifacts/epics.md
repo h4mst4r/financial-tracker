@@ -214,7 +214,7 @@ starts without errors. All models importable. Middleware stack wired. No feature
 
 ### BE-008 — FastAPI app, middleware stack, DI, and audit service ✅ DONE
 
-**Size:** M · **Depends on:** BE-007 · **FRs:** FR-SYS-002 · **Ref:** ARCH §5.1, §5.2, §5.3, EDP §16.3, §16.4
+**Size:** M · **Depends on:** BE-007 · **FRs:** FR-SYS-002 · **Ref:** ARCH §5.1, §5.2, §5.3
 
 **Files:**
 ```
@@ -396,7 +396,7 @@ renders with placeholder routes. All generic entity components available for fea
 
 ### FE-005 — Generic entity components (Layer 9) ✅ DONE
 
-**Size:** M · **Depends on:** FE-003, FE-004 · **FRs:** — · **Ref:** EDP §14, UX §9.1–9.3
+**Size:** M · **Depends on:** FE-003, FE-004 · **FRs:** — · **Ref:** UX §9.1–9.3
 **Completed:** 2026-05-29
 
 **Files:**
@@ -461,7 +461,7 @@ renders with placeholder routes. All generic entity components available for fea
 
 ### FE-008 — Design System Test Page ✅ DONE
 
-**Size:** M · **Depends on:** FE-001–FE-007 · **FRs:** — · **Ref:** UX §1–9, EDP §14
+**Size:** M · **Depends on:** FE-001–FE-007 · **FRs:** — · **Ref:** UX §1–9
 **Completed:** 2026-06-01
 
 **Files:**
@@ -524,7 +524,7 @@ Second user can be invited and accept. All auth tests passing.
 
 ### AUTH-001 — Google OAuth backend: flow, callback, session ✅ DONE
 
-**Size:** M · **Depends on:** BE-008 · **FRs:** FR-P-001, FR-HH-001 · **Ref:** ARCH §7.1, §7.2, EDP §16.3
+**Size:** M · **Depends on:** BE-008 · **FRs:** FR-P-001, FR-HH-001 · **Ref:** ARCH §7.1, §7.2
 **Completed:** 2026-06-03 · **Reviewed:** 2026-06-03 · **Tests:** 8/8 passing
 
 **Files:**
@@ -1150,7 +1150,7 @@ Tree view, spending rollup, merge, and import mapping all operational.
 
 ### CAT-003 — Category merge and duplicate detection
 
-**Size:** S · **Depends on:** CAT-001 · **FRs:** FR-C-005, FR-C-006 · **Ref:** EDP §9.4
+**Size:** S · **Depends on:** CAT-001 · **FRs:** FR-C-005, FR-C-006 · **Ref:** EDP §9
 
 **Files:**
 ```
@@ -1609,7 +1609,7 @@ management, threshold alerts, and the Budgets page with drill-down.
 
 ### BUDG-004 — Budget frontend with drill-down
 
-**Size:** L · **Depends on:** FE-005, BUDG-002 · **FRs:** FR-B-001 through FR-B-007, FR-V-008 · **Ref:** UX §9.2, EDP §8.5
+**Size:** L · **Depends on:** FE-005, BUDG-002 · **FRs:** FR-B-001 through FR-B-007, FR-V-008 · **Ref:** UX §9.2, EDP §8
 
 **Files:**
 ```
@@ -1804,7 +1804,7 @@ Raw-currency and converted-aggregate toggle works.
 
 ### VIZ-003 — Per-entity chart components
 
-**Size:** M · **Depends on:** FE-002, VIZ-001 · **FRs:** FR-V-006 through FR-V-010 · **Ref:** EDP §13.6, UX §7
+**Size:** M · **Depends on:** FE-002, VIZ-001 · **FRs:** FR-V-006 through FR-V-010 · **Ref:** EDP §13.5, UX §7
 
 **Files:**
 ```

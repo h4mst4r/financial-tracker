@@ -242,7 +242,7 @@ class TestOwnerScenario:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             # Login
             login_resp = await client.get("/auth/login")
-            assert login_resp.status_code == 200
+            assert login_resp.status_code == 302
 
             # Callback
             state = login_resp.cookies.get("oauth_state")
@@ -251,9 +251,8 @@ class TestOwnerScenario:
                 params={"code": "fake_code", "state": state.split(".")[0]},
                 cookies={"oauth_state": state},
             )
-            assert callback_resp.status_code == 200
-            # Should redirect to frontend with session in hash
-            assert "session=" in callback_resp.text
+            assert callback_resp.status_code == 302
+            assert callback_resp.cookies.get("session_id"), f"session_id cookie not set in callback response"
 
     @patch("backend.services.auth_service.validate_id_token")
     @patch("backend.services.auth_service.exchange_code_for_tokens")
@@ -293,8 +292,9 @@ class TestOwnerScenario:
                 params={"code": "fake_code", "state": state2.split(".")[0]},
                 cookies={"oauth_state": state2},
             )
-            assert callback_resp2.status_code == 200
-            assert "not_invited" in callback_resp2.text
+            assert callback_resp2.status_code == 302
+            location = callback_resp2.headers.get("location", "")
+            assert "not_invited" in location
 
     @patch("backend.services.auth_service.validate_id_token")
     @patch("backend.services.auth_service.exchange_code_for_tokens")
@@ -319,10 +319,10 @@ class TestOwnerScenario:
                 params={"code": "fake_code", "state": state.split(".")[0]},
                 cookies={"oauth_state": state},
             )
-            assert "session=" in callback_resp.text
+            assert callback_resp.cookies.get("session_id"), f"session_id cookie not set in callback response"
 
             # Extract session from redirect hash
-            session_match = callback_resp.text.split("session=")[1].split('"')[0]
+            session_match = callback_resp.cookies.get("session_id")
             session_id = session_match
 
             # Get /auth/me for CSRF
@@ -363,10 +363,10 @@ class TestOwnerScenario:
                 params={"code": "fake_code", "state": state2.split(".")[0]},
                 cookies={"oauth_state": state2},
             )
-            assert "session=" in callback_resp2.text
+            assert callback_resp2.cookies.get("session_id"), f"session_id cookie not set in callback response"
 
             # Verify new household
-            new_session = callback_resp2.text.split("session=")[1].split('"')[0]
+            new_session = callback_resp2.cookies.get("session_id")
             me_resp2 = await client.get(
                 "/auth/me",
                 headers={"X-Session-Token": new_session},
@@ -394,7 +394,11 @@ class TestAdminScenario:
         mock_exchange.return_value = {"id_token": "fake_token"}
 
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Use separate clients so each user's session cookie stays in its own jar.
+        async with (
+            AsyncClient(transport=transport, base_url="http://test") as owner_client,
+            AsyncClient(transport=transport, base_url="http://test") as member_client,
+        ):
             # Create owner first
             mock_validate.return_value = {
                 "sub": "admin-test-owner",
@@ -402,97 +406,72 @@ class TestAdminScenario:
                 "name": "Admin Owner",
                 "picture": None,
             }
-            login_resp = await client.get("/auth/login")
+            login_resp = await owner_client.get("/auth/login")
             state = login_resp.cookies.get("oauth_state")
-            callback_resp = await client.get(
+            await owner_client.get(
                 "/auth/callback",
                 params={"code": "fake_code", "state": state.split(".")[0]},
                 cookies={"oauth_state": state},
             )
-            owner_session = callback_resp.text.split("session=")[1].split('"')[0]
+            # session_id is now in owner_client.cookies
 
-            me_resp = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": owner_session},
-            )
+            me_resp = await owner_client.get("/auth/me")
             csrf = me_resp.json()["csrfToken"]
-            household_id = me_resp.json()["household"]["householdId"]
-
-            headers = {
-                "X-Session-Token": owner_session,
-                "X-CSRF-Token": csrf,
-            }
+            household_id = me_resp.json()["household"]["householdId"]  # noqa: F841
 
             # Invite member
-            invite_resp = await client.post(
+            invite_resp = await owner_client.post(
                 "/api/persons/invite",
-                headers=headers,
+                headers={"X-CSRF-Token": csrf},
                 json={"invitedEmail": "admin-member@example.com", "role": "member"},
             )
             assert invite_resp.status_code == 201
             inv_id = invite_resp.json()["id"]
 
-            # Accept invitation as member
+            # Member logs in via their own client (isolated cookie jar)
             mock_validate.return_value = {
                 "sub": "admin-test-member",
                 "email": "admin-member@example.com",
                 "name": "Admin Member",
                 "picture": None,
             }
-            login_resp2 = await client.get("/auth/login")
+            login_resp2 = await member_client.get("/auth/login")
             state2 = login_resp2.cookies.get("oauth_state")
-            callback_resp2 = await client.get(
+            await member_client.get(
                 "/auth/callback",
                 params={"code": "fake_code", "state": state2.split(".")[0]},
                 cookies={"oauth_state": state2},
             )
-            member_session = callback_resp2.text.split("session=")[1].split('"')[0]
+            # session_id is now in member_client.cookies
 
-            # Get member's CSRF token
-            me_member_pre = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": member_session},
-            )
+            me_member_pre = await member_client.get("/auth/me")
             member_csrf = me_member_pre.json()["csrfToken"]
 
             # Accept invitation
-            accept_resp = await client.post(
+            accept_resp = await member_client.post(
                 f"/api/invitations/{inv_id}/accept",
-                headers={
-                    "X-Session-Token": member_session,
-                    "X-CSRF-Token": member_csrf,
-                },
+                headers={"X-CSRF-Token": member_csrf},
             )
             assert accept_resp.status_code == 200
 
-            # Owner promotes member to admin
-            me_member = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": member_session},
-            )
+            # Owner promotes member to admin (owner_client jar still has owner session)
+            me_member = await member_client.get("/auth/me")
             member_person_id = me_member.json()["person"]["personId"]
 
-            promote_resp = await client.patch(
+            promote_resp = await owner_client.patch(
                 f"/api/persons/{member_person_id}/role",
-                headers=headers,
+                headers={"X-CSRF-Token": csrf},
                 json={"role": "admin"},
             )
             assert promote_resp.status_code == 200
 
             # Admin can now invite
-            me_admin = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": member_session},
-            )
+            me_admin = await member_client.get("/auth/me")
             admin_csrf = me_admin.json()["csrfToken"]
-            admin_headers = {
-                "X-Session-Token": member_session,
-                "X-CSRF-Token": admin_csrf,
-            }
 
-            invite_resp2 = await client.post(
+            invite_resp2 = await member_client.post(
                 "/api/persons/invite",
-                headers=admin_headers,
+                headers={"X-CSRF-Token": admin_csrf},
                 json={"invitedEmail": "another@example.com", "role": "member"},
             )
             assert invite_resp2.status_code == 201
@@ -520,7 +499,7 @@ class TestAdminScenario:
                 params={"code": "fake_code", "state": state.split(".")[0]},
                 cookies={"oauth_state": state},
             )
-            owner_session = callback_resp.text.split("session=")[1].split('"')[0]
+            owner_session = callback_resp.cookies.get("session_id")
             owner_me = await client.get("/auth/me", headers={"X-Session-Token": owner_session})
             owner_csrf = owner_me.json()["csrfToken"]
 
@@ -547,7 +526,7 @@ class TestAdminScenario:
                 params={"code": "fake_code", "state": state2.split(".")[0]},
                 cookies={"oauth_state": state2},
             )
-            member_session = cb2.text.split("session=")[1].split('"')[0]
+            member_session = cb2.cookies.get("session_id")
             member_me = await client.get("/auth/me", headers={"X-Session-Token": member_session})
             member_csrf = member_me.json()["csrfToken"]
 
@@ -613,8 +592,9 @@ class TestMemberScenario:
                 params={"code": "fake_code", "state": state2.split(".")[0]},
                 cookies={"oauth_state": state2},
             )
-            assert callback_resp2.status_code == 200
-            assert "not_invited" in callback_resp2.text
+            assert callback_resp2.status_code == 302
+            location = callback_resp2.headers.get("location", "")
+            assert "not_invited" in location
 
     @patch("backend.services.auth_service.validate_id_token")
     @patch("backend.services.auth_service.exchange_code_for_tokens")
@@ -639,7 +619,7 @@ class TestMemberScenario:
                 params={"code": "fake_code", "state": state.split(".")[0]},
                 cookies={"oauth_state": state},
             )
-            owner_session = callback_resp.text.split("session=")[1].split('"')[0]
+            owner_session = callback_resp.cookies.get("session_id")
 
             me_resp = await client.get(
                 "/auth/me",
@@ -672,7 +652,7 @@ class TestMemberScenario:
                 params={"code": "fake_code", "state": state2.split(".")[0]},
                 cookies={"oauth_state": state2},
             )
-            assert "session=" in callback_resp2.text
+            assert callback_resp2.cookies.get("session_id"), f"session_id cookie not set in callback response"
             assert "not_invited" not in callback_resp2.text
 
     @patch("backend.services.auth_service.validate_id_token")
@@ -693,7 +673,11 @@ class TestMemberScenario:
         mock_exchange.return_value = {"id_token": "fake_token"}
 
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Use separate clients so each user's session cookie stays in its own jar.
+        async with (
+            AsyncClient(transport=transport, base_url="http://test") as owner1_client,
+            AsyncClient(transport=transport, base_url="http://test") as member_client,
+        ):
             # --- Owner1 bootstraps household A ---
             mock_validate.return_value = {
                 "sub": "conflict-owner1",
@@ -701,55 +685,45 @@ class TestMemberScenario:
                 "name": "Conflict Owner1",
                 "picture": None,
             }
-            login_resp = await client.get("/auth/login")
+            login_resp = await owner1_client.get("/auth/login")
             state = login_resp.cookies.get("oauth_state")
-            callback_resp = await client.get(
+            await owner1_client.get(
                 "/auth/callback",
                 params={"code": "fake_code", "state": state.split(".")[0]},
                 cookies={"oauth_state": state},
             )
-            owner1_session = callback_resp.text.split("session=")[1].split('"')[0]
+            # session_id is now in owner1_client.cookies
 
-            me_a = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": owner1_session},
-            )
+            me_a = await owner1_client.get("/auth/me")
             csrf_owner1 = me_a.json()["csrfToken"]
             household_a_id = me_a.json()["household"]["householdId"]
 
             # --- Owner1 invites member1 ---
-            invite_resp = await client.post(
+            invite_resp = await owner1_client.post(
                 "/api/persons/invite",
-                headers={
-                    "X-Session-Token": owner1_session,
-                    "X-CSRF-Token": csrf_owner1,
-                },
+                headers={"X-CSRF-Token": csrf_owner1},
                 json={"invitedEmail": "conflict-member@example.com", "role": "member"},
             )
             assert invite_resp.status_code == 201
             inv_id_a = invite_resp.json()["id"]
 
-            # --- Member1 logs in (NOT auto-assigned; pending invitation shown in dialog) ---
+            # --- Member1 logs in via their own client (isolated cookie jar) ---
             mock_validate.return_value = {
                 "sub": "conflict-member",
                 "email": "conflict-member@example.com",
                 "name": "Conflict Member",
                 "picture": None,
             }
-            login_resp_m = await client.get("/auth/login")
+            login_resp_m = await member_client.get("/auth/login")
             state_m = login_resp_m.cookies.get("oauth_state")
-            callback_resp_m = await client.get(
+            callback_resp_m = await member_client.get(
                 "/auth/callback",
                 params={"code": "fake_code", "state": state_m.split(".")[0]},
                 cookies={"oauth_state": state_m},
             )
-            assert "session=" in callback_resp_m.text
-            member_session = callback_resp_m.text.split("session=")[1].split('"')[0]
+            assert callback_resp_m.cookies.get("session_id"), "session_id cookie not set in callback response"
 
-            me_m = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": member_session},
-            )
+            me_m = await member_client.get("/auth/me")
             # Member has no household yet — pending invitation is in the response
             assert me_m.json()["household"] is None
             assert me_m.json()["pendingInvitation"] is not None
@@ -757,101 +731,70 @@ class TestMemberScenario:
             csrf_member = me_m.json()["csrfToken"]
 
             # --- Member1 explicitly accepts the invitation ---
-            accept_resp = await client.post(
+            accept_resp = await member_client.post(
                 f"/api/invitations/{inv_id_a}/accept",
-                headers={
-                    "X-Session-Token": member_session,
-                    "X-CSRF-Token": csrf_member,
-                },
+                headers={"X-CSRF-Token": csrf_member},
             )
             assert accept_resp.status_code == 200
 
             # Re-fetch /auth/me to confirm member is now in household A
-            me_m = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": member_session},
-            )
+            me_m = await member_client.get("/auth/me")
             assert me_m.json()["household"]["householdId"] == household_a_id
             csrf_member = me_m.json()["csrfToken"]
 
             # --- Owner1 grants can_create_household to member1 ---
             member_person_id = me_m.json()["person"]["personId"]
-            grant_resp = await client.patch(
+            grant_resp = await owner1_client.patch(
                 f"/api/persons/{member_person_id}/household-creation",
-                headers={
-                    "X-Session-Token": owner1_session,
-                    "X-CSRF-Token": csrf_owner1,
-                },
+                headers={"X-CSRF-Token": csrf_owner1},
                 json={"canCreateHousehold": True},
             )
             assert grant_resp.status_code == 200
 
             # --- Member1 leaves household A ---
-            leave_resp = await client.post(
+            leave_resp = await member_client.post(
                 "/api/persons/leave",
-                headers={
-                    "X-Session-Token": member_session,
-                    "X-CSRF-Token": csrf_member,
-                },
+                headers={"X-CSRF-Token": csrf_member},
             )
             assert leave_resp.status_code == 200
             assert leave_resp.json()["household"] is None
 
             # --- Owner1 cancels any pending invitations (so member1 won't be auto-assigned) ---
-            list_inv_resp = await client.get(
-                "/api/persons/invitations",
-                headers={
-                    "X-Session-Token": owner1_session,
-                    "X-CSRF-Token": csrf_owner1,
-                },
-            )
+            list_inv_resp = await owner1_client.get("/api/persons/invitations")
             assert list_inv_resp.status_code == 200
             for inv in list_inv_resp.json():
-                await client.delete(
+                await owner1_client.delete(
                     f"/api/persons/invitations/{inv['id']}",
-                    headers={
-                        "X-Session-Token": owner1_session,
-                        "X-CSRF-Token": csrf_owner1,
-                    },
+                    headers={"X-CSRF-Token": csrf_owner1},
                 )
 
             # --- Member1 re-logs in → creates household B (can_create_household=True, no pending invite) ---
-            login_resp_m2 = await client.get("/auth/login")
+            login_resp_m2 = await member_client.get("/auth/login")
             state_m2 = login_resp_m2.cookies.get("oauth_state")
-            callback_resp_m2 = await client.get(
+            callback_resp_m2 = await member_client.get(
                 "/auth/callback",
                 params={"code": "fake_code", "state": state_m2.split(".")[0]},
                 cookies={"oauth_state": state_m2},
             )
-            assert "session=" in callback_resp_m2.text
-            member_session2 = callback_resp_m2.text.split("session=")[1].split('"')[0]
+            assert callback_resp_m2.cookies.get("session_id"), "session_id cookie not set in callback response"
 
-            me_m2 = await client.get(
-                "/auth/me",
-                headers={"X-Session-Token": member_session2},
-            )
+            me_m2 = await member_client.get("/auth/me")
             household_b_id = me_m2.json()["household"]["householdId"]
             assert household_b_id != household_a_id
             csrf_member2 = me_m2.json()["csrfToken"]
 
             # --- Owner1 invites member1 to A again ---
-            invite_resp2 = await client.post(
+            invite_resp2 = await owner1_client.post(
                 "/api/persons/invite",
-                headers={
-                    "X-Session-Token": owner1_session,
-                    "X-CSRF-Token": csrf_owner1,
-                },
+                headers={"X-CSRF-Token": csrf_owner1},
                 json={"invitedEmail": "conflict-member@example.com", "role": "member"},
             )
             assert invite_resp2.status_code == 201
             inv_id_b = invite_resp2.json()["id"]
 
             # --- Member1 tries to accept A's invitation → 409 (already in B) ---
-            accept_resp = await client.post(
+            accept_resp = await member_client.post(
                 f"/api/invitations/{inv_id_b}/accept",
-                headers={
-                    "X-Session-Token": member_session2,
-                    "X-CSRF-Token": csrf_member2,
-                },
+                headers={"X-CSRF-Token": csrf_member2},
             )
             assert accept_resp.status_code == 409

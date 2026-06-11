@@ -1,160 +1,136 @@
-# generated: 2026-05-28
-# last_updated: 2026-06-07T00:02
-# project: financial-tracker
-# project_key: NOKEY
-# tracking_system: file-system
-# story_location: _bmad-output/implementation-artifacts/stories
+# Sprint Status — Financial Tracker
+# Generated from epics.md tracking table
+
+generated: 05-28-2026
+last_updated: 2026-06-08
+notes: |
+  CAT-005 story created and validated 2026-06-08 — category tree view and CRUD frontend. Story file: CAT-005-category-tree-and-crud-frontend.md. Status: ready-for-dev. Validation: passed (added Dependencies section, UX §9.1-9.3 reference).
+  DEV-002 completed 2026-06-08 — security hardening: CSP+Permissions-Policy headers, slowapi rate limiting on auth endpoints, /design-system auth guard, pip-audit added. Story file: DEV-002-security-hardening-patch.md. Companion auth hot-fixes applied in same session (OAuth cookie delivery, validate_session one-connection, CSRF one-query, test suite multi-user client isolation). 218/218 tests passing.
+project: Financial Tracker
+project_key: FT
+tracking_system: file-system
+story_location: "_bmad-output/implementation-artifacts/stories/"
 
 # STATUS DEFINITIONS:
 # ==================
-# Epic Status:
-#   - backlog: Epic not yet started
-#   - in-progress: Epic actively being worked on
-#   - done: All stories in epic completed
-#
-# Epic Status Transitions:
-#   - backlog → in-progress: Automatically when first story is created (via create-story)
-#   - in-progress → done: Manually when all stories reach 'done' status
-#
-# Story Status:
-#   - backlog: Story only exists in epic file
-#   - ready-for-dev: Story file created in stories folder
-#   - in-progress: Developer actively working on implementation
-#   - review: Ready for code review (via Dev's code-review workflow)
-#   - done: Story completed
-#
-# Retrospective Status:
-#   - optional: Can be completed but not required
-#   - done: Retrospective has been completed
-#
-# WORKFLOW NOTES:
-# ===============
-# - Epic transitions to 'in-progress' automatically when first story is created
-# - Stories can be worked in parallel if team capacity allows
-# - Developer typically creates next story after previous one is 'done' to incorporate learnings
-# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
-
-generated: 2026-05-28
-last_updated: 2026-06-07T00:02
-project: financial-tracker
-project_key: NOKEY
-tracking_system: file-system
-story_location: _bmad-output/implementation-artifacts/stories
+# Epic Status: backlog | in-progress | done
+# Story Status: backlog | ready-for-dev | in-progress | review | done
+# Retrospective Status: optional | done
 
 development_status:
-  # Epic 1 — Backend Foundation
-  epic-1: done
-  be-001-python-project-scaffold-and-config: done
-  be-002-baseentity-monetaryvaluemixin-and-shared-enums: done
-  be-003-household-person-session-and-invitation-models: done
-  be-004-account-and-related-models: done
-  be-005-financialevent-and-occurrencerecord-models: done
-  be-006-remaining-models-budget-category-currency-formula-audit-alert: done
+  # Epic 1 — Backend Foundation  [COMPLETE 2026-05-28]
+  epic-1-backend-foundation: done
+  be-001-python-virtualenv-and-dependencies: done
+  be-002-sqlalchemy-base-models-and-mixins: done
+  be-003-database-session-and-connection: done
+  be-004-pydantic-schemas-for-base-entities: done
+  be-005-fastapi-dependency-injection: done
+  be-006-logging-and-error-handling: done
   be-007-alembic-initial-migration: done
-  be-008-fastapi-app-middleware-stack-di-and-audit-service: done
+  be-008-fastapi-app-middleware-di-audit: done
   epic-1-retrospective: done
 
-  # Epic 2 — Frontend Foundation
-  epic-2: done
-  fe-001-vite-react-typescript-scaffold-and-design-tokens: done
+  # Epic 2 — Frontend Design System  [COMPLETE 2026-06-01]
+  epic-2-frontend-design-system: done
+  fe-001-vite-react-scaffold-and-design-tokens: done
   fe-002-design-system-atomic-components: done
-  fe-003-design-system-form-and-selection-components: done
-  fe-004-design-system-containers-layout-and-feedback: done
+  fe-003-design-system-form-selection-components: done
+  fe-004-design-system-containers-layout-feedback: done
   fe-005-generic-entity-components: done
-  fe-006-zustand-stores-and-tanstack-query-client: done
-  fe-007-app-shell-routing-and-auth-guard: done
-  fe-008-test-page-design-system: done
+  fe-006-zustand-stores-and-tanstack-query: done
+  fe-007-app-shell-routing-auth-guard: done
+  fe-008-design-system-test-page: done
   epic-2-retrospective: done
 
-  # Epic 3 — Authentication & Household
-  epic-3: done
-  auth-001-google-oauth-backend-flow-callback-session: done
+  # Epic 3 — Authentication & Household  [COMPLETE 2026-06-05]
+  epic-3-auth-household: done
+  auth-001-google-oauth-backend: done
   auth-002-household-member-management-backend: done
-  auth-003-auth-frontend-login-page-useauth-hook-route-hydration: done
-  auth-004-household-settings-and-member-management-frontend: done
+  auth-003-auth-frontend: done
+  auth-004-household-settings-and-members-frontend: done
   auth-005-public-layout-invitation-join-household-delete: done
   auth-006-enhanced-member-management-invitation-flow: done
-  auth-007-invite-only-household-creation: done
+  auth-007-invite-only-household-creation: ready-for-dev
   epic-3-retrospective: done
 
-  # Developer Tooling
+  # Developer Tooling (sourced from Epic 3 retro — implement before Epic 4)
   dev-001-dev-auth-bypass-mode: done
-  dev-002-security-hardening-patch: backlog
-  developer-tooling-retrospective: optional
+  dev-002-security-hardening-patch: done
 
   # Epic 4 — Categories
-  epic-4: in-progress
-  cat-001-category-schemas-and-service-crud-seeding: done
+  epic-4-categories: in-progress
+  cat-001-category-schemas-and-service: done
   cat-002-category-routes-and-hierarchy-endpoints: done
   cat-003-category-merge-and-duplicate-detection: done
-  cat-004-import-category-mapping-service: ready-for-dev
-  cat-005-category-management-frontend: backlog
+  cat-004-import-category-mapping-service: done
+  cat-005-category-tree-and-crud-frontend: ready-for-dev
+  cat-006-category-ddd-merge-duplicate-frontend: backlog
   epic-4-retrospective: optional
 
   # Epic 5 — Accounts
-  epic-5: backlog
+  epic-5-accounts: backlog
   acct-001-account-pydantic-schemas: backlog
   acct-002-account-service: backlog
-  acct-003-account-api-routes-and-valuation-routes: backlog
+  acct-003-account-api-routes-and-valuations: backlog
   acct-004-account-frontend-pages: backlog
   epic-5-retrospective: optional
 
-  # Epic 6 — Transactions & Events
-  epic-6: backlog
+  # Epic 6 — Events (Transactions)
+  epic-6-events: backlog
   event-001-event-pydantic-schemas: backlog
-  event-002-transaction-service-fx-duplicate-detection-reconciliation: backlog
+  event-002-transaction-service: backlog
   event-003-event-api-routes: backlog
-  event-004-transaction-ledger-frontend-and-categoryselect: backlog
+  event-004-transaction-ledger-frontend: backlog
   epic-6-retrospective: optional
 
   # Epic 7 — Recurring Payments
-  epic-7: backlog
-  recur-001-recurringdateparser-service: backlog
+  epic-7-recurring: backlog
+  recur-001-recurring-date-parser: backlog
   recur-002-recurring-payment-service-and-routes: backlog
-  recur-003-scheduler-recurring-payment-processor-and-missed-occurrence-detection: backlog
+  recur-003-scheduler-recurring-processor: backlog
   recur-004-recurring-payments-frontend: backlog
   epic-7-retrospective: optional
 
   # Epic 8 — Budgets
-  epic-8: backlog
+  epic-8-budgets: backlog
   budg-001-budget-schemas-and-service: backlog
   budg-002-budget-api-routes: backlog
-  budg-003-budget-scheduler-rolling-periods-and-threshold-alerts: backlog
+  budg-003-budget-scheduler: backlog
   budg-004-budget-frontend-with-drill-down: backlog
   epic-8-retrospective: optional
 
-  # Epic 9 — Transfers & Debt
-  epic-9: backlog
+  # Epic 9 — Debt & Transfers
+  epic-9-debt-transfers: backlog
   debt-001-transfer-service-and-debt-computation: backlog
   debt-002-transfer-api-routes: backlog
   debt-003-transfers-frontend-and-debt-widget: backlog
   epic-9-retrospective: optional
 
   # Epic 10 — Formulas
-  epic-10: backlog
+  epic-10-formulas: backlog
   form-001-formula-service-and-routes: backlog
   form-002-formula-management-frontend: backlog
   epic-10-retrospective: optional
 
-  # Epic 11 — Visualisations
-  epic-11: backlog
-  viz-001-visualisation-aggregation-api: backlog
+  # Epic 11 — Visualizations
+  epic-11-visualizations: backlog
+  viz-001-visualization-aggregation-api: backlog
   viz-002-dashboard-page: backlog
   viz-003-per-entity-chart-components: backlog
   viz-004-comparison-mode: backlog
   epic-11-retrospective: optional
 
-  # Epic 12 — Import / Export
-  epic-12: backlog
-  import-001-csv-parser-and-column-detection-backend: backlog
+  # Epic 12 — Import/Export
+  epic-12-import-export: backlog
+  import-001-csv-parser-and-column-detection: backlog
   import-002-import-execution-service: backlog
   import-003-import-export-frontend-wizard: backlog
   epic-12-retrospective: optional
 
-  # Epic 13 — Settings, Currencies & Backup
-  epic-13: backlog
+  # Epic 13 — Settings & Scheduling
+  epic-13-settings-scheduling: backlog
   settings-001-person-and-currency-api-routes: backlog
   settings-002-fx-rate-scheduler-job: backlog
-  settings-003-settings-page-frontend-currencies-and-profile: backlog
+  settings-003-settings-frontend: backlog
   settings-004-backup-scheduler-job: backlog
   epic-13-retrospective: optional

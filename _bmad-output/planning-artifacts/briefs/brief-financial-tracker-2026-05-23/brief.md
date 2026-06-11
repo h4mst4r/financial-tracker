@@ -1,11 +1,9 @@
 ---
 title: Financial Tracker — Product Brief
-version: 2.0
+version: 3.0
 status: living
-created: 2026-05-23
-updated: 2026-05-26
-authority: Plain-language product vision. Derives from entity-design-philosophy.md.
-           Technical detail lives in architecture.md and prd.md.
+created: 2026-06-10
+authority: Plain-language product vision
 ---
 
 # Financial Tracker — Product Brief
@@ -41,7 +39,7 @@ A self-hosted, multi-user financial tracking web application for a small househo
 people) that:
 
 - Replaces the Google Sheets setup with a database-backed system
-- Tracks all financial entities — accounts, events, budgets, currencies — through a
+- Tracks all financial entities — accounts, events, budgets, forex, transfers — through a
   unified entity hierarchy
 - Automates recurring payments from all contributing sources
 - Supports multi-currency transactions with daily FX rates, forex loss tracking, and
@@ -77,13 +75,11 @@ Manual override is always available: enter the exact SGD figure from your statem
 system records the delta. Over time, the dashboard surfaces your true total forex cost — not
 a theoretical one.
 
-**This is not a feature added for completeness. It is the reason this app was built.**
 The Google Sheets setup this replaces accumulated years of manual corrections to spot-rate
 conversions. This application makes those corrections automatic, transparent, and measurable.
 
 The full multi-currency architecture — `MonetaryValue` block, `fx_delta` tracking, per-account
-formula assignment, display-currency switching — is specified in `entity-design-philosophy.md §3.2`
-and `§11`.
+formula assignment, display-currency switching is elaborated later.
 
 ---
 
@@ -95,18 +91,16 @@ and `§11`.
 | Household Member | Kim | Needs to view and add transactions; accesses personal financial view |
 
 Both users are `EntityPersons` within the same `EntityHousehold`. Ben holds the `owner`
-role; Kim holds `member`. Both have equal transaction entry capability. Role difference
+role; Kim holds `admin`. Both have equal transaction entry capability. Role difference
 affects administrative operations only.
 
 **PersonDashboard:** Each person sees the household aggregate by default. They can filter
-to their personal view — showing only their own accounts and events. This is not a
-separate data model; it is a view filter over the same household data.
+to their own views — showing only their own accounts and events, and if admin or higher, others as well.
+This is not a separate data model; it is a view filter over the same household data.
 
 ---
 
 ## Core Design Philosophy
-
-> *The entity hierarchy is not an implementation detail — it is the product.*
 
 Every financial concept in this application is an instance of a known entity class.
 Accounts, transactions, recurring payments, budgets, currencies, formulas, and debt are
@@ -118,19 +112,20 @@ and shared UI patterns.
 - Adding a new account type (e.g. a cryptocurrency wallet) requires a new subclass of
   `EntityAccounts` — not a new page, not a new API, not a new component.
 - Changing the archive behaviour applies everywhere simultaneously.
-- A colour token change in the theme propagates to every entity card in the app.
+- A colour token change in the theme propagates to every design entity card in the app.
 - Multi-currency handling is defined once in `MonetaryValue` and used on every financial
   entity without repetition.
 
-The full hierarchy, base fields, and patterns are specified in `entity-design-philosophy.md`.
 This brief summarises the hierarchy at a product level.
 
 ---
 
 ## Entity Overview
 
-The application is structured around seven entity families, all owned by an
-`EntityHousehold`:
+The application is structured around ten entity families:
+
+**EntityHousehold** — the overarching household entity. It holds EntityPersons at different
+adminstrative capabilities and can be created, archived, restored, and deleted.
 
 **EntityPersons** — household members. Each person is both a system user (Google OAuth
 identity) and a financial participant (with their own accounts, transactions, and
@@ -139,11 +134,15 @@ personal dashboard view). A person belongs to exactly one household.
 **EntityAccounts** — anything that holds financial value. Bank accounts, credit cards,
 capital and investment accounts, physical assets (property, vehicles), and insurance
 policies all inherit from a common `BaseAccount`. Each account belongs to one or more
-persons. Credit cards additionally serve as debt sources. Assets and insurance additionally
-serve as recurring payment sources.
+persons. Credit cards additionally serve as debt sources. Assets, insurance, and capital
+accounts additionally spawn recurring payments. Every account records its value over time as
+periodic `AccountSnapshots`, giving each one a month/year value-history chart: for
+ledger-backed accounts (bank, credit card) the balance is computed from events, anchored by an
+opening balance and optional manual corrections; for asset-like accounts (property, insurance,
+capital) the snapshots themselves are the value series.
 
 **EntityEvents** — anything that happens financially. Transactions, recurring payments,
-and transfers all inherit from `BaseFinancialEvent`. Every event has a monetary value,
+and transfers all inherit from `BaseFinancialEvent`. Every event has an id, monetary value,
 a payee, a category, a transaction status (pending/completed/cancelled/reconciled), and
 a lifecycle status. Recurring payments know their own schedule — including free-text date
 descriptions that are parsed, confirmed by the user, and stored as structured rules.
@@ -160,17 +159,29 @@ transactions → subcategory breakdown.
 deep (parent → subcategory). Used by events, budgets, and recurring payments. Spending
 rolls up from subcategory to parent automatically.
 
-**EntityCurrencies** — the monetary layer. One base currency (SGD by default). Daily FX
+**EntityCurrencies** — the monetary layer. One default base currency. Daily FX
 rates fetched from an external API and cached. Any transaction in a foreign currency
 stores both the original amount and the base-currency equivalent, with the gap between the
 API rate and the actual bank rate tracked as forex loss. Users can switch their display
-currency (e.g. NZD) without affecting stored values. All visualisations support both
-raw-currency stacked views and converted aggregate views.
+currency (e.g. NZD) without affecting stored values. All visualisations support
+raw-currency stacked views, display currency stacked views, and converted aggregate views.
+
+**EntityFormulas** — Formula used for computing straight-line depreciation,
+declining-balance depreciation, compound interest, loan amortisation, FX delta,
+budget variance, net worth. Custom formula can be assigned to specific fields.
 
 **EntityDebt** — household debt is never entered. It is computed automatically from two
 signals: outflow transactions flagged as shared household expenses (internal debt), and
 credit card balances not yet repaid (card debt). Debt is cleared when a Transfer is made
 to the relevant account. The system detects this automatically.
+
+**EntityVisualization** — the universal charting layer. Every entity with history (accounts,
+budgets, currencies) carries a mini-chart on its card that expands into a full visualization
+viewer. The viewer also charts *groups* of events: filter the ledger to a set (e.g. every
+"Netflix" transaction) and see it aggregated over time — count, sum, or average by month/year.
+Chart types include bar, line, pie, area, and stacked, in automatically colour-coded series
+that the user can toggle on and off. The same `VisualizationFilter` drives drill-down,
+cross-module navigation, raw-vs-converted currency, and person/category comparison.
 
 ---
 
@@ -179,16 +190,19 @@ to the relevant account. The system detects this automatically.
 | Module | Primary Entity | Description |
 |---|---|---|
 | Dashboard | All | Household overview: net worth, spending, income, upcoming payments, alerts. Filterable to PersonDashboard. |
-| Accounts | EntityAccounts (bank) | Balance tracking, transaction history, reconciliation |
-| Capital | EntityAccounts (capital) | Portfolio value, inflow/outflow, interest and growth |
-| Assets | EntityAccounts (asset) | Property and vehicle values, depreciation, valuation history, loan repayments |
-| Insurance | EntityAccounts (insurance) | Policy details, premium tracking, recurring premium payments |
-| Transactions | EntityEvents (transaction) | Full transaction ledger, quick entry, CSV import/export, duplicate detection |
+| Accounts | EntityAccounts (bank) | Balance tracking and history, transaction history, reconciliation |
+| Capital | EntityAccounts (capital) | Portfolio value tracking and history, inflow/outflow, interest and growth |
+| Assets | EntityAccounts (asset) | Property and vehicle values, depreciation, loan repayments and valuation tracking and history |
+| Insurance | EntityAccounts (insurance) | Policy details, premium tracking and history, recurring premium payments |
+| Transactions | EntityEvents (transaction) | Full transaction ledger, filtering and sorting, quick entry, CSV import/export, duplicate detection |
 | Recurring Payments | EntityEvents (recurring) | All recurring sources: explicit schedules + capital/asset/insurance payments. Verification view for missed occurrences. |
-| Transfers | EntityEvents (transfer) | Inter-account transfers, debt-clearing detection |
-| Budgets | EntityBudgets | Monthly and yearly spending targets vs actuals, drill-down visualisation |
-| Categories | EntityCategories | Category management, hierarchy, defaults |
-| Settings | EntityHousehold, EntityPersons, EntityCurrencies | Household config, member management, currency setup |
+| Transfers | EntityEvents (transfer) | Inter-account transfers |
+| Debt | EntityDebt | calculated debt, debt-clearing detection |
+| Budgets | EntityBudgets | Monthly and yearly spending targets vs actuals, drill-down visualisation, sorting and filtering visualizations |
+| Categories | EntityCategories | Category management, hierarchy |
+| Formula | EntityFormula | System formula and user defined |
+| Currencies | EntityCurrencies | Currency setup, forex tracking and history |
+| Settings | EntityHousehold, EntityPersons | Household configuration and management, member management, theme management, import and export |
 
 ---
 
@@ -198,16 +212,18 @@ The household is based in New Zealand with ongoing financial commitments in Sing
 (credit card payments, mortgage, insurance). Travel to the Philippines, the United States,
 and other countries means USD, PHP, and additional currencies appear regularly.
 
-The system supports **all ISO 4217 currencies** without restriction. SGD is the household
-base currency by default. NZD is the primary display currency for the NZ-based household
-members. Any currency encountered during travel can be added on demand.
+The system supports **all ISO 4217 currencies** without restriction.While SGD is the current household's
+base currency by default, any currency could be selected at initial onset. Once selected, this cannot be changed
+as a lot of data relies on this default currency.
+NZD is the primary display currency for the NZ-based household members, but one could change this interactively.
+Any currency encountered during travel can be added on demand.
 
 The system handles this by:
 - Storing every monetary amount in both its original currency and the household base
   currency (SGD)
 - Allowing users to override the base-currency amount when the bank statement differs
   from the API rate — the gap is recorded as forex loss
-- Letting each person choose a display currency (NZD or SGD) that converts all views
+- Letting each person choose a display currency that converts all views
   at render time without altering stored data
 - Showing visualisations in both raw-currency stacked views and converted aggregate views
 - Fetching daily FX rates for all active currencies — not just SGD/NZD
@@ -221,7 +237,7 @@ into the same event processor:
 
 - **Explicit schedules:** manually created entries with free-text date descriptions
   (e.g. "3rd of every month"). UI parses and confirms before storing structured rule.
-- **Capital accounts:** periodic interest or dividend inflows
+- **Capital accounts:** periodic payments due to DCA, accumulated interest or dividend inflows
 - **Asset accounts:** loan and mortgage repayments
 - **Insurance accounts:** yearly or periodic premium payments
 
@@ -235,12 +251,14 @@ detected automatically and surfaced as alerts.
 Debt is a derived concept. It is never manually entered.
 
 **Internal household debt:** When a person pays for a shared household expense from their
-personal account, they flag the transaction as a shared expense. The system accumulates
-this to determine what the household owes that person. A transfer back to that person
-clears it automatically.
+personal account or credit cards, they flag the transaction as a shared expense. The system accumulates
+this to determine what the household "owes" that person. A transfer back to that person
+clears this internal household debt automatically.
 
 **Credit card debt:** The outstanding balance on any credit card. Each outflow adds to
-it; each repayment transfer reduces it. Detected automatically.
+it; each repayment transfer reduces it. Detected automatically. It is currently assumed that a user will definitely
+pay off the credit card debt each month, therefore it is kept for posterity whereby if bank integration does happen, this
+will be automatically flagged
 
 ---
 
@@ -295,7 +313,6 @@ it; each repayment transfer reduces it. Detected automatically.
 - Email notifications (deferred to Phase 3)
 - Real-time collaborative editing
 - Bank feed integration
-- Investment trading execution
 - Sound system and advanced animation (future extension)
 - Accountant-level tax reporting
 

@@ -36,7 +36,7 @@ Before marking any frontend story done, verify the delivered component(s) either
 
 Tests going green is necessary but not sufficient. A story with passing tests but unverified visual output is not Done.
 
-**Design System Page Rule (enforced here, authoritative in EDP §14.8 and UX §9.10):**
+**Design System Page Rule (enforced here; component index in UX §7):**
 - If a story ships a new reusable UI component, add a demo section to `/design-system` using the **real exported component**. No synthetic `<div>` approximations. This is part of Done.
 - If a component does not exist yet, do NOT add its section. Add only after the component is real and exported.
 - If a story removes a component, remove its design-system section in the same change.
@@ -92,7 +92,7 @@ Every story, every time, in this order:
 
 ## 4. Frontend — Design Token Quick Reference
 
-> Full token tables are in UX §1. This section captures only the most commonly confused tokens.
+> Full token tables are in UX §0 (Foundation). This section captures only the most commonly confused tokens.
 
 All design decisions live in `frontend/src/index.css` as `@theme` CSS variables and `@utility` classes.
 **Never use raw hex values, px sizes, opacity decimals, or z-index integers in TSX components.**
@@ -102,7 +102,7 @@ If a token you need doesn't exist, add it to `index.css` — don't hardcode it i
 
 ```
 bg-bg              — Page root, outer shell
-bg-surface         — Main content areas, sidebar, Topbar (NOT bg-bg — spec §5.3)
+bg-surface         — Main content areas, sidebar, Topbar (NOT bg-bg — UX §1.1)
 bg-surface-raised  — Cards, panels, picker dropdowns, inputs
 bg-surface-hover   — List row hover (barely visible — full-width rows only)
 bg-surface-active  — Small button hover INSIDE panels, selected states
@@ -148,11 +148,17 @@ bg-accent-active    — Active tab INSIDE picker panels (ColourPicker, EmojiIcon
 
 **Critical distinction:** `bg-control-active` is for navigation/control tabs. `bg-accent-active` is exclusively for tabs inside picker dropdown panels. Getting this backwards makes pickers look wrong.
 
+### 4.6 Colour-Forward Identity & Immersive Themes (UX §0.1–§0.2)
+
+Entity identity is a **colour fill** of the instance's own `colour` (calm tint default / vivid opt-in), read via the `--entity-colour` CSS variable (§5.5). Colour source per item: category/account/currency = their own `colour`; payee = Google avatar first, else initials on `Person.colour`; **status & inflow/outflow are SEMANTIC tokens** (success/warning/info/error), never entity colours. Don't paint every attribute at once — pick one lead colour per context (avoid rainbow rows).
+
+**All colour — including the interaction/feedback tokens** (focus ring, selection halo, border, selection-fill: `accent-primary`, `accent-secondary`, `ring-glow-*`, error) — are **theme tokens**, never literals. Under an `immersive` palette they remap through the palette's `tint` ramp automatically (Game Boy → green rings, green selection). Because you always read tokens/variables, this is free — **hardcoding any hex breaks theming.** This is the teeth behind P4.
+
 ---
 
 ## 5. Frontend — Component Patterns (Common Mistakes)
 
-> Full component library is in UX §2-4. This section captures only patterns agents commonly get wrong.
+> Full component library is in UX §1–§8 (component index UX §7). This section captures only patterns agents commonly get wrong.
 
 ### 5.1 Picker / Dropdown Trigger Button (EXACT pattern — no deviation)
 
@@ -224,26 +230,25 @@ className={`
 
 **Never:** `ring-white/80` — hardcoded magic value.
 
-### 5.5 Entity Accent Bar Pattern
+### 5.5 Entity Colour-Fill Identity Pattern (the left accent bar is RETIRED)
 
-Entity cards have a 4px left accent bar coloured to the entity type. This MUST use an inline style to survive Tailwind's `border` shorthand cascade:
+**Do not build a 4px left accent bar.** That pattern is retired (UX §0.1, §2). Entity identity is now a
+**colour FILL** of the instance's own `colour` (default = entity-type colour): a **calm** soft tint by
+default, or a **vivid** full-saturation fill when the per-instance `vivid` toggle is on. Text on the fill
+is **contrast-aware** (white/dark auto by luminance; muted sub-text = same colour, reduced alpha).
+
+Drive the fill from a CSS variable so children can read it, and keep the colour OFF the `border` shorthand:
 
 ```tsx
 <div
-  className="relative border border-border rounded-lg ..."
-  style={{ borderLeft: `4px solid ${entity.colour}` }}
+  className="relative rounded-lg border border-border ..."   // border stays neutral
+  style={{ '--entity-colour': entity.colour }}                // fill + children read this
 >
 ```
 
-**Do not** use `border-entity-accent` utility with a `border` shorthand class on the same element — Tailwind's `border` sets ALL border widths to 1px and can override `border-left-width: 4px` depending on CSS ordering.
-
-For child utilities that read the entity accent colour, set it as a CSS variable:
-
-```tsx
-style={{ '--entity-accent': entity.colour, borderLeft: `4px solid ${entity.colour}` }}
-```
-
-Then children can use `bg-entity-accent-muted` and `text-entity-accent`.
+- Use the themed fill utilities (`bg-entity-fill-calm` / `bg-entity-fill-vivid`) that read `--entity-colour`; never inline a raw hex.
+- **Selection** is NOT conveyed by the fill — use the §5.4 ring + corner check + lift (tint alone is insufficient on vivid fills).
+- Under an **immersive** theme the instance colour is remapped through the palette's tint ramp (UX §0.2) — because you read it from the token/variable, this happens for free. Never hardcode the hex.
 
 ### 5.6 Nested Button Rule — Never Button Inside Button
 
@@ -339,11 +344,16 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 - **⋮ context menu only — never inline action buttons.** All row actions (Edit, Duplicate, Archive, Delete…) go in a ContextMenu triggered by a `⋮` (`MoreVertical`) button. No icon buttons rendered directly in the row.
 - **Default ⋮ trigger:** the `⋮` button is always visible (not hover-only). It uses `opacity-60 hover:opacity-100` for visual weight, not `opacity-0 group-hover:opacity-100`.
 
+**Colour treatment (UX §6 — no left bar, no chip, no connector line):**
+- **Parent rows** get a **calm colour-tint fill** of the category's `colour` (read via `--entity-colour`, §5.5) — not a left border, not a colour chip.
+- **Subcategory rows** get a **lighter tint of the *parent's* colour** (visually ties child to parent) — **no separate colour chip**, slightly indented, **no connector line**.
+- The **Add subcategory** affordance sits at the **end of an expanded parent's children**, not inline on every parent row.
+
 **Row element classes (top-level or parent rows):**
 ```tsx
 <div
-  className="group flex items-center gap-2 h-11 pl-3 pr-3 hover:bg-surface-hover transition-all duration-100 cursor-pointer"
-  style={{ borderLeft: '4px solid {category.color || var(--color-entity-category)}' }}
+  className="group flex items-center gap-2 h-11 pl-3 pr-3 bg-entity-fill-calm hover:bg-surface-hover transition-all duration-100 cursor-pointer"
+  style={{ '--entity-colour': category.colour ?? 'var(--color-entity-category)' }}
 >
   <GripVertical size={14} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-grab" />
   {hasChildren
@@ -351,21 +361,21 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
     : <Minus size={14} className="text-text-muted shrink-0" />}
   <span className="text-base shrink-0">{icon}</span>
   <span className="text-sm font-medium text-text-primary flex-1 truncate min-w-0">{name}</span>
-  {/* badges, sub-count, + Add Sub */}
+  {/* right-aligned: badges, sub-count */}
   <ContextMenu trigger={<MoreVertical size={14} className="text-text-muted opacity-60 hover:opacity-100 shrink-0" />} items={rowMenuItems} />
 </div>
 ```
 
-**Subcategory group wrapper** — creates the vertical connector line and indent:
+**Subcategory group wrapper** — indent only, **no connector border**:
 ```tsx
-<div className="ml-7 border-l border-border divide-y divide-border">
-  {/* subcategory rows use pl-4 instead of pl-3 — connector border is on the wrapper */}
+<div className="ml-7 divide-y divide-border">
+  {/* subcategory rows: pl-4, lighter tint of the PARENT's colour via --entity-colour */}
 </div>
 ```
 
 **Expand/collapse:** conditional render (show/hide children), not `display:none`. Animate with `overflow-hidden` + `max-h-0`/`max-h-[9999px]` if transition is needed.
 
-**Archived rows:** `opacity-60 grayscale` + `borderLeft: '4px dashed var(--color-border-strong)'` + `[Archived]` Badge.
+**Archived rows:** `opacity-60 grayscale` + **dashed full border** (`border border-dashed border-border-strong`) + `[Archived]` Badge. (No left-border bar.)
 
 **Selected rows:** `bg-primary-muted` replaces `hover:bg-surface-hover` when selected (multi-select).
 
@@ -375,7 +385,7 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 
 ## 6. Backend Gotchas (Common Mistakes)
 
-> Full backend architecture is in ARCH §5-7. This section captures only patterns agents commonly get wrong.
+> Full backend architecture is in ARCH §2–§4 (Auth & Security, Data Model, Backend). This section captures only patterns agents commonly get wrong.
 
 ### 6.0 — Always Activate the Venv First
 
@@ -392,11 +402,11 @@ The venv is at `.venv/` in the project root. Never run `python` or `pip` without
 
 **The app uses `./financial_tracker.db` at the project root.** `alembic.ini` lives in `backend/` and resolves `./financial_tracker.db` relative to `backend/` — a **different file**.
 
-**Never** run `alembic upgrade head` from `backend/` bare. Always override the URL (see ARCH §4.1 for full command).
+**Never** run `alembic upgrade head` from `backend/` bare. Always override the URL (see ARCH §3.12 for the exact command).
 
 ### 6.1 — Model Column Gotchas
 
-**Not all models inherit `BaseEntity`.** `Session` and `HouseholdInvitation` inherit `Base` directly — they have NO `updated_at` column. Use `expires_at` for recency filtering. See ARCH §4.4 for full model schemas.
+**Not all models inherit `BaseEntity`.** `Session` and `HouseholdInvitation` inherit `Base` directly — they have NO `updated_at` column. Use `expires_at` for recency filtering. See ARCH §3.4 for full model schemas.
 
 **`Session` has NO `household_id`.** Session → Person → Household. Join through `person_id`.
 
@@ -404,35 +414,35 @@ The venv is at `.venv/` in the project root. Never run `python` or `pip` without
 
 ### 6.2 — DI Chain
 
-`get_db` → `get_current_person` → `get_household_id`. Service layer always receives `household_id` as first positional arg. **Never** trust request body for household scoping. See ARCH §5.2 for full code.
+`get_db` → `get_current_person` → `get_household_id`. Service layer always receives `household_id` as first positional arg. **Never** trust request body for household scoping. See ARCH §4.4 for full code.
 
 ### 6.3 — Error Responses
 
-Use `raise HTTPException(status_code=..., detail={...})` — the global handler formats RFC 7807 Problem Details. See ARCH §6.4 for the canonical format table.
+Use `raise HTTPException(status_code=..., detail={...})` — the global handler formats RFC 7807 Problem Details. See ARCH §4.6 for the canonical format table.
 
 ### 6.4 — CSRF
 
-One token per session (not single-use). Frontend sends via `api/client.ts` interceptor — don't reimplement. See ARCH §7.3 for full spec.
+One token per session (not single-use). Frontend sends via `api/client.ts` interceptor — don't reimplement. See ARCH §2.4 for full spec.
 
 ### 6.5 — Household Deletion → Person Detachment
 
 When a household is deleted, all member `Person` rows survive (`household_id` becomes `NULL`). On re-login, `seed_household_if_needed` checks `can_create_household`: owner gets a new household, members get `NotInvitedError`.
 
-**Do NOT treat "person survives household deletion" as a bug.** It is the designed flow. See ARCH §7.1 for the full truth table.
+**Do NOT treat "person survives household deletion" as a bug.** It is the designed flow. See ARCH §2.6 for the full truth table.
 
 ### 6.6 — Category Archiving
 
-Archiving a category auto-promotes children to top-level (`parent_id = NULL`). Return 200, not 409.
+Archiving a category with subcategories archives the subcategories **together** with the parent (the whole branch is archived) — per PRD FR-C-005. Do NOT auto-promote children to top-level. Return 200, not 409.
 
 ### 6.7 — OAuth Callback Flow
 
 `seed_household_if_needed` is called AFTER `get_or_create_person` but BEFORE `create_session`. A pending invitation produces a session with `household_id=NULL` — this is intentional. The frontend shows `PendingInvitationDialog`.
 
-**Do NOT treat "pending invitation + NULL household session" as a bug.** See ARCH §7.1 for the full algorithm.
+**Do NOT treat "pending invitation + NULL household session" as a bug.** See ARCH §2.6 for the full algorithm.
 
 ### 6.8 — Dev Auth Bypass
 
-Set `AUTH_BYPASS_ENABLED=true` in `.env` for local dev. Middleware auto-injects a dev session. **NEVER** enable in production. See ARCH §7.6 for full mechanism.
+Set `AUTH_BYPASS_ENABLED=true` in `.env` for local dev. Middleware auto-injects a dev session. **NEVER** enable in production. See ARCH §2.5 for full mechanism.
 
 ---
 
@@ -440,8 +450,9 @@ Set `AUTH_BYPASS_ENABLED=true` in `.env` for local dev. Middleware auto-injects 
 
 - All list endpoints return `{"items": [...], "total": N}` — never a bare array
 - Household-scoped queries always `WHERE household_id = :household_id AND is_archived = false` unless `show_archived=true` is passed
-- FX rates always stored as `base → target` ratio (1 USD = X target)
+- FX stored as `rate_to_base` — the multiplier from the foreign amount to base: `amount_base = amount × rate_to_base` (ARCH §3.8). **Never store the inverse.** The human-readable "1 base = N target" shown in the UI is derived for display only. Rates come from the per-currency provider chain (ARCH §5.7); persist the winning provider in `rate_source`.
 - Visualisation endpoints (`/api/visualizations/...`) are read-only, have no mutations, and may return cached/aggregated data — do not add write operations to these routes
+- Bulk endpoints, global search (`GET /api/search`), and FX-provider config (`fx_providers`) follow the same household-scoping + RFC 7807 rules. API keys are stored only as Secret Manager references — never returned by any endpoint.
 
 ---
 
@@ -465,9 +476,11 @@ Do not create new stores for entity CRUD — that belongs to TanStack Query.
 ### 8.3 Generic Entity Layer
 
 For any feature page implementing entity CRUD:
-- Use `useEntityManager<T>` hook — provides `items`, `isLoading`, `create`, `update`, `archive`, `bulkArchive`
-- Use `EntityCard<T>` — provides accent bar, context menu, archive state
-- Use `EntityModal<T>` — two-column form layout, cancel/save actions
-- Use `EntityPage<T>` — action bar, filter slot, main content slot
+- Use `useEntityManager<T>` hook — provides `items`, `isLoading`, `create`, `update`, `archive`, `bulkArchive`. **Built on TanStack Query** (not local `useState`) — server state lives there (§8.2).
+- Use `EntityCard<T>` — provides the **colour-fill identity** (§5.5, calm/vivid), favourite star, context menu, archive state, value-history sparkline.
+- Use `EntityModal<T>` — two-column form layout, cancel/save actions.
+- Use `EntityPage<T>` — action bar, filter slot, main content slot.
+- For multi-select, use the **generic `useMultiSelect` + BulkActionBar** (ledger *and* CategoryTree, FR-E-020) — do not re-implement per module.
+- Per-person favourite + manual sort persist in `entity_preferences` (ARCH §3) — not on the entity row.
 
 Do NOT build bespoke CRUD pages — extend the generic layer.

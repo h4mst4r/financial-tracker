@@ -95,43 +95,45 @@ async def _use_test_db():
 
 @pytest.mark.asyncio
 async def test_auth_login_generates_state_and_redirects():
-    """GET /auth/login should set oauth_state cookie and redirect to Google."""
+    """GET /auth/login should set oauth_state cookie and 302 redirect to Google."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/auth/login", follow_redirects=False)
 
-    assert resp.status_code == 200
+    assert resp.status_code == 302
     assert "oauth_state" in resp.cookies
-    assert "window.location.href" in resp.text
-    assert "accounts.google.com" in resp.text
-    assert "scope=openid" in resp.text
+    location = resp.headers.get("location", "")
+    assert "accounts.google.com" in location
+    assert "scope=openid" in location
 
 
 @pytest.mark.asyncio
 async def test_auth_callback_missing_params_redirects_to_error():
-    """GET /auth/callback without code/state should redirect to /login?error=oauth_error."""
+    """GET /auth/callback without code/state should 302 redirect to /login?error=oauth_error."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/auth/callback")
+        resp = await client.get("/auth/callback", follow_redirects=False)
 
-    # Returns an HTML page with a JS redirect rather than a raw JSON 400
-    assert resp.status_code == 200
-    assert "oauth_error" in resp.text
+    assert resp.status_code == 302
+    location = resp.headers.get("location", "")
+    assert "oauth_error" in location
 
 
 @pytest.mark.asyncio
 async def test_auth_callback_invalid_state_redirects_to_error():
-    """GET /auth/callback with invalid signed state should redirect to /login?error=oauth_error."""
+    """GET /auth/callback with invalid signed state should 302 redirect to /login?error=oauth_error."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get(
             "/auth/callback",
             params={"code": "fake_code", "state": "fake_state"},
             cookies={"oauth_state": "invalid.signature"},
+            follow_redirects=False,
         )
 
-    assert resp.status_code == 200
-    assert "oauth_error" in resp.text
+    assert resp.status_code == 302
+    location = resp.headers.get("location", "")
+    assert "oauth_error" in location
 
 
 @pytest.mark.asyncio
@@ -172,15 +174,14 @@ async def test_auth_callback_full_flow_creates_session():
                 cookies={"oauth_state": signed_state},
             )
 
-    # Should redirect to frontend via JS snippet with session in URL hash
-    assert resp.status_code == 200
-    import re
-    match = re.search(r'#session=([0-9a-f-]+)', resp.text)
-    assert match, f"Session ID not found in callback response: {resp.text[:200]}"
+    # Callback sets session as HttpOnly cookie and 302 redirects to frontend root.
+    assert resp.status_code == 302
+    session_id_str = resp.cookies.get("session_id")
+    assert session_id_str, f"session_id cookie not set in callback response"
 
     # Verify session was created in DB
     from uuid import UUID as PyUUID
-    session_id = PyUUID(match.group(1))
+    session_id = PyUUID(session_id_str)
     async with backend.database.async_session_factory() as session:
         from sqlalchemy import select
         result = await session.execute(
@@ -394,17 +395,15 @@ async def test_e2e_session_pipeline():
                 cookies={"oauth_state": signed_state},
             )
 
-        assert callback_resp.status_code == 200
-        # Session is now passed via URL hash in JS redirect (not as a cookie)
-        import re
-        match = re.search(r'#session=([0-9a-f-]+)', callback_resp.text)
-        assert match, f"Session ID not found in callback response: {callback_resp.text[:200]}"
-        session_id = match.group(1)
+        assert callback_resp.status_code == 302
+        # Callback sets an HttpOnly session cookie and 302 redirects to frontend root.
+        session_id = callback_resp.cookies.get("session_id")
+        assert session_id, f"session_id cookie not set in callback response"
 
-        # Step 2: Use session token header to call /auth/me (dev proxy mode)
+        # Step 2: Use session cookie to call /auth/me.
         me_resp = await client.get(
             "/auth/me",
-            headers={"X-Session-Token": session_id},
+            cookies={"session_id": session_id},
         )
 
         assert me_resp.status_code == 200
@@ -416,20 +415,18 @@ async def test_e2e_session_pipeline():
         assert me_body["household"]["householdId"] is not None
         assert me_body["csrfToken"] is not None
 
-        # Step 4: Logout clears session (send session as dev header + CSRF token)
+        # Step 4: Logout clears session (send session as cookie + CSRF token)
         logout_resp = await client.post(
             "/auth/logout",
-            headers={
-                "X-Session-Token": session_id,
-                "X-CSRF-Token": me_body["csrfToken"],
-            },
+            cookies={"session_id": session_id},
+            headers={"X-CSRF-Token": me_body["csrfToken"]},
         )
         assert logout_resp.status_code == 200
 
         # Step 5: /auth/me should now return 401
         me_after_logout = await client.get(
             "/auth/me",
-            headers={"X-Session-Token": session_id},
+            cookies={"session_id": session_id},
         )
         assert me_after_logout.status_code == 401
 

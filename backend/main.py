@@ -11,10 +11,13 @@ from typing import Any, AsyncGenerator
 from fastapi import FastAPI, HTTPException, Request, status  # Request kept for exception handlers
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.responses import Response
 
 from backend.config import settings
 from backend.dependencies import get_db
+from backend.limiter import limiter
 from backend.middleware.auth_middleware import DevBypassMiddleware
 from backend.middleware.csrf_middleware import CSRFMiddleware
 from backend.routes import auth as auth_routes
@@ -56,6 +59,22 @@ class SecurityHeadersMiddleware:
                 headers[b"x-frame-options"] = b"DENY"
                 headers[b"x-content-type-options"] = b"nosniff"
                 headers[b"referrer-policy"] = b"strict-origin-when-cross-origin"
+                # CSP: restricts what the browser will load/execute.
+                # 'unsafe-inline' on style-src is required for Tailwind v4's injected CSS.
+                # lh3.googleusercontent.com covers Google profile picture URLs.
+                headers[b"content-security-policy"] = (
+                    b"default-src 'self'; "
+                    b"script-src 'self'; "
+                    b"style-src 'self' 'unsafe-inline'; "
+                    b"img-src 'self' data: https://lh3.googleusercontent.com; "
+                    b"font-src 'self'; "
+                    b"connect-src 'self'; "
+                    b"frame-ancestors 'none'; "
+                    b"base-uri 'self'; "
+                    b"form-action 'self'"
+                )
+                # Permissions-Policy: block sensor/payment APIs the app doesn't use.
+                headers[b"permissions-policy"] = b"camera=(), microphone=(), geolocation=(), payment=()"
                 message = {**message, "headers": list(headers.items())}
             await send(message)
 
@@ -139,13 +158,24 @@ def create_app() -> FastAPI:
     # --- Middleware stack (Starlette LIFO: last registered = outermost = runs first) ---
     # Execution order: SecurityHeaders → DevBypass → CSRF → Route
     # Auth and household context are resolved by FastAPI dependencies, not middleware.
-    app.add_middleware(CSRFMiddleware)              # innermost — runs last
+    app.add_middleware(SlowAPIMiddleware)            # innermost — rate limit check
+    app.add_middleware(CSRFMiddleware)              # CSRF validation
     app.add_middleware(DevBypassMiddleware)         # injects dev session before CSRF check
     app.add_middleware(SecurityHeadersMiddleware)   # outermost — runs first, wraps all responses
+
+    # Wire the limiter state so SlowAPIMiddleware can find it
+    app.state.limiter = limiter
 
     # --- Exception handlers ---
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(
+        RateLimitExceeded,
+        lambda req, exc: JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded", "code": "RATE_LIMITED", "detail": {}},
+        ),
+    )
 
     # --- Auth routes (public + protected) ---
     app.include_router(auth_routes.router)

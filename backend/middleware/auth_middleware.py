@@ -53,8 +53,8 @@ def _should_skip(path: str) -> bool:
 async def validate_session(session_id: str | None) -> "tuple[Person, SessionModel] | None":
     """Module-level session validator — used by both AuthMiddleware and get_current_person.
 
-    Looks up session, validates expiry + staleness, slides the window, and
-    returns (Person, Session) or None.
+    Looks up session, validates expiry + staleness, slides the window, fetches person,
+    and returns (Person, Session) — all in one DB connection.
     """
     if not session_id:
         return None
@@ -64,11 +64,13 @@ async def validate_session(session_id: str | None) -> "tuple[Person, SessionMode
     except (ValueError, AttributeError):
         return None
 
+    from backend.config import settings as _settings
+
     async with backend.database.async_session_factory() as s:
-        session_rec = await s.execute(
+        session_result = await s.execute(
             select(SessionModel).where(SessionModel.id == session_uuid)
         )
-        session_rec = session_rec.scalar_one_or_none()
+        session_rec = session_result.scalar_one_or_none()
 
         if session_rec is None:
             return None
@@ -88,7 +90,6 @@ async def validate_session(session_id: str | None) -> "tuple[Person, SessionMode
         # Dev sessions (user_agent='dev-bypass') are only valid while AUTH_BYPASS_ENABLED=true.
         # When the flag is off, reject dev sessions so a stale browser cookie cannot
         # authenticate as the dev user after bypass is disabled.
-        from backend.config import settings as _settings
         is_dev_session = session_rec.user_agent == "dev-bypass"
         if is_dev_session and not _settings.AUTH_BYPASS_ENABLED:
             return None
@@ -97,27 +98,24 @@ async def validate_session(session_id: str | None) -> "tuple[Person, SessionMode
         if not is_dev_session and (now - last_activity).total_seconds() > STALE_THRESHOLD_SECONDS:
             return None
 
+        # Slide the window and fetch person in the same transaction.
         session_rec.last_activity_at = now
-        # Dev sessions keep their 24h expiry; real sessions get a 30-min sliding window.
         if not is_dev_session:
             session_rec.expires_at = now + timedelta(minutes=30)
-        person_id = session_rec.person_id
-        await s.commit()
 
-    async with backend.database.async_session_factory() as s:
-        person_result = await s.execute(select(Person).where(Person.id == person_id))
+        person_result = await s.execute(
+            select(Person).where(Person.id == session_rec.person_id)
+        )
         person_obj = person_result.scalar_one_or_none()
         if person_obj is None:
             return None
 
-        session_result = await s.execute(
-            select(SessionModel).where(SessionModel.id == session_uuid)
-        )
-        session_obj = session_result.scalar_one_or_none()
-        if session_obj is None:
-            return None
-
-        return (person_obj, session_obj)
+        await s.commit()
+        # commit() expires all tracked attributes — refresh both objects while
+        # the session is still open so callers can read columns without a live session.
+        await s.refresh(person_obj)
+        await s.refresh(session_rec)
+        return (person_obj, session_rec)
 
 
 def _extract_cookie(headers: list, name: str) -> str | None:
