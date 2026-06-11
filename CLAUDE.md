@@ -392,11 +392,11 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 Before running ANY Python command (pytest, uvicorn, alembic, pip):
 
 ```
-Windows PowerShell:  .venv\Scripts\activate
-Bash / WSL:          source .venv/bin/activate
+Windows PowerShell:  venv\Scripts\activate
+Bash / WSL:          source venv/bin/activate
 ```
 
-The venv is at `.venv/` in the project root. Never run `python` or `pip` without it active.
+The venv is at `venv/` in the project root. Never run `python` or `pip` without it active.
 
 ### 6.0a — Always Run Alembic Against the Root Database
 
