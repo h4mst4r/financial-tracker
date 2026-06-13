@@ -129,7 +129,12 @@ semantic colour remap, above).
 | Base · Light | `#f7f7fb` | `#ffffff` | `#1a1a2e` | `#4f46e5` | `#0891b2` | no |
 | Retro · 70s | `#f4ecd8` | `#fffaf0` | `#3a2a18` | `#d2691e` | `#2a9d8f` | no |
 | Muted Brown | `#1f1a16` | `#2b241d` | `#e8ddd0` | `#b08968` | `#9c6644` | no |
-| Game Boy · DMG | `#0f380f` | `#306230` | `#9bbc0f` | `#8bac0f` | `#9bbc0f` | **yes** |
+| Game Boy · DMG | `#0f380f` | `#306230` | `#9bbc0f` | `#8bac0f` | `#306230` | **yes** |
+
+> **Game Boy accents are two *separated* ramp slots** (`accent-1 = #8bac0f` light,
+> `accent-2 = #306230` dark). The two-colour focus language (§0.9) needs `accent-primary` and
+> `accent-secondary` to be visibly distinct even inside a 4-shade monochrome ramp, so the accents
+> are pulled from clearly different luminance positions — never two adjacent near-identical greens.
 
 Custom user palettes = post-MVP.
 
@@ -292,7 +297,7 @@ Per-tenant white-label (and a server-driven config) is post-MVP.
 - **Bottom:** Settings link only (no identity row — identity lives in the topbar avatar).
 - **Responsive:**
   - **Icon rail** (user-collapsible; **auto-collapses below `lg`**): ~62px — labels become
-    **hover tooltips** (§5.8), group labels collapse to thin dividers, the active item keeps the
+    **hover tooltips** (the Tooltip primitive, §7; pattern in CLAUDE.md §5.8), group labels collapse to thin dividers, the active item keeps the
     `accent-subtle` fill + `accent-primary` treatment, the branded header shows the **mark only**,
     an **expand toggle** sits at the top, Settings stays pinned at the bottom. The expanded ↔ rail
     choice persists per person.
@@ -368,7 +373,7 @@ renders its instances through it.
 |---|---|
 | bank / capital / asset / insurance | entity icon + default entity colour; hero = balance/value + sparkline |
 | **credit card** | leads with **Debt owing** (semantic red), shows due date + limit; debt-trend may replace the balance sparkline |
-| archived | desaturated, **dashed** border, `Archived` badge, opacity ~0.55 |
+| archived | desaturated, **dashed** border, `Archived` badge, **`opacity-60`** (the named token — same value used by CategoryTree archived rows, CLAUDE.md §5.11) |
 
 ### 2.3 States
 
@@ -382,7 +387,9 @@ renders its instances through it.
 
 ### 2.4 Interactions (gestures, §0.8)
 
-`tap` = flip-to-open detail · `star` = favourite (sorts first) · `drag` = reorder on grid ·
+`tap` = **flip-expand directly into the EntityModal** (§8.2 / §0.7) — the flip animation *is* the
+modal opening; there is **no separate intermediate "card detail" state** · `star` = favourite
+(sorts first) · `drag` = reorder on grid ·
 `⋮` = context menu (Edit · Duplicate · Archive · Delete-if-empty) · mobile `swipe-left` =
 archive / `swipe-right` = edit · `long-press` = multi-select.
 
@@ -450,7 +457,8 @@ routes via existing surfaces (no novel screens):
 - **Logged in + valid token:** a brief handoff — renders the **PendingInvitationDialog** (no
   household) or the **HouseholdConflictDialog** (already in one → §4.4 flow).
 - **Invalid / expired / revoked / already-used token:** a **§3 semantic error page** (calm icon +
-  plain copy + "Go to login").
+  plain copy + "Go to login"). A token is actionable only while `status=pending`; "already-used" =
+  an `accepted`/`declined` invitation — there is no separate enum state for it (ARCH §3.4).
 
 ### 4.2 Dialog convention (global)
 
@@ -502,7 +510,12 @@ Single column of personal preferences:
 - **Household config** (owner-editable; **read-only + lock for others**): name · timezone ·
   date format · **base currency** + recompute warning (FR-CU-005).
 - **Members:** avatar · name+email · role chip · status. **⋮:** Promote/Demote (role change
-  owner-only; owner not demotable), Archive/Restore, Remove (FR-P-005/007).
+  owner-only; owner not demotable), **Archive/Restore**, **Remove** (FR-P-005/007). The two are
+  distinct: **Archive/Restore** is the in-household lifecycle archive of the Person record
+  (membership intact); **Remove** detaches the member (`household_id=NULL`), **archives all their
+  data**, and **invalidates their sessions** → they hit the "Removed from Household" page (§3) and
+  are re-invitable with data restored (admin/owner only; EDP §5.1 Path C). The owner is not
+  removable.
 - **Invitations:** **+ Invite** → modal (Google email). Rows: email · status
   (pending/accepted/declined/expired/revoked) · expiry. Actions: Copy join link (`/join/<id>`),
   Resend, Revoke (pending) / Delete (terminal) (FR-HH-003/004).
@@ -532,7 +545,11 @@ Single column of personal preferences:
      name (`Parent > Child` ⇒ subcategory).
   2. **Preview & map** — table of parsed rows; each row's category auto-suggested
      (**green** = matched, **yellow** = needs a pick). **Unmatched categories must be mapped to an
-     existing category (or explicitly created) before Confirm — never silently auto-created.** Rows
+     existing category (or explicitly created) before Confirm — never silently auto-created.** The
+     yellow cell is a **Dropdown of existing categories with a "+ Create new category…" item** at
+     the foot; choosing it opens an **inline mini-create** (name · parent · type) that creates the
+     category immediately so it becomes selectable for that row and any later one — an explicit,
+     never-silent creation. Rows
      excludable; **duplicate detection** surfaces a **Conflicting Transactions** modal (FR-IE-004):
      each conflict shows the **incoming (file) row vs the existing (ledger) row** side by side with
      a per-conflict **SegmentedControl** — **Keep newer** (imports the incoming row and **replaces
@@ -566,6 +583,9 @@ tinted with the semantic income colour) alongside a secondary **New category**. 
   (multi-select, merge, promote-out) · slightly **offset/indented** · **no connector line** ·
   drag handle · name · right-aligned badge · ⋮. An **"Add subcategory"** affordance sits at the
   end of an expanded parent's children (not inline on every primary row).
+- **No left accent bar.** Category identity is the **colour-tint fill** (§0.1 / §5.5) — the 4px
+  left-border accent bar is **not used** anywhere (parent or sub rows); neither is a colour chip or
+  a connector line. (This prohibition is mirrored in CLAUDE.md §5.11.)
 - **Behaviours:** archiving a parent **archives the whole branch** (no auto-promote, FR-C-005) ·
   **drag** reorders within a level and **onto another parent re-parents** a sub · **2 levels max**
   · expand/collapse animates (§0.7).
@@ -627,7 +647,10 @@ The single create/edit surface for every entity.
 From an account's **⋮ → Add value snapshot** (§8.1). An **`EntityModal<AccountSnapshot>`**
 (two-column, §8.2): **Date** (DatePicker, defaults today) · **Value** (MonetaryValueInput; currency
 defaults to the account's) · **Source** (Dropdown — user options **Manual · Appraisal ·
-Reconciliation** only; `formula` / `computed` / `import` are system-written) · **Notes** (optional).
+Reconciliation** only; `formula` / `computed` / `import` are system-written). The three user
+options are **functionally identical** — all write a user-entered snapshot, processed the same way;
+the choice is only a **provenance label** for audit/history (typed by hand / professional valuation
+/ checked against a statement; ARCH §3.5) · **Notes** (optional).
 The header shows the account's latest snapshot for reference; **Cancel** left / **Save snapshot**
 right (§4.2). Writes an `account_snapshots` row (architecture §3.6).
 
@@ -801,8 +824,9 @@ All open the **same** Viewer, seeded with the launching context's filter:
 A compact inline chart on cards/rows summarising an entity's recent history/usage (account value,
 currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows history.
 - **Form:** axis-less and label-less — pure trend. **Line** for continuous series (account value,
-  FX rate), **bar** for discrete/period series (budget months). Renders the **last N points** of
-  the entity's series (≈12, capped to the card width); the line carries a soft area fill beneath.
+  FX rate), **bar** for discrete/period series (budget months). Renders the **last 12 points** of
+  the entity's series (fewer if fewer exist — never downsampled below the available data); the line
+  carries a soft area fill beneath.
 - **Colour:** the entity's **deterministic identity colour** (§0.1) — so the sparkline matches the
   card's fill/chip and stays consistent under immersive themes (the ramp remap, §0.2).
 - **Latest-point emphasis:** the most recent point gets a small end-dot; an optional **delta
@@ -852,8 +876,9 @@ EntityPage scaffold. **Header:** "Transactions" + info (count · out/in totals i
 for secondary filters (account, person, status, GST/gift, reconciled).
 
 ### 12.1 Columns (desktop)
-checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-line) · **Payer**
-(avatar) · **Category** (filled chip — *colour leads*, anti-rainbow §0.1) · **Currency** (chip) ·
+checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-line) · **Payee**
+(avatar — the `payee_person_id` PersonRef, EDP §3.3; header reads "Payee" to match the data model) ·
+**Category** (filled chip — *colour leads*, anti-rainbow §0.1) · **Currency** (chip) ·
 **Amount** (original, sortable, mono) · **Base SGD** (prominent, sortable, mono) · **status**
 (faint dot) · ⋮.
 - **Currency + Amount + Base are first-class** (the figures that matter most).
@@ -863,7 +888,7 @@ checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-
 - **Shared is the default**; only **exceptions** are flagged — a small icon for *personal (not
   shared)* or *gift* (most expenses are shared).
 - Foreign rows: Base differs from Amount; `fx_delta` shows in the detail/modal.
-- **Column alignment:** a **fixed-width column grid** (table-layout) so Payer / Category /
+- **Column alignment:** a **fixed-width column grid** (table-layout) so Payee / Category /
   Currency / Amount / SGD align cleanly across every row — columns never overlap.
 
 ### 12.2 Sorting — both
@@ -965,7 +990,11 @@ EntityPage scaffold. **Header:** name + info (over/near counts) + **+ New budget
   a **progress bar coloured by health** — green (< threshold) / amber (≥ `alert_threshold_pct`,
   default 80) / red (> 100%) · status ("S$ N left" / "S$ N over") + **alert badge** · a **drill
   affordance** ("N transactions →"). Rollover budgets show a `rollover` hint.
-- **Actuals are computed live**, never stored (FR-B-003); category rollup includes subcategories.
+- **Actuals are computed live**, never stored (FR-B-003).
+- **Subcategory rollup (important).** A budget on a **parent** category counts spending in **all its
+  child categories** too — `actual_spent` is the whole-subtree total, not just events tagged to the
+  parent directly (EDP §8). This is a frequent source of confusion, so it is called out explicitly
+  rather than buried.
 - **3-level drill-down (FR-B-006/007):** card → contributing **transactions** → **subcategory**
   breakdown.
 - **Budget history:** the Viewer (§9) charts **limit vs actual across periods** (FR-B-008 / FR-V-007).
@@ -1018,8 +1047,13 @@ comes from the topbar (§1.1).
   (drag-reorder *on the board*, with live reflow — drag-follow §0.7), an inline **S/M/L size
   control**, and a **remove ✕**. Exiting (`Done`) returns to the static board. Outside edit mode
   the board is read-only (widgets are still clickable to drill in). A ⋮ menu on each widget carries
-  **Resize / Remove / Expand** as the redundant keyboard/a11y path (§5.6). Layout persists per
-  person (`{widget_type, span, order, scope?}[]`).
+  **Resize / Remove / Expand** as the redundant keyboard/a11y path (the ContextMenu, §8.1). Layout
+  persists per person (`{widget_type, span, order, scope?}[]`).
+- **Data loading.** Each widget fetches **its own** data via TanStack Query, keyed by
+  `widget_type` + its `scope` + the active VisualizationFilter + topbar context (Household/member +
+  display currency), against the read-only visualization contracts (`/api/visualizations/...`,
+  EDP §13.5 / ARCH §6.4). No batch endpoint in MVP; the shared query cache de-dupes overlapping
+  widgets.
 - **Widget sizing — discrete spans, resized in place.** In edit mode the S/M/L control rescales
   the widget **live on the grid** (no separate dialog); widgets snap to the responsive grid (same
   `auto-fit` columns as the card grid, §1.3). Three spans:

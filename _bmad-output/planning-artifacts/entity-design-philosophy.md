@@ -189,6 +189,10 @@ fields. It is always stored and rendered as a unit.
   `amount_base = amount`, `fx_delta = 0`.
 - Original `currency` and `amount` are always preserved — never overwritten — so raw
   currency breakdowns remain available for visualisation (§10).
+- `fx_rate_date` is set **once** at rate-resolution time (the `event_date` for a spot lookup, or
+  the historical lookup date for a backfill) and is **immutable** thereafter — a re-FX writes a
+  correction, never mutates it. It is **NULL only when `currency == base_currency`** (no FX
+  applied); for any foreign-currency value it is required (ARCH §3.2).
 
 **Frontend component:** `<MonetaryValue>` — renders the full block. Used inside every entity
 card and modal. Never replicated as ad-hoc amount fields.
@@ -345,6 +349,20 @@ Because a person belongs to at most one household, joining a new household requi
 - Detaches the person from the household (sets `household_id=null`).
 - All the person's data (accounts, events, etc.) is ARCHIVED — not deleted. It remains in the household's dataset but is excluded from active queries.
 - Person can rejoin the same household later (via new invitation) to restore access to their archived data.
+- **Reversible.** Data is preserved.
+
+**Path C: Admin/Owner Removes a Member** (the Members ⋮ → **Remove** action, UX §5.2)
+- Available to Admin and Owner (`require_role(admin)`); the Owner is not removable.
+- **Same data outcome as Path B**, but initiated by another member rather than self: detaches the
+  target person from the household (`household_id=NULL`) and **archives all their data** (kept in
+  the household dataset, excluded from active queries). The `Person` row **survives** — a person is
+  never hard-deleted (only archived), preserving audit-trail integrity.
+- **Invalidates the removed member's sessions**, so on their next request they land on the
+  **"Removed from Household"** page (UX §3); they are **re-invitable**, and re-joining restores
+  access to the archived data.
+- **Distinct from ⋮ Archive/Restore**, which is the in-household lifecycle archive of the Person
+  record (membership and `household_id` intact) — it does not detach or invalidate sessions.
+- Backend: `POST /api/household/members/:id/remove`.
 - **Reversible.** Data is preserved.
 
 **Pending Invitation Flow:**
@@ -1026,6 +1044,11 @@ All entities support the same operation set, exposed uniformly:
 | **Visualize / Expand** | Open the universal Viewer seeded with this entity | MiniSparkline expand + ⋮ (§13.5, UX §9) |
 | **Bulk multi-select** | Generic `useMultiSelect` + BulkActionBar | Ledger + CategoryTree (FR-E-020) |
 
+**Edit/Delete permission — "own" = `created_by`.** A Member may Edit/Delete only rows whose
+`created_by` is them (the person who authored the record); Admin/Owner may act on any. Ownership
+follows the **record's author**, never `payee_person_id` or other attribution — being the payee of
+an admin-created event grants no edit rights. The check is a single shared helper (ARCH §4.10).
+
 ### 13.5 Visualization Architecture (Cross-Cutting)
 
 Visualizations are a **first-class architectural concern**, not a UI feature bolted onto
@@ -1232,8 +1255,8 @@ All enums use `snake_case` for values:
 - `category_type`: `income`, `expense`, `both`
 - `event_source`: `manual`, `csv_import`, `bank_feed` (FinancialEvent provenance — §7.1; recurring provenance is the `linked_recurring_id` FK, not a source value)
 - `snapshot_source`: `manual`, `formula`, `reconciliation`, `appraisal`, `import`, `computed` (§6.2a)
-- `invitation_status`: `pending`, `accepted`, `declined`, `expired`, `revoked` (was `cancelled` — §5.1)
-- `person_density`: `comfortable`, `compact` (§5)
+- `invitation_status` (enum type `InvitationStatus`; **column is `status`** on `household_invitations`, ARCH §3.4): `pending`, `accepted`, `declined`, `expired`, `revoked` (`revoked` is the sole "cancelled" state — §5.1)
+- `person_density` (enum type `DensityEnum`; **column is `density`** on `persons`, ARCH §3.4): `comfortable`, `compact` (§5)
 - `fx_provider_status`: `ok`, `stale`, `down` (§10a)
 
 > **Backend architecture patterns:** See ARCH §5-7 for DI chain, auth flow, CSRF, session management, and error handling. See CLAUDE.md §6 for common backend gotchas.

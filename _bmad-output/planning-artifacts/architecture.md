@@ -1,22 +1,17 @@
 ---
 title: Financial Tracker — Architecture
 version: 4.0
-status: rebuild-in-progress
 created: 2026-06-11
 authority: >
   The implementation contract for the backend, security model, data model, and
-  infrastructure. Where this document describes an existing mechanism, it is
-  documented FROM SOURCE — the code is ground truth, not intention. Feature-level
-  API contracts (entities, events, visualizations) are deferred to Phase 3 and
-  co-designed with the UX specification.
-supersedes: architecture-legacy.md (v3, archived 2026-06-11)
+  infrastructure. Feature-level API contracts (entities, events, visualizations) are
+  specified per story in epics.md, co-designed with the UX specification.
 ---
 
-# Financial Tracker — Architecture (v4 rebuild)
+# Financial Tracker — Architecture
 
-> **Stand-alone, greenfield-buildable spec.** Every section is re-implementable with NO access
-> to any existing codebase. `file:line` citations are **provenance only** ("this pattern was
-> verified against …") — never the spec itself. The spec *is* the prose, schemas, algorithms,
+> **Stand-alone, greenfield-buildable spec.** This document assumes no existing code and
+> describes the system to be built from zero. The spec *is* the prose, schemas, algorithms,
 > and contracts here, which stand alone. Build top-to-bottom in this order:
 >
 > 1. **Foundational Stack Decisions** — the tech choices everything else assumes
@@ -25,35 +20,21 @@ supersedes: architecture-legacy.md (v3, archived 2026-06-11)
 > 4. **Backend Application Architecture** — layering, DI, error contract, audit
 > 5. **Infrastructure & Operations** — Cloud Run, secrets, jobs, FX fetch, backups
 > 6. **Frontend Architecture Skeleton** — app shell, state, API client
-> 7. **Status & cleanup register** — the decided code changes to land with their features
+> 7. **Build status** — what each part requires
 >
-> Tags: **(as-built)** = verified against the prior working implementation; **(new)** = a decided
-> addition. A v3 of this document is archived at `architecture-legacy.md` for history only — it is
-> not part of the build.
-
 ---
 
 ## 0. Document Conventions & Authority
 
-**This document is a contract, not prose.** Every statement is either:
-- **(as-built)** — verified against the **archived reference implementation** (a prior working
-  build, now retired). The cited file/line records where the pattern was confirmed; the prose
-  here is the spec and stands alone (see provenance note below). Treat these as proven designs to
-  re-implement from zero, not as "go read the code."
-- **(new)** — a decided addition that was never in the reference build. These carry a one-line
-  rationale and are authoritative.
+**This document is a contract, not prose.** It is a greenfield specification: it assumes no
+existing code and describes the system to be built from zero. The specification is the prose,
+schemas (DDL), algorithms (numbered steps), and contracts (request/response shapes) in this
+document — all of which stand alone.
 
-**Scope of this document:** the proven, stable layers — stack, auth, security, data model, backend
-layering, infrastructure, frontend skeleton. **Per-feature API request/response contracts**
+**Scope of this document:** the foundational, stable layers — stack, auth, security, data model,
+backend layering, infrastructure, frontend skeleton. **Per-feature API request/response contracts**
 (entities, events, budgets, currencies, visualizations) are specified **per story in `epics.md`**,
 alongside the screen that consumes each one, so data shape and UI are pinned together.
-
-**Citations are provenance, not the spec.** `file.py:line` references record where a
-mechanism *currently* lives and how the spec was *verified* against reality. They are
-**not** the specification — an agent building from zero has no such files. The
-specification is the prose, schemas (DDL), algorithms (numbered steps), and contracts
-(request/response shapes) in this document, all of which must stand alone. If a citation
-were deleted, the spec must remain fully buildable.
 
 ---
 
@@ -109,7 +90,7 @@ From the brief and PRD, non-negotiable:
 - **Alternatives rejected:** Postgres/Cloud SQL (recurring cost, violates C1; warranted only
   on the multi-tenant SaaS path); Firestore (document model fights the relational entity
   hierarchy and exact-decimal money).
-- **Known consequence:** writes serialize; the auth sliding-window write (§2.14) and any
+- **Known consequence:** writes serialize; the auth sliding-window write (§2.13) and any
   hot-write path must stay modest. **Migration trigger to Postgres:** the day multi-tenant
   SaaS (post-MVP) begins. The ORM choice (§1.4) keeps that migration mechanical.
 
@@ -137,22 +118,21 @@ From the brief and PRD, non-negotiable:
 - **Why:** C3 + the security posture argued in §1 (revocable sessions, nothing sensitive in
   the browser).
 - **Alternatives rejected:** JWT access tokens (revocation is hard; XSS exfiltration risk);
-  Firebase Auth (vendor lock-in, another dependency for a 4-user app); **`authlib`**
-  (installed but **unused** — the raw `httpx` + `google-auth` path is simpler and is what
-  works; `authlib` should be **removed** from requirements — added to the §2.13 sweep).
+  Firebase Auth (vendor lock-in, another dependency for a 4-user app); `authlib` (the raw
+  `httpx` + `google-auth` path is simpler — do not add `authlib`).
 
-### 1.7 Background jobs → **APScheduler (MVP) with an explicit scale-to-zero caveat**
+### 1.7 Background jobs → **Cloud Scheduler → authenticated HTTP job endpoints**
 
-- **Decision:** APScheduler with a persisted job store for MVP (currency refresh, alerts,
-  budget rollover, monthly snapshots, backup).
-- **Why:** simplest single-process scheduler; no extra infra (C1).
-- **Honest caveat (from C1's scale-to-zero):** an in-process scheduler does **not** fire
-  while the container is scaled to zero. For MVP single-household use this is acceptable
-  (the container is usually warm during waking hours, and jobs are idempotent/catch-up on
-  next start). **Post-MVP / reliability:** move triggers to **Cloud Scheduler → HTTP
-  endpoint** so jobs fire regardless of instance state. Flagged in the brief's risks and the
-  post-MVP doc; the Infrastructure part specifies the catch-up-on-start behaviour that makes
-  the MVP version safe.
+- **Decision:** managed **Cloud Scheduler** (cron) calls authenticated `/jobs/*` HTTP endpoints
+  on the service (currency refresh, recurring processing, alerts, budget rollover, monthly
+  snapshots, backup). Each call wakes the instance, runs the job, then it scales back down.
+- **Why:** `min-instances=0` (C1) means an **in-process** scheduler does **not** fire while the
+  container is scaled to zero — so the trigger must come from outside the instance. Cloud
+  Scheduler is managed, free at this volume, and fires regardless of instance state.
+- **What makes it safe:** every job endpoint is **idempotent and catch-up-aware** (processes
+  everything due since `last_processed_at`, not just "today"), so a missed window self-heals on
+  the next run. Full job table + auth in §5.6. (An in-process scheduler may be registered for
+  local/warm-dev convenience, but Cloud Scheduler is the source of truth.)
 
 ### 1.8 Frontend → **React 19 + Vite + TypeScript (strict)**
 
@@ -187,7 +167,7 @@ From the brief and PRD, non-negotiable:
 
 `react-router-dom` (routing + guards) · `lucide-react` (icons) · `date-fns` (the
 `DD-MM-YYYY` ⇄ ISO display/transport rule, FR-V-010) · `httpx` (server HTTP) ·
-`apscheduler` · `slowapi` (per-IP rate limiting). Test/quality: `pytest`/`pytest-asyncio`,
+`slowapi` (per-IP rate limiting). Test/quality: `pytest`/`pytest-asyncio`,
 `vitest` + Testing Library, `playwright` (E2E), `ruff` (lint/format), `bandit` +
 `pip-audit` (security/CVE).
 
@@ -201,7 +181,7 @@ From the brief and PRD, non-negotiable:
 | ORM / migration | SQLAlchemy 2.0 async + Alembic | C5, portability |
 | Money | `Decimal` / `NUMERIC(15,4)` | C5 |
 | AuthN | Google OAuth + server sessions | C3, §1 |
-| Jobs | APScheduler → (post-MVP) Cloud Scheduler | C1 + reliability |
+| Jobs | Cloud Scheduler → HTTP job endpoints | C1 + reliability |
 | Frontend | React 19 + Vite + strict TS | C6, C7 |
 | Styling | Tailwind v4, token-first | C7 |
 | State | Zustand + TanStack Query | fit-to-purpose |
@@ -210,17 +190,14 @@ From the brief and PRD, non-negotiable:
 
 ## 2. Authentication & Security
 
-The authentication subsystem **works today** and is the most-proven part of the system.
-The v4 rule for it: document the real mechanism exactly, change only what is explicitly
-decided. Section 1.7 (`approved_owners`) is the single decided addition; everything else
-is as-built.
+The authentication subsystem is the security backbone of the application. This section is
+the authoritative specification for it.
 
-### 2.1 Middleware Stack — what actually runs *(as-built)*
+### 2.1 Middleware Stack
 
 Auth and household context are **NOT middleware.** They are resolved by FastAPI
-dependencies, per route. The ASGI middleware stack is registered in
-[main.py:161-164](backend/main.py:161). Starlette runs middleware LIFO (last registered =
-outermost = runs first), so the real execution order is:
+dependencies, per route. The ASGI middleware stack is registered on the app, and Starlette
+runs middleware LIFO (last registered = outermost = runs first), so the execution order is:
 
 ```
 SecurityHeaders  →  DevBypass  →  CSRF  →  SlowAPI (rate-limit)  →  route handler
@@ -229,62 +206,96 @@ SecurityHeaders  →  DevBypass  →  CSRF  →  SlowAPI (rate-limit)  →  rout
                                           get_household_id  ───────────┘  (FastAPI dependency)
 ```
 
-**Why auth is a dependency, not middleware:** the original design resolved auth in
-middleware and stashed it on ASGI `scope["state"]`. State propagation across middleware
-layers was unreliable and was a source of bugs. The working design resolves auth inside
-`get_current_person`, which does its own DB lookup and does not depend on upstream
-middleware having populated scope state ([dependencies.py:45-89](backend/dependencies.py:45)).
+**Why auth is a dependency, not middleware:** resolving auth in middleware and stashing it
+on ASGI `scope["state"]` makes state propagation across middleware layers unreliable. Auth
+is therefore resolved inside `get_current_person`, which does its own DB lookup and does not
+depend on any upstream middleware having populated scope state. There is no household
+middleware — household scoping is a dependency (`get_household_id`), never a middleware.
 
-> **Decommissioned:** `household_middleware.py` no longer exists. Any doc or comment
-> describing an "Auth → Household → CSRF" *middleware* chain is stale.
+**On the CSRF middleware reading the session (not a contradiction).** The CSRF middleware does
+perform the single per-request `validate_session()` *read* — it has to, because it needs the
+session's `csrf_token` to compare — and stashes the `(person, session)` tuple on
+`request.state.auth` (§2.4). That is a transport-layer *read*, not the authorization *decision*:
+"auth is not middleware" refers to the authZ decision and household scoping, which remain
+dependencies (`get_current_person` reads `request.state.auth` if present; `get_household_id`
+enforces scope). The middleware never decides access — it only enforces the CSRF token on
+mutations and primes the per-request session cache.
 
-### 2.2 OAuth Flow *(as-built)*
+### 2.2 OAuth Flow
 
 **Authorization Code flow with a confidential client** (`client_secret`). **Not PKCE** —
 PKCE is for public clients that cannot hold a secret; this backend is a confidential
 server-side client and uses the secret directly, which is the correct choice.
-CSRF protection of the OAuth round-trip is an **HMAC-signed `oauth_state` cookie**
-([auth_service.py:75-94](backend/services/auth_service.py:75)).
+CSRF protection of the OAuth round-trip is an **HMAC-signed `oauth_state` cookie**.
 
 | Step | Endpoint | Behaviour |
 |---|---|---|
-| 1 | `GET /auth/login` | Generate random state, HMAC-sign with `SESSION_SECRET`, set `oauth_state` cookie (HttpOnly, SameSite=Lax, 10-min TTL, path `/auth/callback`), 302 → Google. [auth.py:39-60](backend/routes/auth.py:39) |
-| 2 | `GET /auth/callback` | Verify signed state == returned state; exchange code (+`client_secret`) for tokens; validate ID token via `google-auth` (audience + signature + expiry, 10s skew); `get_or_create_person`; `seed_household_if_needed`; `create_session`; set `session_id` cookie; 302 → frontend. [auth.py:68-151](backend/routes/auth.py:68) |
+| 1 | `GET /auth/login` | Generate random state, HMAC-sign with `SESSION_SECRET`, set `oauth_state` cookie (HttpOnly, SameSite=Lax, 10-min TTL, path `/auth/callback`), 302 → Google. |
+| 2 | `GET /auth/callback` | Verify signed state == returned state; exchange code (+`client_secret`) for tokens; validate ID token via `google-auth` (audience + signature + expiry, 10s skew); **require `email_verified is True`** before trusting the email; `get_or_create_person`; `seed_household_if_needed`; `create_session`; set `session_id` cookie; 302 → frontend. |
 | — | failure | Any failure 302 → `{FRONTEND_URL}/login?error=oauth_error` (or `?error=not_invited`). Never a 500 to the user. |
 
 Scopes requested: `openid email profile`. Prompt: `select_account`.
-The ID-token audience is validated against `GOOGLE_CLIENT_ID`
-([auth_service.py:136-147](backend/services/auth_service.py:136)).
+The ID-token audience is validated against `GOOGLE_CLIENT_ID`.
 
-### 2.3 Sessions *(as-built)*
+**Post-callback token ordering (constraint).** The callback's 302 lands the SPA, which then
+calls `GET /auth/me` (a CSRF-exempt GET) to obtain the auth payload **including `csrfToken`**. The
+frontend has no CSRF token until `/auth/me` resolves, so it **must not issue any mutation before
+`/auth/me` completes**. `authStore.setAuth()` gates the app on this call, so in practice the first
+mutation can only fire afterward — but the ordering is a hard requirement, not an incidental.
 
-Server-side sessions in the `sessions` table ([person.py:71-97](backend/models/person.py:71)).
-The session id is an opaque UUID delivered in a cookie.
+### 2.3 Sessions
+
+Server-side sessions live in the `sessions` table. The session id is an opaque UUID
+delivered in a cookie.
 
 - **Cookie:** `session_id`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` (off only when
   `DEBUG=true`), `max-age = 30 min`.
 - **Sliding idle window:** every validated request slides `last_activity_at = now` and
-  `expires_at = now + 30 min`. Idle > 30 min → session rejected
-  ([auth_middleware.py:96-104](backend/middleware/auth_middleware.py:96)).
+  `expires_at = now + 30 min`. Idle > 30 min → session rejected.
+- **The cookie `max-age` must slide too (REQUIRED).** Every validated response **re-sends**
+  `Set-Cookie: session_id=…; Max-Age=1800` with the same attributes, so the browser cookie's
+  lifetime tracks the DB `expires_at`. Without this the browser would discard the cookie 30 min
+  after *login* regardless of continued activity, logging an active user out mid-session. The
+  re-set is emitted from the same place that performs the sliding-window write (the validated
+  request path), not only at login.
 - **Columns:** `id, person_id, created_at, expires_at, last_activity_at, csrf_token
   (unique), ip_address (String(45), IPv6-safe), user_agent`.
 - `Session` inherits `Base` directly — **no `household_id`, no audit fields.** To scope a
   session to a household, join `Session → Person → Household` via `person_id`.
 
-**Cookie-over-header resolution:** `get_current_person` and both middlewares read the
+**Cookie-over-header resolution:** `get_current_person` and the middlewares read the
 session id from the cookie first, then fall back to an `X-Session-Token` header. The
 header path exists **only** for the dev-bypass flow (the Vite proxy strips `Set-Cookie`
-in local dev). In production the cookie is always used and the header is never sent
-([dependencies.py:59-68](backend/dependencies.py:59)).
+in local dev). In production the cookie is always used and the header is never sent.
 
-### 2.4 CSRF *(as-built — design confirmed)*
+### 2.4 CSRF
 
 **One synchronizer token per session, stored on the session row. No rotation.**
 Mutating methods (POST/PUT/PATCH/DELETE) require an `X-CSRF-Token` header matching the
-session's stored `csrf_token`; safe methods (GET/HEAD/OPTIONS) and skip-listed paths
-bypass ([csrf_middleware.py:49-104](backend/middleware/csrf_middleware.py:49)). Expired
-sessions are rejected even with a correct token
-([csrf_middleware.py:126-131](backend/middleware/csrf_middleware.py:126)).
+session's stored `csrf_token`, compared with a constant-time check (`hmac.compare_digest`);
+safe methods (GET/HEAD/OPTIONS) and skip-listed paths bypass. Expired sessions are rejected
+even with a correct token.
+
+**CSRF-exempt paths (the skip-list, explicit):** the CSRF check is bypassed for —
+(a) the all-middleware skip prefixes in §2.11 (`/health`, `/static/`, `/assets/`, `/docs/`,
+`/redoc/`, `/openapi.json`); (b) the public auth paths `/auth/login`, `/auth/callback`,
+`/auth/dev-login` (they are GETs that mint their own session and have no prior token); and
+(c) the job endpoints `/jobs/*` (machine-to-machine, authenticated by §5.6 job auth, never
+browser-originated). All other mutating routes require the token.
+
+**Single session validation per request — no double-lookup, no write conflict (resolved).**
+The CSRF middleware and `get_current_person` must **not** each independently call
+`validate_session()`; on SQLite two connections sliding the same session row in one request can
+collide (`database is locked`) and waste a round-trip. The contract:
+- `validate_session()` runs **once per request**, in the CSRF middleware (the first component
+  that needs the session — it must read `csrf_token`). It performs the sliding-window write and
+  stashes the result on **`request.state.auth`** as an `(person, session)` tuple — the single
+  agreed key.
+- `get_current_person` **reads `request.state.auth`** if present and only falls back to calling
+  `validate_session()` itself when the key is absent (e.g. a GET that skipped CSRF). It never
+  re-slides a session already validated this request.
+
+This supersedes the "looked up twice in separate connections" note in §2.13.
 
 **Design rationale (decided):** a per-session synchronizer token is the OWASP-endorsed
 sufficient defense. Per-request rotation is rejected because it breaks concurrent
@@ -293,63 +304,66 @@ for negligible security gain over the HttpOnly + SameSite=Lax cookie that is the
 defense. A fresh token is minted only at a trust boundary — i.e. when a new session is
 created at login. There is no `X-New-CSRF-Token` response header.
 
-### 2.5 Dev Auth Bypass *(as-built)*
+### 2.5 Dev Auth Bypass
 
-`DevBypassMiddleware` ([auth_middleware.py:155-222](backend/middleware/auth_middleware.py:155))
-auto-authenticates **only** when ALL hold: `AUTH_BYPASS_ENABLED=true`, the request is
-HTTP from a localhost client (`127.0.0.1`/`::1`/`localhost`), and no session cookie/header
-is already present. It then injects a fixed dev session
+`DevBypassMiddleware` auto-authenticates **only** when ALL hold: `AUTH_BYPASS_ENABLED=true`,
+the request is HTTP from a localhost client (`127.0.0.1`/`::1`/`localhost`), and no session
+cookie/header is already present. It then injects a fixed dev session
 (`google_sub=dev-bypass-user-001`, `user_agent="dev-bypass"`, 24-hour expiry, exempt from
 the 30-min staleness check) and adds `Set-Cookie` + `X-Session-Id` to the response.
 
+**It persists real rows (clarified).** On first activation the middleware **upserts a dev
+`Person`** (`google_sub=dev-bypass-user-001`, seeded through the normal
+`get_or_create_person` + `seed_household_if_needed` path so it lands in a real household) **and
+inserts a dev `Session` row** (`user_agent="dev-bypass"`). Both are real DB rows — so
+`get_current_person`/`validate_session` find them with their ordinary lookups (no mock object,
+no special-case in the dependency). The dev rows persist across restarts; the fail-safe in §2.14.B
+step 6 is what neutralizes them once the flag is turned off.
+
 - **Inert by default** — does nothing when the flag is false.
-- **Fail-safe on flag-off:** `validate_session` actively **rejects** any session whose
+- **Fail-safe on flag-off:** session validation actively **rejects** any session whose
   `user_agent == "dev-bypass"` while `AUTH_BYPASS_ENABLED=false`, so a stale dev cookie in
-  a browser cannot authenticate after bypass is disabled
-  ([auth_middleware.py:90-95](backend/middleware/auth_middleware.py:90)).
+  a browser cannot authenticate after bypass is disabled.
 - **`POST /auth/dev-login`** returns the same `/auth/me`-shaped payload and `404`s when the
-  flag is off ([auth.py:269-322](backend/routes/auth.py:269)).
+  flag is off.
 - `/auth/login`, `/auth/callback`, `/auth/dev-login` are excluded from the bypass
   (they create their own sessions).
 
-> **Production guard:** `create_app` logs `CRITICAL` if `AUTH_BYPASS_ENABLED` is true while
-> `ENV != "development"` ([main.py:147-151](backend/main.py:147)).
+> **Production guard:** the app factory logs `CRITICAL` if `AUTH_BYPASS_ENABLED` is true
+> while `ENV != "development"`.
 
-### 2.6 Identity & Household Seeding *(as-built, except the §2.7 gate)*
+### 2.6 Identity & Household Seeding
 
-`get_or_create_person` ([auth_service.py:155-226](backend/services/auth_service.py:155)):
-- Match by `google_sub` (stable, unique). Fallback: case-insensitive email match —
-  an **intentional account merge** so a user rotating Google accounts but keeping their
-  email lands on their existing `Person` rather than a duplicate.
+`get_or_create_person`:
+- Match by `google_sub` (stable, unique). Fallback: case-insensitive match on a
+  **verified** email — an **intentional account merge** so a user rotating Google accounts
+  but keeping their email lands on their existing `Person` rather than a duplicate. The
+  email-merge fallback applies only when `email_verified is True`.
 - New persons are created with a **pre-generated UUID** (`id=uuid4()` in Python, before
   flush) because `seed_household_if_needed` passes `person.id` into
   `Household(created_by=...)` before the person row is inserted.
 
-`seed_household_if_needed` ([auth_service.py:298-341](backend/services/auth_service.py:298))
-runs **after** `get_or_create_person` and **before** `create_session`. Priority:
+`seed_household_if_needed` runs **after** `get_or_create_person` and **before**
+`create_session`. Priority:
 
 1. `person.household_id` already set → return.
 2. **Active pending invitation** for this email exists → return, leaving `household_id`
    NULL. *This is intentional:* the session is created with a NULL household and the
    frontend renders the PendingInvitationDialog. A NULL-household session is **not a bug**.
-3. *(v4 gate — see §2.7)* email ∈ active `approved_owners` → create + seed a household,
-   `role=owner`.
+3. email ∈ active `approved_owners` (§2.7) → create + seed a household, `role=owner`.
 4. else → raise `NotInvitedError`. The `Person` row is **still persisted** (valid Google
    identity, no rights); no session is created; callback redirects to `?error=not_invited`.
 
 `_create_and_seed_household` creates the `Household` (default `SGD` / `Asia/Singapore`),
 flushes (to satisfy the `Household.created_by → persons.id` FK ordering), sets
 `person.household_id` + `role=owner`, seeds the base `SGD` `Currency`, and seeds default
-categories via `category_service.seed_default_categories`
-([auth_service.py:250-290](backend/services/auth_service.py:250)).
+categories via `category_service.seed_default_categories`.
 
-### 2.7 Approved Owners *(new — replaces the first-person bootstrap heuristic)*
+### 2.7 Approved Owners
 
 **Decision:** household-creation rights are governed by an explicit allowlist table, not
-by a "first real person wins" heuristic. This removes the fragile `recheck` branch at
-[auth_service.py:213-224](backend/services/auth_service.py:213) and provides the
-provisioning surface needed for eventual commercialization (one approved row ≈ one
-provisioned/paying account).
+by a "first real person wins" heuristic. An allowlist provides the provisioning surface
+needed for eventual commercialization (one approved row ≈ one provisioned/paying account).
 
 **Table `approved_owners`:**
 
@@ -359,7 +373,7 @@ provisioned/paying account).
 | `email` | String(320), **unique, case-insensitive** | enforce via `func.lower(email)` unique index |
 | `label` | String, nullable | human note — "Founder", "Customer #1234" |
 | `is_active` | Boolean, default `true` | deactivate without deleting (preserves history) |
-| `added_by` | UUID, nullable, FK `persons.id` | NULL = system/env-seeded |
+| `added_by` | UUID, nullable, FK `persons.id` | NULL = system/env-seeded. **Cross-household by design:** the adder is a `Person` inside some household, while `approved_owners` is global/pre-household — this FK intentionally crosses that boundary. Not a bug. |
 | `created_at` / `updated_at` | datetime | |
 
 *Reserved for commercialization (NOT MVP, do not build yet):* `plan_tier`,
@@ -377,32 +391,40 @@ present in `approved_owners`. This keeps local dev zero-touch (put your email in
 and is SaaS-ready (rows added later via an owner-only admin endpoint). **No code path
 depends on "the first person."**
 
+**Idempotent and add-only.** The hook **only inserts** missing emails — it never updates or
+removes existing `approved_owners` rows. Consequences: (a) re-running it (every cold start, incl.
+after a GCS restore) is safe; (b) **removing an email from `BOOTSTRAP_OWNER_EMAILS` does not
+revoke** an already-seeded owner — deactivate via `is_active=false` (or delete the row) instead.
+The env var is a seed list, not a declarative source of truth.
+
 **Future management surface (reserved, not MVP):** an owner-only `/api/approved-owners`
 CRUD endpoint. Until then, the allowlist is managed via `BOOTSTRAP_OWNER_EMAILS` + direct
 DB rows.
 
-**Migration impact:** a new Alembic revision adds `approved_owners`; the existing
-`can_create_household` column on `persons` is retained (semantics change from "bootstrap
-winner" to "approved-email cache"). The bootstrap-count logic in `get_or_create_person`
-([auth_service.py:186-224](backend/services/auth_service.py:186)) is removed; new persons
-default `can_create_household=False` and the flag is set only by the approved-owners match.
+**Schema:** the `approved_owners` table is created in the initial Alembic revision. The
+`can_create_household` column on `persons` is a denormalized cache of approved-email status:
+new persons default `can_create_household=False`, and the flag is set only by the
+approved-owners match in `seed_household_if_needed`.
 
-### 2.8 Household Scoping & Roles *(as-built)*
+### 2.8 Household Scoping & Roles
 
-- `get_household_id` returns `person.household_id`, raising 401 if NULL
-  ([dependencies.py:96-109](backend/dependencies.py:96)). Services receive `household_id`
-  as their first positional argument — **never trust a request body for scoping.**
-- `_get_or_404` fetches an entity by PK **and** `household_id`, raising 404 if it belongs
-  to another household — cross-household access is impossible at the data layer
-  ([dependencies.py:148-180](backend/dependencies.py:148)).
+- `get_household_id` returns `person.household_id`, raising 401 if NULL. Services receive
+  `household_id` as their first positional argument — **never trust a request body for
+  scoping.**
+- **`/auth/me` and `/auth/logout` must NOT depend on `get_household_id`** — they depend only on
+  `get_current_person`. A pending-invitation user has a valid session with `household_id = NULL`
+  (§2.6 step 2, §2.12); `/auth/me` returns `household: null` so the frontend can render the
+  `PendingInvitationDialog`. If `/auth/me` required `get_household_id` it would 401 these users and
+  the dialog could never load. Every **household-scoped** route (accounts, events, budgets, …)
+  *does* depend on `get_household_id` and correctly 401s a NULL-household session.
+- `get_or_404` fetches an entity by PK **and** `household_id`, raising 404 if it belongs
+  to another household — cross-household access is impossible at the data layer.
 - `require_role(min)` enforces a minimum role against the hierarchy
-  `{member:1, admin:2, owner:3}`, 403 below threshold
-  ([dependencies.py:116-141](backend/dependencies.py:116)).
+  `{member:1, admin:2, owner:3}`, 403 below threshold.
 
-### 2.9 Security Headers & CSP *(as-built)*
+### 2.9 Security Headers & CSP
 
-`SecurityHeadersMiddleware` (pure ASGI, outermost) sets on every response
-([main.py:39-81](backend/main.py:39)):
+`SecurityHeadersMiddleware` (pure ASGI, outermost) sets on every response:
 
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`
@@ -413,24 +435,35 @@ default `can_create_household=False` and the flag is set only by the approved-ow
   https://lh3.googleusercontent.com` (Google profile pictures); `connect-src 'self'`;
   `frame-ancestors 'none'`; `base-uri 'self'`; `form-action 'self'`.
 
-### 2.10 Rate Limiting *(as-built)*
+### 2.10 Rate Limiting
 
-`slowapi` limiter wired via `app.state.limiter` + `SlowAPIMiddleware`
-([main.py:161-167](backend/main.py:161), [limiter.py](backend/limiter.py)). Auth
-endpoints carry `@limiter.limit("20/minute")`. `RateLimitExceeded` → `429` with the
-standard error envelope.
+`slowapi` limiter wired via `app.state.limiter` + `SlowAPIMiddleware`. Limits are **per client
+IP**. The OAuth-initiating endpoints `/auth/login`, `/auth/callback`, `/auth/dev-login` carry
+`@limiter.limit("20/minute")`. `RateLimitExceeded` → `429` with the standard error envelope.
 
-### 2.11 Public / Skip Paths *(as-built)*
+- **`/auth/me` is exempt** from the auth limit — it fires on every page load / route change /
+  query refetch, so a 20/min cap would throttle normal use. It already requires a valid session,
+  which is its own abuse ceiling.
+- **`/jobs/*`** are not IP-rate-limited (they are machine-triggered and protected by job auth,
+  §5.6).
+- **All other authenticated API routes** carry no numeric limiter in MVP. This is an **explicit
+  accepted risk**, not an oversight: the MVP trust model is a handful of known, invited household
+  members behind a valid session — there is no anonymous attack surface on these routes, and the
+  per-session DB-write serialization (a concurrency constraint, *not* a rate limit) bounds
+  steady-state load. The **post-MVP hook** is a per-session / per-IP default limit added when the
+  app goes multi-tenant (cross-ref the scaling note, §2.13); until then the session requirement is
+  the abuse ceiling.
 
-[auth_middleware.py:27-50](backend/middleware/auth_middleware.py:27):
+### 2.11 Public / Skip Paths
+
 - **Skip prefixes** (bypass all middleware): `/health`, `/static/`, `/assets/`, `/docs/`,
   `/redoc/`, `/openapi.json`.
 - **Public auth paths** (no session required): `/auth/login`, `/auth/callback`,
   `/auth/dev-login`. Note `/auth/me` and `/auth/logout` **require** auth.
 
-### 2.12 Invariants & Gotchas — do not "fix" these *(as-built)*
+### 2.12 Invariants — correct by design
 
-These are correct-by-design and were each a past source of churn:
+These are correct-by-design; do not "fix" them:
 
 1. **NULL-household session is valid** — a pending-invitation user gets a session with no
    household so the frontend can show the dialog (§2.6 step 2).
@@ -438,40 +471,27 @@ These are correct-by-design and were each a past source of churn:
    not deleted. On re-login they re-enter the seed flow (§2.6).
 3. **Dev session rejected when bypass off** (§2.5) — intentional fail-safe.
 4. **Pre-generated UUIDs before flush** (§2.6) — required for the `created_by` FK ordering.
-5. **`commit()` expires attributes** — `validate_session` refreshes both `person` and
-   `session` objects after commit so callers can read columns without a live session
-   ([auth_middleware.py:113-118](backend/middleware/auth_middleware.py:113)).
+5. **`commit()` expires attributes** — session validation refreshes both `person` and
+   `session` objects after commit so callers can read columns without a live session.
 6. **Cookie takes priority over header** everywhere (§2.3).
 
-### 2.13 Required Implementation Changes (v4) — atomic with code
+### 2.13 Known Scaling Note (not an MVP concern)
 
-These are the **decided** deltas to the as-built auth code. Each must land in the same
-commit as its dependent work — do not partially apply.
-
-| # | Change | Why | Atomic with |
-|---|---|---|---|
-| 1 | **Verify `email_verified`.** In `get_or_create_person`, require `claims.get("email_verified") is True` before trusting the email, and restrict the case-insensitive email-merge fallback to verified emails only. | 🔴 Security. Google ID tokens can carry an unverified email; the merge fallback ([auth_service.py:179-184](backend/services/auth_service.py:179)) turns that into an account-takeover vector. | Standalone — may be done any time; smallest, highest-value fix. |
-| 2 | **Add `approved_owners` + `BOOTSTRAP_OWNER_EMAILS` seeding** (§2.7) and **remove** the bootstrap-count + `recheck` logic in `get_or_create_person` ([auth_service.py:186-224](backend/services/auth_service.py:186)). New persons default `can_create_household=False`. | Replaces the fragile first-person heuristic; provisioning surface for commercialization. | Single commit — auth breaks if the bootstrap is removed before the table exists. |
-| 3 | **Align CSRF comparison to `hmac.compare_digest`** ([csrf_middleware.py:133](backend/middleware/csrf_middleware.py:133)). | 🟡 Rigor/consistency — OAuth state already uses constant-time compare. Negligible practical risk. | Standalone, trivial. |
-| 4 | **Code comments match reality:** the built `main.py` module docstring must state the real middleware order, and any `ARCH §X.Y` comment references use this document's numbering. | Comments must not contradict the real design. | Standalone; trivial. |
-
-### 2.14 Known Scaling Note (not an MVP fix)
-
-The auth path is correct but not optimized; these matter only at multi-tenant SaaS scale,
-**not** at household scale, and are deliberately left as-is for MVP:
+The auth path is correct but not optimized; this matters only at multi-tenant SaaS scale,
+**not** at household scale, and is intentionally left simple for MVP:
 - Every authenticated request performs a DB **write** (sliding-window update of
   `expires_at`/`last_activity_at`). On SQLite, writes serialize.
-- A mutating request looks up the session **twice** in separate connections
-  (`CSRFMiddleware._validate_csrf` and `get_current_person → validate_session`).
 
-When scaling: consolidate to a single session lookup per request and throttle the
-sliding-window write (e.g. only when `last_activity_at` is older than ~60s).
+> The former "session looked up **twice** in separate connections" concern is **resolved**, not
+> deferred: §2.4 mandates a single `validate_session()` per request stashed on
+> `request.state.auth`. The remaining item below is the only open scaling note.
 
-### 2.15 Stand-Alone Implementation Artifacts
+When scaling: throttle the sliding-window write (e.g. only when `last_activity_at` is older than
+~60s) so steady-state reads don't each incur a write.
 
-Everything needed to rebuild auth without the source. (Provenance for verification:
-`models/person.py`, `services/auth_service.py`, `middleware/auth_middleware.py`,
-`routes/auth.py`, `config.py`.)
+### 2.14 Stand-Alone Implementation Artifacts
+
+Everything needed to build the auth subsystem from this spec alone.
 
 **A. `sessions` table (logical DDL)**
 
@@ -508,6 +528,13 @@ called by `get_current_person` (auth) and by `CSRFMiddleware` (token check):
 
 Dev sessions use a 24-hour expiry and are exempt from step 7.
 
+> **Steps 5 and 7 are intentionally both present.** For a normal session they are near-equivalent
+> (every slide sets `expires_at = now + 30 min`, so `expires_at < now` ⇔ idle > 30 min). Keeping
+> both is deliberate defense-in-depth: step 5 (`expires_at`) is the absolute cutoff that also
+> catches dev sessions and clock/restore anomalies where `last_activity_at` and `expires_at`
+> disagree (e.g. a DB restored from an older backup); step 7 is the idle rule for non-dev sessions.
+> A rejected session here is also a cleanup candidate (§2.14.F).
+
 **C. `GET /auth/me` response contract** (also returned verbatim by `POST /auth/dev-login`):
 
 ```jsonc
@@ -540,19 +567,35 @@ Any change to this shape requires updating the frontend `authStore.setAuth()` in
 | `ENV` | `development` / non-dev (prod guard) | `development` |
 | `DEBUG` | Controls cookie `Secure` flag + SQL echo | `false` |
 | `FRONTEND_URL` | Redirect target after callback | `http://localhost:5173` |
-| `BOOTSTRAP_OWNER_EMAILS` *(new, §2.7)* | Seed list for `approved_owners` | — |
+| `BOOTSTRAP_OWNER_EMAILS` (§2.7) | Seed list for `approved_owners` | — |
 
-> Cleanup note: the **session lifetime is hardcoded** to a 30-min constant in
-> `auth_service.py`; the `ACCESS_TOKEN_EXPIRE_MINUTES` setting in `config.py` is currently
-> dead. Either wire it through or drop it (added to the §2.13 sweep).
+> The session lifetime is a 30-min constant. Do not add a competing
+> `ACCESS_TOKEN_EXPIRE_MINUTES` setting — there is one source of truth for session length.
+
+**E. `POST /auth/logout`** (requires auth; CSRF-protected like any mutation):
+1. Resolve the current session (via `request.state.auth`, §2.4).
+2. **Hard-delete the session row** (`DELETE FROM sessions WHERE id = :session_id`) — logout is
+   immediate revocation, not a soft flag. Idempotent: a missing row still returns success.
+3. Respond `204 No Content` with `Set-Cookie: session_id=; Max-Age=0; Path=/` (plus the same
+   `HttpOnly`/`SameSite`/`Secure` attributes) to clear the browser cookie.
+4. Google tokens are **not** revoked upstream (the app holds only a server session, no stored
+   refresh token); the local session deletion is the complete logout.
+
+**F. Expired-session cleanup.** Sessions are deleted, never left to accumulate:
+- **Lazy:** `validate_session` may `DELETE` a row it rejects as expired/stale (steps 5/7) instead
+  of leaving it.
+- **Sweep:** the daily `/jobs/alerts` run deletes all sessions with
+  `expires_at < now() - 1 day` as its **first step**, before computing alerts. This is its
+  unambiguous home — no separate scheduler entry and no "dedicated step" elsewhere (see the §5.6
+  job table).
 
 ---
 
 ## 3. Data Model & Schema
 
-Stand-alone and greenfield-buildable. Provenance for verification: `backend/models/*.py`.
-Where a table or column differs from the as-built code, it is tagged **(new)**,
-**(changed)**, or **(removed)** and summarised in the delta table at §3.10.
+The authoritative schema for every table. UUID PKs, household scoping, exact-decimal money,
+and the migration plan (§3.12). This section is the DDL contract; the Entity Design
+Philosophy doc covers the conceptual model behind it.
 
 ### 3.0 Schema Principles (apply to every table)
 
@@ -563,7 +606,11 @@ Where a table or column differs from the as-built code, it is tagged **(new)**,
    (`sessions`, `fx_rate_history`, `audit_logs`, `approved_owners`) — see §3.3.
 3. **Money is `Decimal`**, stored `NUMERIC(15,4)`; FX rates `NUMERIC(10,6)`. No floats, ever.
 4. **Soft-delete by default:** `archived` flag + `archived_at`/`archived_by`; hard delete only
-   for empty entities (no FK references), which produce no audit row.
+   for empty entities (no FK references), which produce no audit row. **One sanctioned
+   exception — household teardown (FR-HH-005):** deleting a household cascades a **hard delete of
+   ALL its rows** (accounts, events, categories, budgets, …) — the account-closure path —
+   bypassing the "hard-delete only if empty" rule. Member `Person` rows survive with
+   `household_id=NULL` (§2.6); do not soft-delete first. See EDP §5.1 Path A.
 5. **Dates** stored/transmitted ISO 8601 (`YYYY-MM-DD`); display `DD-MM-YYYY` is a frontend
    concern (FR-V-010). Timestamps are tz-aware UTC.
 6. **Audit:** every create/update/archive/restore/delete writes an `audit_logs` row
@@ -595,10 +642,14 @@ status        TEXT  NOT NULL DEFAULT 'active', INDEX   -- enum: active|inactive|
 `status` enum = `active | inactive | archived` (lifecycle: active → inactive → archived →
 hard-delete; archived↔active via restore).
 
-### 3.2 `MonetaryValueMixin` — the 7-column money block *(+1 new column)*
+### 3.2 `MonetaryValueMixin` — the money column block
 
-Mixed into any entity that holds a monetary value (`accounts`, `financial_events`). Pure
-column mixin — does not inherit Base.
+Mixed into `financial_events` **only** — the one entity whose row *is* a single monetary value.
+Pure column mixin — does not inherit Base. **Accounts do NOT use this mixin:** an account has no
+single "amount" (its value is the `opening_balance` ledger anchor plus the `account_snapshots`
+series, §3.5), so forcing the `amount NOT NULL` block onto it would be wrong. The flat
+destination-leg columns on a Transfer (`dest_*`, §3.6) and `account_snapshots`' own
+`value`/`currency`/`value_base` columns are likewise standalone, not this mixin (EDP §3.2 carve-out).
 
 ```sql
 currency               VARCHAR(3)    NOT NULL,          -- ISO 4217 of the entered amount
@@ -608,7 +659,7 @@ amount_base_calculated NUMERIC(15,4) NOT NULL,          -- system fill: amount �
 amount_base            NUMERIC(15,4) NOT NULL,          -- user-overridable bank-statement figure
 fx_delta               NUMERIC(15,4) NULL,              -- auto: amount_base_calculated − amount_base
 fee_amount             NUMERIC(15,4) NULL,              -- conversion fee, if any
-fx_rate_date           DATE          NULL,   -- (new) the date the rate applies to; immutable
+fx_rate_date           DATE          NULL,   -- the date the rate applies to; immutable
 ```
 
 **Invariants:**
@@ -616,10 +667,15 @@ fx_rate_date           DATE          NULL,   -- (new) the date the rate applies 
   amount_base_calculated − amount_base`. Positive = bank charged more than the API rate
   (forex loss). Enforced in the model layer, not by the DB.
 - When `currency == base_currency`: `fx_rate = 1`, `fx_delta = 0`, fee fields hidden.
-- **(new) `fx_rate_date`** records *which day's* rate produced `fx_rate`/`amount_base_calculated`,
+- **`fx_rate_date`** records *which day's* rate produced `fx_rate`/`amount_base_calculated`,
   so the annual FX-cost report (post-MVP) and tax-year export use the historical rate, never
-  a recomputed current one (PRD FR-E-009). It pairs with the existing `fx_rate`, which already
-  serves as `fx_rate_used` — no separate column for that is needed.
+  a recomputed current one (PRD FR-E-009). It pairs with `fx_rate`, which serves as
+  `fx_rate_used` — no separate column for that is needed.
+- **`fx_rate_date` population & nullability.** Set **once**, at rate-resolution time, to the date
+  whose rate produced `fx_rate` (the `event_date` for a spot lookup, or the historical lookup
+  date for a backfill); **immutable** thereafter — a later re-FX writes a correcting row, it never
+  mutates this. It is **NULL only when `currency == base_currency`** (no FX applied); for any
+  foreign-currency row it is required (non-NULL).
 
 ### 3.3 Inheritance map — which tables get the audit trail
 
@@ -636,6 +692,12 @@ exist yet at bootstrap).
 via `currency_id`; `audit_logs` deliberately store **plain UUIDs with NO foreign keys** so
 records survive entity/actor deletion; `approved_owners` is global (pre-household).
 
+**Audit coverage of `Base` tables is intentional (resolved 2026-06-13).** Because
+`household_invitations` and `currencies` inherit `Base`, their lifecycle (invite/revoke,
+currency add/remove) is **not written to `audit_logs`** — they are treated as config/technical
+rows, not audited domain entities. This is a deliberate scope decision, not an oversight; do not
+"fix" it by promoting them to BaseEntity without a corresponding requirements change.
+
 ### 3.4 Identity & Access tables
 
 **`households`** — `id, name, base_currency(ISO,def SGD), timezone(IANA,def Asia/Singapore),
@@ -645,85 +707,108 @@ created_at, created_by(UUID,no FK)`. Base currency is immutable after creation i
 **`persons`** (BaseEntity, nullable `household_id`/`created_by`) — adds: `email(320,unique),
 display_name, picture_url, role(owner|admin|member), display_currency(ISO,def SGD),
 default_view(household|personal), google_sub(unique), last_active_at, can_create_household
-(bool)`. **(changed)** `can_create_household` semantics: from "first-person bootstrap winner"
-→ "cache of approved-owner match" (§2.7). **(new, Phase 3)** also adds `theme` (str, def `'base'`; per-person theme per FR-P-003)
+(bool)`. `can_create_household` is a denormalized cache of the approved-owner match (§2.7).
+Also adds `theme` (str, def `'base'`; per-person theme per FR-P-003)
 and `colour` (hex; **fallback** initials-avatar background for payee identity — the Google
-`picture_url` avatar is used first when present). **(new, Phase 3 fold-back, all per-person prefs,
-FR-P-003 / FR-DB-003):** `font` (str, def `'base'`), `density` (`comfortable|compact`, def
+`picture_url` avatar is used first when present). Per-person preference columns
+(FR-P-003 / FR-DB-003): `font` (str, def `'base'`), `density` (`comfortable|compact`, def
 `comfortable`), `reduce_motion` (bool, def false), `notification_prefs` (JSON — per-alert-type
 opt-in map, FR-SYS-007), `dashboard_layout` (JSON — `{widget_type, span, order, scope?}[]`,
 FR-DB-003). Index: `(household_id, email)`.
 
-**`sessions`** (Base) — see §2.15.A (full DDL there). No `household_id`.
+**`sessions`** (Base) — see §2.14.A (full DDL there). No `household_id`.
 
 **`household_invitations`** (Base) — `id, household_id, invited_email(320), invited_by(FK
-persons), created_at, expires_at, accepted_at, status`. **Status enum (changed/aligned):**
-`pending | accepted | declined | revoked | expired`. **Expiry = 7 days** per FR-HH-003
-(verify `household_service` sets 7d — the model docstring's "48h" is stale).
+persons), created_at, expires_at, accepted_at, status`. **Status enum** (type `InvitationStatus`,
+EDP §14.3): `pending | accepted | declined | revoked | expired`. **Expiry = 7 days** per FR-HH-003.
 
-**`approved_owners`** **(new)** (Base, global) — full spec in §2.7:
+> **Token validation has no separate "already-used" state (resolved).** A join token is
+> actionable **only** while `status=pending` (and not past `expires_at`). Validation returns a
+> reason code — `pending` (proceed) vs `invalid` for any non-actionable case
+> (`accepted | declined | revoked | expired`, or unknown token) — and every non-`pending`
+> outcome renders the §5.8 / UX §3 error page. UX §4.1a's "already-used" link is simply an
+> `accepted` (or `declined`) invitation; it needs no enum value of its own.
+
+**`approved_owners`** (Base, global) — full spec in §2.7:
 `id, email(320,unique,case-insensitive), label, is_active(def true), added_by(FK persons,null),
 created_at, updated_at`. Reserved (not MVP): `plan_tier, billing_ref, expires_at`.
 
 ### 3.5 Accounts
 
-**`accounts`** (BaseEntity + MonetaryValueMixin, **STI**, discriminator `account_type` ∈
-`bank|credit_card|capital|asset|insurance`).
+**`accounts`** (BaseEntity, **STI**, discriminator `account_type` ∈
+`bank|credit_card|capital|asset|insurance`). **No `MonetaryValueMixin`** (§3.2): an account has
+no single amount — its value is the `opening_balance`/`opening_balance_date` ledger anchor plus
+the `account_snapshots` series (asset-like current value = latest snapshot, §3.11).
 
-*Shared columns:* `name, account_type, institution, notes`.
-**(new, Phase 3)** `colour` (hex; per-instance brand/identity colour, default = entity-type
-colour). *Reserved, post-MVP:* `brand_image_ref` (logo / card art).
-**(removed)** `month_year` — superseded by `account_snapshots` (§3.6).
-**(new)** ledger-backed only: `opening_balance NUMERIC(15,4) NULL`,
+*Shared columns:* `name, account_type, institution, notes`,
+`colour` (hex; per-instance brand/identity colour, default = entity-type colour).
+*Reserved, post-MVP:* `brand_image_ref` (logo / card art).
+Ledger-backed only: `opening_balance NUMERIC(15,4) NULL`,
 `opening_balance_date DATE NULL` — required for Bank/CreditCard (the anchor for the computed
-running balance, §1-data rule from FR-A-008); NULL for asset-like types.
+running balance, FR-A-008); NULL for asset-like types.
 
 *Subtype columns (all nullable):*
 
 | Subtype | Columns |
 |---|---|
-| bank | `account_number, interest_rate(8,4), interest_frequency` |
-| credit_card | `credit_limit(15,4), billing_day(int), due_day(int), reward_points(int), annual_fee(10,2)` |
-| capital | `investment_type, cost_basis(15,4)` — **(removed)** `current_value`; current value derived from latest `account_snapshot` |
-| asset | `asset_type, purchase_date, purchase_value(15,4), depreciation_formula_id(FK formulas)` |
-| insurance | `policy_type, coverage_types(JSON text), premium_frequency, coverage_amount(15,4), insurer` |
+| bank | `account_number, interest_rate(8,4), interest_frequency, reserved_amount(15,4, null)` — `reserved_amount` is the bank-held emergency reserve, excluded from available balance |
+| credit_card | `credit_limit(15,4), billing_day(int), due_day(int), reward_points(int), annual_fee(10,2), reward_type(enum points\|cashback\|miles\|none), bonus_limit(15,4, null), points_expiry(DATE, null)` |
+| capital | `investment_type, cost_basis(15,4)` — current value derives from the latest `account_snapshot` (no `current_value` column) |
+| asset | `asset_type, registration_no(str, null), purchase_date, purchase_value(15,4), depreciation_formula_id(FK formulas)` — `registration_no` = strata-title no. (property) / plate no. (vehicle) |
+| insurance | `policy_no(str, null), insurer(str), policy_type(enum life\|term\|health), policy_status(enum active\|cancelled — domain status, distinct from record lifecycle), purchase_date, premium_frequency, coverage_death(15,4, null), coverage_tpd(15,4, null), coverage_ci(15,4, null), coverage_early_ci(15,4, null), coverage_personal_accident(15,4, null), coverage_hospital(str, null — ward type or excess text, e.g. "Private" / "$2,000 excess"), surrender_value(15,4, null — life policies), surrender_inquiry_date(DATE, null)` |
 
-**(new) formula assignment columns** (FR-F-003): keep `depreciation_formula_id` (asset);
-**add** `fx_formula_id(FK formulas, null)` for bank/credit_card and `interest_formula_id(FK
+> **Insurance coverage is individual typed columns, not a JSON blob** (resolved 2026-06-13) — the
+> per-coverage amounts (`coverage_death`/`tpd`/`ci`/`early_ci`/`personal_accident`) are first-class
+> nullable columns so they are queryable/sortable and match EDP §6.2. There is **no
+> `coverage_types(JSON)` / `coverage_amount` column** (an earlier draft used those; they are
+> superseded).
+
+**Formula assignment columns** (FR-F-003): `depreciation_formula_id` (asset),
+`fx_formula_id(FK formulas, null)` for bank/credit_card, and `interest_formula_id(FK
 formulas, null)` for capital/asset. Index: `(household_id, account_type)`.
 
-> **current_value (resolved):** `accounts.current_value` is **dropped.** Current value for
-> asset-like accounts (capital, asset, insurance) = the latest `account_snapshot` by date —
-> single source of truth, no drift. `cost_basis` stays (it is the basis, not a current value).
+> **Current value** for asset-like accounts (capital, asset, insurance) is the latest
+> `account_snapshot` by date — single source of truth, no drift. `cost_basis` is the basis,
+> not a current value, and is retained.
 
 **`account_owners`** (Base junction) — composite PK `(account_id, person_id)`, `is_primary,
 added_at`. An account always has ≥1 owner.
 
-**`account_snapshots`** **(changed — generalizes `valuation_records`)** (BaseEntity) — the
-universal per-account value series (FR-A-008):
+**`account_snapshots`** (BaseEntity) — the universal per-account value series (FR-A-008):
 `id, household_id, account_id(FK accounts, INDEX), snapshot_date(DATE), value(15,4),
 currency(3), value_base(15,4), source, formula_id(FK formulas, null), note` + BaseEntity audit.
-**`source` enum:** `manual | formula | reconciliation | appraisal | import | computed`
-(broadened from the old `valuation_records.source`). `import` reserved for bank-feed;
-`computed` is what the monthly scheduler writes (FR-SYS-006). Index: `(account_id, snapshot_date)`.
+**`source` enum:** `manual | formula | reconciliation | appraisal | import | computed`.
+`import` reserved for bank-feed; `computed` is what the monthly scheduler writes (FR-SYS-006).
+The three **user-selectable** values (`manual | reconciliation | appraisal`, UX §8.2a) are
+**stored and processed identically** — all are user-entered snapshots with no behavioural
+difference; the distinct label is a **provenance tag** for audit/reporting (typed by hand /
+checked against a statement / professional valuation). `formula | import | computed` are
+system-written and never user-selectable. Index: `(account_id, snapshot_date)`.
 
-**`recurring_configs`** **(removed)** — account-linked recurring is now a real
-`FinancialEvent` (§3.6). The `financial_events` columns `source_entity_type` +
-`source_entity_id` already model the link back to the originating account, so **no new
-columns** are required; the table is dropped and FR-A-017 creates a recurring-payment event.
+Account-linked recurring is modelled as a `FinancialEvent` (§3.6), not a separate config
+table: the `financial_events` columns `source_entity_type` + `source_entity_id` model the
+link back to the originating account, so FR-A-017 creates a recurring-payment event directly.
 
 ### 3.6 Events
 
 **`financial_events`** (BaseEntity + MonetaryValueMixin, **STI**, discriminator `event_type` ∈
 `transaction|recurring_payment|transfer`).
 
-*Base event columns:* `name, event_date(INDEX), event_type, account_id(FK accounts, null),
+*Base event columns:* `name, event_date(INDEX), event_type,
 payee, transaction_status(pending|completed|cancelled|reconciled, def completed),
 payee_person_id(FK persons), payment_method, category_id(FK categories), transaction_type
 (inflow|outflow|transfer), is_shared_expense(bool), notes, is_gst_claimable(bool),
-is_gift(bool), source_account_id(FK accounts), linked_recurring_id(FK self)`.
-**(new)** `source (manual|csv_import|bank_feed, def manual)`, `external_ref(null)` — provenance
+is_gift(bool), source_account_id(FK accounts, null)` *(the single account link — **no separate
+`account_id` column**, see note below)*`, linked_recurring_id(FK self)`,
+`source (manual|csv_import|bank_feed, def manual)`, `external_ref(null)` — provenance
 (FR-E-001), bank-feed hook.
+
+> **One account link: `source_account_id` (resolved 2026-06-13).** The originating account is
+> `source_account_id` (NULL only for Cash, where `payment_method='cash'`); a Transfer's far leg is
+> `destination_account_id`. There is **no separate `account_id` column** — an earlier draft listed
+> one, but it duplicated `source_account_id` and nothing referenced it (EDP §7.1 and the PRD only
+> know `source_account_id`). Account ledger/history queries (FR-A-007) filter on `source_account_id`
+> (plus `destination_account_id` for incoming transfer legs).
 
 *Transaction columns:* `reconciled(bool), reconciled_at, duplicate_of(FK self)`.
 
@@ -734,7 +819,7 @@ occurrences_generated(int), last_processed_at`.
 
 *Transfer columns:* `destination_account_id(FK accounts), dest_currency, dest_amount(15,4),
 dest_amount_base(15,4), is_debt_repayment(bool), debt_cleared_amount(15,4)`.
-**(note)** transfers inherit `fx_rate`, `fx_rate_date`, `fx_delta` from the mixin (FR-E-017's
+Transfers inherit `fx_rate`, `fx_rate_date`, `fx_delta` from the mixin (FR-E-017's
 forex-loss tracking); the destination leg is captured by `dest_*`. A future remittance metric
 = `amount_base − dest_amount_base`.
 
@@ -745,8 +830,9 @@ forex-loss tracking); the destination leg is captured by `dest_*`. A future remi
 
 **`occurrence_records`** (Base) — `id, recurring_event_id(FK events, INDEX), expected_date,
 occurrence_status(upcoming|processed|skipped|missed|failed), generated_event_id(FK events,
-null), processed_at, notes`. **(changed)** add `manual` to the status enum (FR-E-015 manual
-trigger). Index: `(recurring_event_id, expected_date)`.
+null), processed_at, notes`. A user-triggered run (FR-E-015 manual trigger) records the
+occurrence as `processed` — there is **no separate `manual` status** (resolved 2026-06-13; the
+enum is exactly the five values above, matching EDP §7.3). Index: `(recurring_event_id, expected_date)`.
 
 ### 3.7 Budgets, Categories
 
@@ -763,8 +849,8 @@ CHECK `depth <= 1` (max 2 levels). Index: `(household_id, parent_id)`.
 ### 3.8 Currencies, Formulas
 
 **`currencies`** (Base) — `id, household_id, code(3), name, symbol(5), is_base(bool),
-is_display_active(bool), rate_to_base(10,6), fee_pct(6,4), last_rate_at, rate_source`.
-**(new, Phase 3)** `colour` (hex, nullable — default derived deterministically from `code`;
+is_display_active(bool), rate_to_base(10,6), fee_pct(6,4), last_rate_at, rate_source`,
+`colour` (hex, nullable — default derived deterministically from `code`;
 overridable). This same colour is the currency's series colour in raw-currency stacked charts
 (FR-CU-008), so currency identity is consistent across chips and visualizations.
 UNIQUE `(household_id, code)`. Exactly one `is_base=true` per household (app-enforced).
@@ -780,24 +866,28 @@ The PRD's prose "1 base = X target" is restated in this multiplier form to match
 **`fx_rate_history`** (Base) — `id, currency_id(FK), rate_date, rate_to_base(10,6), source`.
 UNIQUE `(currency_id, rate_date)`. The read side (FR-CU-009 chart) queries this.
 
-**`fx_providers`** **(new, Phase 3 fold-back, FR-CU-010)** (Base, household-scoped) — `id,
+**`fx_providers`** (FR-CU-010) (Base, household-scoped) — `id,
 household_id(FK), name, provider_type(enum: openexchangerates|…), base_url,
 api_key_secret_ref(str — a Secret Manager resource name, NEVER the key), priority(int),
 is_enabled(bool, def true), last_status(enum ok|stale|down, null), last_checked_at(null)`.
 Ordered by `priority` = the fetch fallback chain (§5.7). **The API key value is never stored
-here nor returned by any endpoint** — only the secret reference; GET masks it. Default provider
-seeded from `EXCHANGERATE_API_KEY` on first run.
+here nor returned by any endpoint** — only the secret reference; GET masks it. **Default provider
+seeded at household creation** (`_create_and_seed_household`, §2.6, alongside the base currency and
+default categories): a single `openexchangerates` row, `priority=0`, `is_enabled=true`,
+`api_key_secret_ref` pointing at the `EXCHANGERATE_API_KEY` secret. If that env/secret is unset,
+the row is still created `is_enabled=false` (no usable chain → FX uses last-known/seed rates and
+raises `FX_API_DOWN` per §5.7) rather than being skipped — so the Integrations UI (UX §5.2) always
+has a row to configure. Seeding is idempotent (keyed on `(household_id, provider_type)`).
 
 **`formulas`** (BaseEntity) — `name, expression(text), applies_to(str), is_system(bool),
 description`. System formulas (`is_system=true`) are seeded and undeletable (FR-F-001).
 
 ### 3.9 System tables
 
-**`alerts`** (BaseEntity) **(changed)** — `alert_type, title, body, entity_type(null),
-entity_id(UUID, null)`. **Replace** `is_read(bool)` with **`read_at`(null) + `dismissed_at`(null)
-timestamps** (FR-SYS-007); "read" = `read_at IS NOT NULL`. **`alert_type` enum aligned to
-FR-SYS-007:** `BUDGET_WARNING | BUDGET_EXCEEDED | RECURRING_MISSED | FX_RATE_STALE |
-UPCOMING_PAYMENTS | FX_API_DOWN | BACKUP_CREATED`.
+**`alerts`** (BaseEntity) — `alert_type, title, body, entity_type(null),
+entity_id(UUID, null), read_at(null), dismissed_at(null)` (FR-SYS-007); "read" =
+`read_at IS NOT NULL`. **`alert_type` enum:** `BUDGET_WARNING | BUDGET_EXCEEDED |
+RECURRING_MISSED | FX_RATE_STALE | UPCOMING_PAYMENTS | FX_API_DOWN | BACKUP_CREATED`.
 
 **`audit_logs`** (Base, **no FKs by design**) — `id, household_id(UUID), actor_id(UUID),
 action(create|update|archive|restore|delete), entity_type, entity_id(UUID),
@@ -805,58 +895,33 @@ before_state(JSON text), after_state(JSON text), occurred_at(INDEX), ip_address,
 **Append-only:** no UPDATE/DELETE ever (FR-SYS-005). Indexes on `household_id, actor_id,
 entity_id, occurred_at`.
 
-**`entity_preferences`** **(new, Phase 3 fold-back, FR-E-021)** (Base) — `id, person_id(FK),
+**`entity_preferences`** (FR-E-021) (Base) — `id, person_id(FK),
 entity_type(str), entity_id(UUID), is_favourite(bool, def false), sort_order(int, null)`.
 UNIQUE `(person_id, entity_type, entity_id)`. **Per-person** favourite + manual ordering for any
 EntityCard list — one member's arrangement never affects another's. Index `(person_id, entity_type)`.
 
-### 3.10 Delta vs as-built — every change at a glance
-
-| Table | Change | Driver |
-|---|---|---|
-| `accounts` | **−** `month_year`, **−** `current_value`; **+** `opening_balance`, `opening_balance_date`, `fx_formula_id`, `interest_formula_id`, `colour` (Phase 3) | FR-A-008, FR-F-003 |
-| `account_snapshots` | **renamed/generalized** from `valuation_records`; `source` enum broadened (+`import`,`computed`,`reconciliation`); applies to all account types | FR-A-008/014/015 |
-| `recurring_configs` | **removed** (account-linked recurring → `FinancialEvent`) | FR-A-017 |
-| `financial_events` | **+** `source`, `external_ref` | FR-E-001 |
-| monetary mixin | **+** `fx_rate_date` (on `accounts` & `financial_events`) | FR-E-009 |
-| `occurrence_records` | **+** `manual` status | FR-E-015 |
-| `alerts` | **−** `is_read`; **+** `read_at`, `dismissed_at`; `alert_type` enum aligned | FR-SYS-007 |
-| `persons` | `can_create_household` semantics change (cache, not bootstrap); **+** `theme`, `colour`, `font`, `density`, `reduce_motion`, `notification_prefs`, `dashboard_layout` (Phase 3) | §2.7, FR-P-003, FR-DB-003 |
-| `currencies` | **+** `colour` (Phase 3; chip + raw-currency chart series) | FR-CU-008 |
-| `approved_owners` | **new table** | §2.7 |
-| `fx_providers` | **new table** (household FX provider chain; key as Secret Manager ref) | FR-CU-010 |
-| `entity_preferences` | **new table** (per-person favourite + manual sort) | FR-E-021 |
-| `household_invitations` | status enum aligned (`revoked`), expiry pinned to 7d | FR-HH-003/004 |
-
 ### 3.11 Resolved schema decisions
 
-1. **`accounts.current_value` — dropped.** Current value for asset-like accounts derives from
+1. **No `accounts.current_value` column.** Current value for asset-like accounts derives from
    the latest `account_snapshot`; `cost_basis` retained. (§3.5)
 2. **FX direction — `amount_base = amount × rate_to_base`.** Single allowed direction
    everywhere; any inverse is a bug. (§3.8)
-3. **Materialized monthly snapshots — confirmed.** The scheduler writes one
-   `source=computed` `account_snapshot` per Bank/CreditCard account each month (FR-SYS-006);
-   ledger-backed current balance = opening balance + ledger, anchored/corrected by manual
-   snapshots; asset-like current value = latest snapshot. (§3.5, §3.6)
+3. **Materialized monthly snapshots.** The scheduler writes one `source=computed`
+   `account_snapshot` per Bank/CreditCard account each month (FR-SYS-006); ledger-backed
+   current balance = opening balance + ledger, anchored/corrected by manual snapshots;
+   asset-like current value = latest snapshot. (§3.5, §3.6)
 
 ### 3.12 Migration plan (Alembic)
 
-Greenfield build = one consolidated `0001_initial_schema` reflecting §3.1–3.9 (no need to
-replay the legacy incremental migrations). If instead we evolve the existing DB, the ordered
-revisions are: (a) add `approved_owners` + backfill from `BOOTSTRAP_OWNER_EMAILS`; (b)
-`accounts`: drop `month_year`, add opening-balance + formula-id columns; (c) rename/expand
-`valuation_records` → `account_snapshots`; (d) `financial_events`: add `source`/`external_ref`;
-(e) add `fx_rate_date` to `accounts` + `financial_events`; (f) `alerts`: drop `is_read`, add
-`read_at`/`dismissed_at`; (g) drop `recurring_configs`; (h) `occurrence_records` status enum.
-All run against the **root** DB (`./financial_tracker.db`), per the Alembic-URL gotcha
-(Infrastructure part).
+The schema ships as **one consolidated `0001_initial_schema`** revision reflecting §3.1–3.9.
+It runs against the **root** DB (`./financial_tracker.db`), per the Alembic-URL note in the
+Infrastructure part (§5).
 
 ---
 
 ## 4. Backend Application Architecture
 
-Stand-alone and greenfield-buildable. Provenance: `backend/routes/*.py`,
-`backend/services/*.py`, `backend/schemas/*.py`, `backend/dependencies.py`, `backend/main.py`.
+The layering, dependency-injection seam, error contract, and audit model for the backend.
 
 ### 4.0 The four layers
 
@@ -916,12 +981,28 @@ async def get_db():
             raise
 ```
 
+**Engine & session factory (SQLite/aiosqlite specifics).**
+```python
+engine = create_async_engine(
+    settings.DATABASE_URL,                 # sqlite+aiosqlite:///./financial_tracker.db
+    echo=settings.DEBUG,
+    connect_args={"check_same_thread": False},   # required for aiosqlite
+    pool_pre_ping=True,
+)
+# WAL + foreign_keys are set per-connection via a `connect` event listener (§5.5), not here.
+async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+```
+`expire_on_commit=False` so attributes remain readable after `get_db` commits (the route still
+needs `obj` to serialize the response). Connection pooling is effectively a single writer
+(`max-instances=1`, SQLite single-writer) — do not tune pool size as if Postgres; the SQLAlchemy
+default is fine.
+
 Consequences (all load-bearing):
 - A request is **atomic**: either every mutation + its audit rows commit together, or none do.
 - Services call `await db.flush()` (to obtain PKs / order FK inserts) but **never** `commit()`.
   A stray `commit()` in a service breaks atomicity.
 - `HTTPException` raised mid-service → propagates → `get_db` rolls back → clean error response.
-- **Exception:** session validation (§2.15.B) deliberately uses its **own** short-lived
+- **Exception:** session validation (§2.14.B) deliberately uses its **own** short-lived
   connection and commits the sliding-window update independently of the request session. This
   is the one sanctioned second connection (and the §2.14 scaling note).
 
@@ -933,7 +1014,7 @@ Consequences (all load-bearing):
 | `get_current_person` | `Person` (validates session; stashes it on `request.state`) | 401 |
 | `get_household_id` | `UUID` (`person.household_id`) | 401 if NULL |
 | `require_role("admin")` | `Person` if role ≥ threshold | 403 |
-| `_get_or_404(db, hid, id, Model)` | household-scoped entity | 404 (incl. cross-household) |
+| `get_or_404(db, model, id, household_id=…)` | household-scoped entity | 404 (incl. cross-household) |
 
 **Service signature law:** `async def <verb>_<entity>(db, household_id, actor_id, ...) -> ...`.
 `household_id` comes from `get_household_id`, never from the request body — this is the tenant
@@ -951,8 +1032,15 @@ isolation guarantee.
   (PRD API rule). Computed fields (e.g. `children_count`, `parent_name`) are added to the
   response dict by the route via a single aggregate query, not N+1.
 - Enum-like fields are `Literal[...]` in responses where the value set is closed.
+- **STI responses (accounts, financial_events) use a discriminated union.** Each subtype has its
+  own `<Subtype>Response` carrying only that subtype's columns; the list/detail response is
+  `Annotated[Union[BankAccountResponse, CreditCardResponse, …], Field(discriminator="account_type")]`
+  (likewise `event_type` for events). This keeps each serialized object to its **relevant** fields
+  instead of a single flat schema padded with every other subtype's columns as `null`. The route
+  picks the subtype schema from the discriminator before `model_validate`; `from_attributes=True`
+  reads the nullable ORM columns that belong to that subtype.
 
-### 4.6 Error contract — RFC 7807 (CANONICAL) *(consistency fix required)*
+### 4.6 Error contract — RFC 7807 (CANONICAL)
 
 **Every error response uses RFC 7807 Problem Details:**
 
@@ -976,16 +1064,13 @@ of field errors.
 | 400 | malformed business request (e.g. self-parent, max-depth) |
 | 401 | no/invalid session, or NULL household where one is required |
 | 403 | authenticated but role too low (`require_role`), or CSRF invalid |
-| 404 | entity absent **or in another household** (`_get_or_404`) |
+| 404 | entity absent **or in another household** (`get_or_404`) |
 | 409 | conflict — duplicate name, or hard-delete blocked by dependencies |
 | 422 | Pydantic validation failure |
 | 429 | rate limit exceeded |
 
-> 🟡 **Consistency fix (cleanup list):** the as-built code is **not uniform** — `category_service`
-> raises the short envelope `{"error","detail"}` while `merge_categories` and `/auth/me` already
-> use full 7807. **Canonical = 7807 everywhere.** All non-conforming `raise HTTPException`
-> details must be migrated to the 7807 shape during implementation. (Also: `main.py`'s
-> string-detail fallback `{"error","code","detail"}` should emit 7807.)
+Every `raise HTTPException` carries a dict `detail` in the 7807 shape; there is no short
+`{"error","detail"}` envelope anywhere in the API.
 
 ### 4.7 Audit pattern
 
@@ -1001,6 +1086,19 @@ await audit.log(db, household_id=hid, actor_id=actor_id,
                 entity_type="category", entity_id=obj.id,
                 before={...}|None, after={...}|None)
 ```
+
+**What goes in the snapshots:**
+- A **full column dict** of the row (via the entity's own serialization, not the response
+  schema) — `before` = pre-mutation state (null for `create`), `after` = post-mutation state
+  (null for `delete`). Storing the full row, not just changed fields, keeps each audit record
+  self-describing without needing to replay history.
+- **Relationships are NOT serialized** — only scalar columns / FK ids. No nested objects, no lazy
+  loads.
+- **Sensitive values are masked** before writing: `account_number` is reduced to `****` + last 4;
+  `api_key_secret_ref` and any secret reference is written as the reference string only (it is
+  already not the key). No raw secrets ever enter `audit_logs`.
+- No hard size cap is enforced in MVP (rows are small, single-tenant); a JSON-size guard is a
+  post-MVP concern noted alongside audit-retention.
 
 ### 4.8 Validation tiers
 
@@ -1049,29 +1147,59 @@ DELETE /api/<es>/{id}       -> 204
 
 **Standing rules:** no raw SQL (ORM only); every query filtered by `household_id`; idempotent
 seeders; route-ordering (static before parameterized); permission via `require_role` or
-per-row ownership check (Member edits own, Admin/Owner edits any).
+per-row ownership check.
 
-### 4.11 Consistency / cleanup items found in Part 4
+**"Own" = `created_by` (authoritative).** The per-row ownership check is
+`row.created_by == current_person.id` — a Member may edit/delete only rows **they created**;
+Admin/Owner may edit/delete any. This holds for every entity (events included): ownership follows
+the **author of the record**, not `payee_person_id` or any other attribution field (a Member who
+is merely the payee of an admin-created event does not gain edit rights). The check is a single
+shared helper, not re-implemented per module.
 
-| Item | Detail | Lands |
-|---|---|---|
-| **Error format** | Unify all `HTTPException` details to RFC 7807 (§4.6); fix `main.py` string fallback | implementation |
-| **Category archive** | `archive_category` auto-promotes children — must change to **archive-together** per FR-C-005 / CLAUDE.md §6.6; the `/categories/tree` + `reassign-children` "promote orphans" behaviour is re-reviewed against the same rule | implementation |
-| **`spending-summary` stub** | returns `{"total":0}` placeholder — real impl is Phase-3 feature work | Phase 3 |
+**Hard-delete eligibility (the emptiness scan).** `delete_<e>` hard-deletes **only** when the
+entity has zero downstream references; otherwise it returns **409** (the UI then offers archive).
+The check is an explicit per-entity dependency scan in the service — a `SELECT COUNT(*)` (or
+`EXISTS`) against each table that FKs to this entity — **not** a reliance on a DB FK error:
+- `category` → events, budgets, recurring events, child categories referencing `category_id`/`parent_id`
+- `account` → financial_events (`source_account_id`/`destination_account_id`), account_snapshots
+- `budget`, `formula`, `person`, etc. → their respective referrers
+Each entity's `delete_<e>` declares its referrer list; a non-zero count → `409`
+(`type="has_dependencies"`). A confirmed-empty delete writes an **INFO log line, not an audit row**
+(§4.7, FR-SYS-005). Categories additionally follow the archive-together branch rule (CLAUDE.md §6.6)
+rather than hard-delete when they have a subtree.
+
+### 4.11 Global search endpoint — `GET /api/search` (FR-SYS-010)
+
+The backend half of the CommandPalette (UX §8.5). **Read-only, no mutations.**
+
+- **Request:** `GET /api/search?q=<str>&limit=<int, default 8 per group>&person_id=<uuid, optional>`
+  — query params only. Household-scoped via `get_household_id` (never trusts a body). `person_id`
+  applies the **Individual-mode** member filter; a Member passing another member's id is rejected
+  per FR-P-006 (a Member never surfaces others' personal entities).
+- **Response** (matches the UX §8.5 grouping and order):
+  ```jsonc
+  {
+    "results": {
+      "transactions": [ { "id": "…", "type": "transaction", "label": "…",
+                          "sublabel": "amount + date", "colour": "#…" } ],
+      "accounts":   [ … ], "categories": [ … ], "currencies": [ … ],
+      "budgets":    [ … ], "members":    [ { …, "avatar": "https://…" } ]
+    },
+    "total": 23
+  }
+  ```
+  Each item: `{ id, type, label, sublabel?, colour? | avatar? }` (members carry `avatar`;
+  others carry the entity-type `colour`, §0.1). Each group is capped at `limit`.
+- **Ranking:** exact > prefix > substring/fuzzy; tie-break `updated_at` desc; then fixed type
+  weight (transactions > accounts > categories > currencies > budgets > members); **archived
+  items rank last** (and only appear when relevant). Identical to the UX §8.5 contract.
 
 ---
 
 ## 5. Infrastructure & Operations
 
-Mixed maturity — tagged **(as-built)** where code exists and **(spec)** where it must be
-built. Provenance: `Dockerfile`, `docker-compose.yml`, `.env.example`, `backend/alembic.ini`,
-`backend/migrations/env.py`, `backend/database.py`.
-
-### 5.0 What exists vs what is spec
-
-| Built (as-built) | Not yet built (spec) |
-|---|---|
-| Backend `Dockerfile` (uvicorn, non-root) · dev `docker-compose` · `.env.example` · `alembic.ini` + `env.py` · WAL/FK pragmas · `/health` | frontend build stage + static serving · Cloud Run config · Secret Manager wiring · scheduler job endpoints · FX fetch + circuit breaker · GCS backup/restore · Cloud Scheduler triggers · CI gates |
+How the application is packaged, configured, deployed, and operated: the container image,
+Cloud Run topology, secrets, database operations, scheduled jobs, FX fetch, and backups.
 
 ### 5.1 Production topology (decided)
 
@@ -1093,19 +1221,16 @@ Browser ── HTTPS ─────►│  uvicorn / FastAPI                   
 ephemeral copy. **Why `min-instances=0`:** true $0 idle (C1). The consequences — cold-start DB
 restore and unreliable in-process scheduling — are handled in §5.5 and §5.6.
 
-### 5.2 Container image *(as-built backend + new frontend stage)*
+### 5.2 Container image
 
-As-built: `python:3.12-slim`, install `requirements.txt`, copy `backend/`, create non-root
-`appuser`, `CMD uvicorn backend.main:app --host 0.0.0.0 --port 8000`.
-
-**(new) Multi-stage build for same-origin serving:**
+**Multi-stage build for same-origin serving:**
 1. **Stage 1 (node):** `npm ci && npm run build` in `frontend/` → produces `frontend/dist/`.
-2. **Stage 2 (python):** as today, plus `COPY --from=stage1 frontend/dist ./frontend_dist`.
-3. **(fix)** Cloud Run injects `$PORT` (default 8080). The CMD must bind it:
-   `uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}`. The current hardcoded 8000
-   is a cleanup item.
+2. **Stage 2 (python):** `python:3.12-slim`, install `requirements.txt`, copy `backend/`,
+   `COPY --from=stage1 frontend/dist ./frontend_dist`, create non-root `appuser`.
+3. **Bind Cloud Run's `$PORT`** (default 8080):
+   `CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}`.
 
-### 5.3 Same-origin SPA serving *(spec)*
+### 5.3 Same-origin SPA serving
 
 `main.py` mounts, in this order: API routers (`/auth`, `/api`) and `/health` **first**, then a
 **static mount + SPA fallback last** — any unmatched GET returns `frontend_dist/index.html` so
@@ -1120,70 +1245,106 @@ the browser sees a single origin, matching the CSP (`connect-src 'self'`).
 | `DATABASE_URL` | config | `sqlite+aiosqlite:///./financial_tracker.db` (root file). Postgres only on the SaaS path. |
 | `GOOGLE_CLIENT_ID` | config | OAuth client id |
 | `GOOGLE_CLIENT_SECRET` | **secret** | → Secret Manager |
-| `GOOGLE_REDIRECT_URI` | config | **(missing from `.env.example` — add)** |
+| `GOOGLE_REDIRECT_URI` | config | callback URL |
 | `SESSION_SECRET` | **secret** | HMAC key; generate per env; → Secret Manager |
 | `EXCHANGERATE_API_KEY` | **secret** | FX provider; → Secret Manager |
 | `GCS_BUCKET` | config | backup/restore bucket |
-| `FRONTEND_URL` | config | callback redirect target **(add to `.env.example`)** |
-| `BOOTSTRAP_OWNER_EMAILS` | config | **(new, §2.7)** seed list **(add to `.env.example`)** |
+| `FRONTEND_URL` | config | callback redirect target |
+| `BOOTSTRAP_OWNER_EMAILS` | config | seed list for `approved_owners` (§2.7) |
+| `SERVICE_ACCOUNT_KEY` | **secret** | Shared bearer token for `/jobs/*` — **local/manual fallback only**; unset in prod where OIDC is required (§5.6) |
+| `JOB_INVOKER_SA` | config | Service-account email the Cloud Scheduler OIDC token must carry (`email` claim), verified by `get_job_auth` (§5.6) |
+| `MAINTENANCE_MODE` | config | bool, default `false`. When `true`, a middleware short-circuits `/api/*` and `/auth/*` (and the SPA app routes) with a **503** RFC-7807 body → frontend renders the Maintenance page (§5.8, UX §3). `/health` and the static/asset prefixes (§2.11) are **exempt** so liveness and the shell still serve. |
 | `AUTH_BYPASS_ENABLED` | config | dev only; CRITICAL log if true in non-dev |
 | `ENV` | config | `development` / `production` |
 | `DEBUG` | config | SQL echo + cookie `Secure` toggle |
-| ~~`ACCESS_TOKEN_EXPIRE_MINUTES`~~ | dead | wire-or-drop (§2.15 cleanup) |
 
-**Secrets** (`GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `EXCHANGERATE_API_KEY`) come from
-**Google Secret Manager**, surfaced as env vars by Cloud Run — never committed, never in the
-image. Local dev uses `.env` (gitignored). **Cleanup:** `.env.example` is missing the three
-vars marked above and its `DATABASE_URL` prod comment wrongly suggests Postgres as the default.
+**Secrets** (`GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `EXCHANGERATE_API_KEY`,
+`SERVICE_ACCOUNT_KEY`) come from **Google Secret Manager**, surfaced as env vars by Cloud Run
+— never committed, never in the image. Local dev uses `.env` (gitignored); `.env.example`
+lists every variable above. `DATABASE_URL` is SQLite at the root path; Postgres is reserved
+for the post-MVP SaaS path only.
 
 ### 5.5 Database operations
 
-- **Pragmas (as-built):** every connection sets `journal_mode=WAL` + `foreign_keys=ON`
-  ([database.py:27-33](backend/database.py:27)).
-- **Alembic root-DB gotcha (as-built — do not trip on this):** `alembic.ini` lives in
-  `backend/` and its `sqlalchemy.url` resolves `./financial_tracker.db` **relative to
-  `backend/`** — a *different* file from the app's root `./financial_tracker.db`. `env.py`
-  prepends the project root to `sys.path` for model imports, but the **URL must be overridden**
-  to the root DB on every Alembic run. Canonical command (run from project root, venv active):
-  `alembic -c backend/alembic.ini -x db_url=sqlite+aiosqlite:///./financial_tracker.db upgrade head`
-  (env.py reads the `-x db_url` override; if not yet wired, set `sqlalchemy.url` to an absolute
-  root path). **Cleanup:** make `env.py` prefer `DATABASE_URL`/`-x db_url` so this is automatic.
+- **Pragmas:** every connection sets `journal_mode=WAL` + `foreign_keys=ON` via a SQLAlchemy
+  `connect` event listener.
+- **Alembic:** `alembic.ini` lives at the **project root** with
+  `sqlalchemy.url = sqlite+aiosqlite:///./financial_tracker.db`, so it resolves to the same
+  root DB the app uses. `env.py` prepends the project root to `sys.path` for model imports.
+  Canonical command (run from project root, venv active): `alembic upgrade head`.
 - **Migrations on deploy (spec):** the container entrypoint runs `alembic upgrade head`
   **before** uvicorn starts, against the (possibly just-restored) root DB.
 - **Cold-start restore (spec, FR-SYS-008):** on startup, if the DB file is absent, download the
-  latest backup from `GCS_BUCKET` *before* running migrations.
+  latest backup from `GCS_BUCKET` *before* running migrations. **Restore failure handling
+  (explicit):**
+  - DB file **present** → skip restore (it's a warm restart), proceed to migrations.
+  - DB file **absent + a backup object exists** → download it, then migrate.
+  - DB file **absent + no backup object exists** (genuine first boot) → start with an empty DB;
+    `alembic upgrade head` creates the schema, lifespan seeds run. Log this at `INFO` ("fresh DB").
+  - DB file **absent + GCS unreachable / download errors** (network, auth, missing bucket) →
+    **fail fast: log `CRITICAL` and exit non-zero.** Do **not** silently boot an empty DB when a
+    backup was expected — that would mask data loss. Cloud Run retries the cold start; a transient
+    GCS blip self-heals, a persistent one stays loud rather than serving an empty database.
+  - Only the **main DB file** is restored. WAL/SHM are process-local and are recreated by SQLite
+    on first access — backups never include them (see the checkpoint note below).
 - **Backup (spec, FR-SYS-008):** a `/jobs/backup` endpoint (triggered by Cloud Scheduler, §5.6)
-  performs a WAL checkpoint and uploads the file to GCS; 90-day retention. Because
-  `min-instances=0`, the durable copy is the GCS backup — the live file is disposable. **Honest
-  risk:** writes between the last backup and an ungraceful stop are lost; mitigate with a
-  short backup cadence during active use and a SIGTERM backup hook on graceful shutdown.
+  runs **`PRAGMA wal_checkpoint(TRUNCATE)`** (merges all WAL pages into the main file and empties
+  the WAL — so the single uploaded file is fully consistent and self-contained) and uploads **only
+  the main `financial_tracker.db` file** to GCS; 90-day retention. Because `min-instances=0`, the
+  durable copy is the GCS backup — the live file is disposable.
+- **SIGTERM backup hook (graceful shutdown).** Cloud Run sends `SIGTERM` before stopping an
+  instance. A **FastAPI lifespan shutdown handler** runs the same checkpoint-and-upload as
+  `/jobs/backup`, capturing writes made since the last scheduled backup. Constraints: Cloud Run's
+  default grace period is short (~10 s) — set the container's `timeoutSeconds`/termination grace
+  generously and keep the hook to a single checkpoint + one GCS upload. If the upload fails during
+  shutdown, log `CRITICAL` and exit anyway (the instance is going down regardless); the next
+  scheduled `/jobs/backup` is the backstop.
+- **Honest risk:** writes between the last successful backup and an *ungraceful* stop (OOM, SIGKILL)
+  are still lost; mitigate with a short scheduled backup cadence during active use. The SIGTERM hook
+  covers graceful shutdowns (deploys, scale-down), not hard kills.
 
-### 5.6 Scheduling *(spec — supersedes "APScheduler persisted job store")*
+### 5.6 Scheduling
 
-`min-instances=0` means an in-process scheduler does not fire while scaled to zero. **Decision:
-Cloud Scheduler (managed cron) calls authenticated HTTP job endpoints** on the service; each
-call wakes the instance, runs the job, triggers a backup, then the instance scales back down.
+`min-instances=0` means an in-process scheduler does not fire while scaled to zero. **Cloud
+Scheduler (managed cron) calls authenticated HTTP job endpoints** on the service; each call wakes
+the instance, runs the job, triggers a backup, then the instance scales back down (§1.7).
 
 | Cloud Scheduler cron | Endpoint | Does | FR |
 |---|---|---|---|
 | daily | `/jobs/fx-refresh` | fetch FX for active/recent currencies; write `fx_rate_history` | FR-CU-006 |
 | daily | `/jobs/recurring` | process due recurring occurrences; flag missed | FR-SYS-006 |
-| daily | `/jobs/alerts` | budget thresholds, missed recurring, FX-stale, upcoming payments | FR-SYS-007 |
+| daily | `/jobs/alerts` | **session GC** (delete `expires_at < now()-1 day`, §2.14.F) then budget thresholds, missed recurring, FX-stale, upcoming payments | FR-SYS-007 |
 | monthly (00:05) | `/jobs/rollover-snapshots` | budget auto-rollover + monthly `account_snapshot` (computed) | FR-B-005, FR-A-008 |
 | daily | `/jobs/backup` | WAL checkpoint + upload to GCS | FR-SYS-008 |
 
 **Job endpoint rules:** idempotent + **catch-up aware** (process everything due since
-`last_processed_at`, not just "today") — this is what makes scale-to-zero safe. Protected by
-Cloud Scheduler OIDC auth (or a shared secret header); never publicly callable. APScheduler may
-still be registered for local/warm convenience, but Cloud Scheduler is the source of truth.
+`last_processed_at`, not just "today") — this is what makes scale-to-zero safe. Never publicly
+callable.
 
-> **PRD reconciliation:** FR-SYS-006's "persisted SQLAlchemy job store / survives restarts"
-> wording is superseded by this Cloud-Scheduler model and is updated accordingly.
+**Job auth — `get_job_auth` dependency (OIDC primary, bearer fallback).** `/jobs/*` are guarded
+by a dedicated FastAPI dependency, **not** session/CSRF auth (no cookie, no `Person`, no
+`household_id`):
 
-### 5.7 External-call resilience & FX fetch *(spec — grounded in v1)*
+1. **OIDC (production).** Cloud Scheduler is configured with an **OIDC token** whose
+   `audience = ` the service's own URL and whose service account is `JOB_INVOKER_SA`. The
+   dependency reads the `Authorization: Bearer <jwt>`, verifies the **Google-signed** token
+   against Google's public JWKS (`https://www.googleapis.com/oauth2/v3/certs`), and checks
+   `aud == <service URL>` and `email == JOB_INVOKER_SA`. Verification uses `google-auth`
+   (`google.oauth2.id_token.verify_oauth2_token`), with a small clock-skew allowance.
+2. **Shared bearer (local / manual trigger).** If `SERVICE_ACCOUNT_KEY` is set and the incoming
+   `Authorization: Bearer <token>` equals it (constant-time `hmac.compare_digest`), the request
+   is authorized. This path is for local dev and manual `curl` triggers; in production
+   `SERVICE_ACCOUNT_KEY` is unset and only OIDC is accepted.
+3. Neither present/valid → `401`. The dependency short-circuits before any job logic.
+
+`get_job_auth` does **not** call `validate_session`, set `request.state.auth`, or touch CSRF; the
+CSRF middleware already skip-lists `/jobs/*` (§2.4). Config keys (`JOB_INVOKER_SA`,
+`SERVICE_ACCOUNT_KEY`) are in the §5.4 matrix.
+
+### 5.7 External-call resilience & FX fetch
 
 All outbound calls use explicit timeouts + a **circuit breaker**. The **FX fetch** is specified
-exactly (it was a v1 pain point; the rate math below matches the working v1 implementation).
+exactly below — the rate math is the single source of truth for currency conversion.
 
 **Provider abstraction (multi-provider, household-configurable).** FX is **not** pinned to one
 vendor. A household configures an **ordered list** of providers (UX §5.2 Integrations); the
@@ -1212,7 +1373,7 @@ class FxProvider(Protocol):
   remainder from the next provider.
 - **Reference implementation — Open Exchange Rates:** free tier is **USD-relative** (all
   `rates[...]` are per 1 USD). Key resolved from **Secret Manager** via `api_key_secret_ref` —
-  **never hardcoded** (the v1 hardcoded it; do not).
+  **never hardcoded**.
   - **Daily latest** (`/jobs/fx-refresh`, §5.6): `GET /api/latest.json?app_id=KEY&symbols=<base>,<targets>`.
   - **Historical** (a transaction's `fx_rate_date` / backfill):
     `GET /api/historical/{YYYY-MM-DD}.json?app_id=KEY&symbols=<base>,<target>`.
@@ -1230,9 +1391,9 @@ class FxProvider(Protocol):
   consecutive daily all-provider failures → `FX_API_DOWN` alert** (FR-CU-006 / FR-SYS-007).
 - **Freshness:** update `last_rate_at`; **stale at > 48 h → `FX_RATE_STALE`** (UX §10).
 
-> The legacy `rate_source = "ExchangeRate-API"` string is reconciled to the actual provider name
-> at fetch time. The same timeout/breaker/secret-ref pattern applies to any future external API
-> (incl. post-MVP **bank connections**, surfaced greyed-out in UX §5.2).
+> `rate_source` records the actual winning provider name at fetch time. The same
+> timeout/breaker/secret-ref pattern applies to any future external API (incl. post-MVP
+> **bank connections**, surfaced greyed-out in UX §5.2).
 
 ### 5.8 Public / error-page contract (FR-SYS-001 — backend half)
 
@@ -1252,37 +1413,27 @@ Phase-3 UX). All error bodies are RFC 7807 JSON (§4.6) — never a stack trace.
 | session lost mid-use (401 after being in) | Lost Connection → re-login |
 | in-flight request pending | Loading |
 | uncaught 500 (7807, no trace) | Generic Error |
+| 503 (`MAINTENANCE_MODE` on, §5.4) | Maintenance |
 
-### 5.9 Observability *(as-built pattern, extend)*
+### 5.9 Observability
 
 Structured logs to stdout/stderr → Cloud Logging. Event-name keys + `extra={}` context, **no
 PII in messages** (§4.9). `/health` for Cloud Run liveness. The dev-bypass-in-prod CRITICAL log
 (§2.5) is a deliberate alarm.
 
-### 5.10 CI / security gates (per PRD §4.2) *(spec)*
+### 5.10 CI / security gates (per PRD §4.2)
 
 `ruff` (lint/format) · `pytest` + `pytest-asyncio` + `pytest-cov` (backend) · `vitest` +
 Testing Library (frontend) · `playwright` (E2E) · `bandit` (Python security lint) · `pip-audit`
 (CVE scan) · **OWASP ZAP** on each release — **zero critical findings required to deploy**.
-
-### 5.11 Cleanup items found in Part 5
-
-| Item | Detail | Lands |
-|---|---|---|
-| `$PORT` | CMD hardcodes 8000; Cloud Run sets `$PORT` (8080) — bind `${PORT:-8000}` | implementation |
-| Frontend stage | add node build stage + `dist` copy; mount StaticFiles + SPA fallback in `main.py` | implementation |
-| `.env.example` | add `GOOGLE_REDIRECT_URI`, `FRONTEND_URL`, `BOOTSTRAP_OWNER_EMAILS`; fix `DATABASE_URL` prod note; drop/realign `ACCESS_TOKEN_EXPIRE_MINUTES` | implementation |
-| Alembic URL | make `env.py` prefer `DATABASE_URL`/`-x db_url` so the root-DB override is automatic | implementation |
-| FR-SYS-006 | PRD wording updated to Cloud-Scheduler model (done in this pass) | PRD edit |
 
 ---
 
 ## 6. Frontend Architecture Skeleton
 
 Scope: the **architecture** — data flow, layers, state, routing, guards. The component
-*catalog* and design tokens are owned by the UX spec / EDP and locked in Phase 3; this section
-specifies how those components are wired, not how they look. Provenance: `frontend/src/main.tsx`,
-`App.tsx`, `api/client.ts`, `store/*.ts`, `hooks/useEntityManager.ts`, `components/entity/*`.
+*catalog* and design tokens are owned by the UX spec / EDP; this section specifies how those
+components are wired, not how they look.
 
 ### 6.0 Layer model
 
@@ -1301,7 +1452,7 @@ Backend (§4)
 Zustand stores ── CLIENT state only (auth/session, filter state, alerts). NEVER entity data.
 ```
 
-### 6.1 Bootstrap & providers *(as-built)*
+### 6.1 Bootstrap & providers
 
 `main.tsx` mounts: `StrictMode → QueryClientProvider → BrowserRouter → <App/>` plus a
 `<ToastContainer/>` rendered **outside** AppShell (so the toast z-index isn't trapped by a
@@ -1309,7 +1460,7 @@ child stacking context). It wires the API client to the auth store once at start
 `setAuthStoreGetter(() => useAuthStore.getState())` — this is how `api/client.ts` reads the
 CSRF token and calls `clearAuth()` without importing the store (avoids a circular dependency).
 
-### 6.2 HTTP client *(as-built)* — `api/client.ts`
+### 6.2 HTTP client — `api/client.ts`
 
 A typed `fetch` wrapper (not axios). Single source of HTTP truth:
 - **CSRF:** for non-safe methods, injects `X-CSRF-Token` from the auth store (skipped for
@@ -1324,7 +1475,7 @@ A typed `fetch` wrapper (not axios). Single source of HTTP truth:
 - **Shape:** resolves `{ data, status }`; `204` returns `data: null`.
 - Convenience verbs: `api.get/post/put/patch/delete`.
 
-### 6.3 Client state — Zustand *(as-built)*
+### 6.3 Client state — Zustand
 
 Three stores, **client state only** (CLAUDE.md §8.1):
 
@@ -1335,19 +1486,18 @@ Three stores, **client state only** (CLAUDE.md §8.1):
 | `alertStore` | in-app alert panel state |
 
 **Rule:** entity CRUD data never lives in Zustand — that belongs to TanStack Query (§6.4).
-`authStore.setAuth()` consumes the exact `/auth/me` shape (§2.15.C); the two move in lockstep.
+`authStore.setAuth()` consumes the exact `/auth/me` shape (§2.14.C); the two move in lockstep.
 
 ### 6.4 Server state — TanStack Query + the generic entity layer
 
 **Intended canonical pattern (CLAUDE.md §8.2):** all server data flows through TanStack Query;
 keys follow `['entity-type', filters]`; `api/client.ts` handles auth/CSRF/401 underneath.
 
-**(inconsistency — must reconcile, see §6.7):** the generic `useEntityManager<T>` hook is
-currently implemented on **`useState`/`useEffect`**, not TanStack Query — it holds `items` in
-local component state and mutates the array by hand, while `useCategories`/`usePersons` use
-TanStack Query. Two competing patterns. **Decision: the generic entity layer is rebuilt on
-TanStack Query** so there is exactly one server-state mechanism (shared cache, automatic
-refetch/invalidation, optimistic updates). This is a frontend-rebuild task, flagged in §6.7.
+**One server-state mechanism.** The generic `useEntityManager<T>` hook is built **on TanStack
+Query** (`useQuery`/`useMutation`) — never `useState`/`useEffect` for server data. There is
+exactly one server-state path: shared cache, automatic refetch/invalidation, and optimistic
+updates all flow through Query, with `api/client.ts` underneath. Every entity hook
+(`useCategories`, `usePersons`, …) follows the same pattern.
 
 **Generic entity layer (the "no bespoke CRUD pages" rule, CLAUDE.md §8.3):**
 
@@ -1355,13 +1505,23 @@ refetch/invalidation, optimistic updates). This is a frontend-rebuild task, flag
 |---|---|
 | `useEntityManager<T>` | `items, isLoading, create, update, archive, restore, deletePermanently, duplicate, detectDuplicate, showArchived` |
 | `EntityPage<T>` | action bar + filter slot + content slot |
-| `EntityCard<T>` | accent bar, context menu, archived state |
+| `EntityCard<T>` | colour-fill identity (calm/vivid), favourite star, context menu, archived state, value-history sparkline |
 | `EntityModal<T>` | two-column create/edit form |
-| `BulkActionBar` + `useMultiSelect` | multi-select bulk ops (backs the v3.1 FR-E-020 bulk-edit) |
+| `BulkActionBar` + `useMultiSelect` | multi-select bulk ops (FR-E-020) |
 
 Any new entity feature **extends this layer** — it does not hand-roll a CRUD page.
 
-### 6.5 Routing & auth guards *(as-built)* — `App.tsx`
+**Dashboard widget data loading (UX §17).** Each dashboard widget fetches **its own**
+read-only data via TanStack Query, keyed `['widget', widget_type, scope, filter]`, against the
+existing per-entity **visualization contracts** (`/api/visualizations/...`, EDP §13.5) — the same
+read-only aggregation endpoints the Viewer uses. There is **no bespoke widget store and no new
+per-widget endpoint**: the query key's inputs are the widget's own `scope`
+(`{kind, id?}` from `dashboard_layout`), the `visualizationStore` filter (date range / group-by),
+and the topbar context (Household vs member + display currency). Because each widget is an
+independent query, the shared cache de-dupes overlapping requests automatically. *(A single batch
+endpoint is a post-MVP optimization only — not built for MVP.)*
+
+### 6.5 Routing & auth guards — `App.tsx`
 
 Guarding is done in `App`, not per-route, in this precedence:
 1. **`/login`** renders before any gating (so a dev-bypassed user can still switch to real
@@ -1369,13 +1529,21 @@ Guarding is done in `App`, not per-route, in this precedence:
 2. **Loading** (`isLoading`) → centered `Spinner`.
 3. **Unauthenticated** (`!currentPerson`) → only `/join/:token` is reachable; everything else
    `Navigate → /login`.
-4. **Authenticated** → `/design-system` (DEV-only, else `NotFound`), `/join/:token`, and all
-   app routes wrapped in `<AppShell>`. `/` redirects to `/dashboard`.
-5. `<PendingInvitationDialog>` renders at the app root, outside the routes (§2.6 flow).
+4. **Authenticated but NULL household** (`currentPerson && household == null`, §2.6 step 2) →
+   **does not enter the app routes** (a household-scoped page like `/dashboard` would 401). The
+   app root renders a **neutral shell that issues no household-scoped queries** and surfaces the
+   `PendingInvitationDialog` (no household) or `HouseholdConflictDialog` (already in one,
+   §4.4 flow). This is the wired landing state for the NULL-household session — `/auth/me`
+   returns `household: null` (§2.8), and the guard branches here before any scoped fetch fires.
+5. **Authenticated with a household** → `/design-system` (DEV-only, else `NotFound`),
+   `/join/:token`, and all app routes wrapped in `<AppShell>`. `/` redirects to `/dashboard`.
+6. `<PendingInvitationDialog>` / `<HouseholdConflictDialog>` render at the app root, outside the
+   routes (§2.6 flow, UX §4.3/§4.4) — they can appear over the neutral shell (branch 4) or over
+   an in-household view (an invite arriving mid-session).
 
 The whole tree is wrapped in `<ErrorBoundary>`.
 
-### 6.6 Public / error pages — frontend half of FR-SYS-001 *(as-built, extend in Phase 3)*
+### 6.6 Public / error pages — frontend half of FR-SYS-001
 
 Pages exist and map to the §5.8 backend contract: `Login`, `JoinHousehold`, `NotFound`,
 `Forbidden`, the `PublicPage` layout, `ErrorBoundary`, and `ConnectionError` (backend
@@ -1383,57 +1551,32 @@ unreachable). The remaining FR-SYS-001 pages (Access Denied, Lost Connection, Lo
 Generic Error) are completed against the §5.8 mapping in Phase 3 UX, each signed off per the
 iterative review gate.
 
-### 6.7 Type safety & inconsistencies found
+### 6.7 Type safety
 
-- **Types** (`types/*.ts`) mirror backend response shapes; **no `any`** (look up the type). The
-  `/auth/me` payload ↔ `authStore` contract is the canonical example (§2.15.C).
-- **Inconsistencies / rebuild tasks:**
-
-| Item | Detail | Lands |
-|---|---|---|
-| **Generic layer on TanStack Query** | rebuild `useEntityManager` over `useQuery`/`useMutation` so server state has one pattern (not `useState`) | frontend rebuild |
-| **Component catalog vs spec** | the existing `components/ui/*` are reconciled against the Phase-3 UX spec + EDP before being treated as canonical (P0: no unauthorized UI) | Phase 3 |
-| **CategoryTree** | re-validated against the Phase-3 UX spec with sign-off (the design-ambiguity failure mode) | Phase 3 |
+**Types** (`types/*.ts`) mirror backend response shapes; **no `any`** — look up the type. The
+`/auth/me` payload ↔ `authStore` contract is the canonical example (§2.14.C). The generic entity
+layer (`useEntityManager`) is built over TanStack Query `useQuery`/`useMutation` so server state
+has one pattern — never `useState` (CLAUDE.md §8.3).
 
 ### 6.8 Design-system discipline (pointer)
 
 Tokens live in `index.css` (`@theme`/`@utility`); no raw hex/px/opacity/z-index in components
 (P4). Every reusable component has a `/design-system` demo using the **real** exported component.
-The authoritative component + token specification is the **UX spec / EDP**, produced in Phase 3
-with per-element sign-off — this architecture only fixes *how* components are wired, not their
-visual contract.
+The authoritative component + token specification is the **UX spec / EDP** — this architecture
+only specifies *how* components are wired, not their visual contract.
 
 ---
 
-## 7. Build Status & Implementation-Cleanup Register
+## 7. Build Status
 
-All seven sections are complete and ordered for a stand-alone, greenfield build (Stack → Auth →
-Data → Backend → Infra → Frontend). The one register below collects the decided code changes that
-must land **atomically with the features that need them** during the build:
+All seven parts form one stand-alone, greenfield-buildable specification. Build in order:
+Stack (§1) → Auth (§2) → Data (§3) → Backend (§4) → Infra (§5) → Frontend (§6). Each part stands
+alone from the prose, schemas, algorithms, and contracts in this document — no existing code is
+assumed or required.
 
-- **Implementation cleanup register** (consolidated from §2.13, §3.10, §4.11, §5.11, §6.7) —
-  the decided code changes that land atomically with their features: `email_verified`,
-  `approved_owners` + bootstrap removal, `compare_digest`, RFC 7807 error unification, category
-  archive-together, drop `recurring_configs` / `current_value` / `month_year` / `is_read`, add
-  the v3.1 columns, `$PORT`, frontend build stage, `.env.example` vars, Alembic URL auto-resolve,
-  generic layer on TanStack Query.
-- **Phase-3 fold-back additions** (new schema + endpoints to include in the initial build, so the
-  greenfield migration & API are complete):
-  - **Columns** on `persons`: `font, density, reduce_motion, notification_prefs(JSON),
-    dashboard_layout(JSON)` (FR-P-003 / FR-DB-003) — into `0001_initial_schema`.
-  - **New tables** `fx_providers` (FR-CU-010) and `entity_preferences` (FR-E-021) — into
-    `0001_initial_schema`; both household/person-scoped per §3.
-  - **FX = provider chain** (§5.7): refactor the fetcher to walk the ordered `fx_providers`
-    (fallback chain), resolve each key from **Secret Manager via `api_key_secret_ref`** (never
-    plaintext, never echoed by the API), breaker trips only when **all** providers fail. Seed a
-    default provider from `EXCHANGERATE_API_KEY` on first run.
-  - **Generic multi-select** (`useMultiSelect` + BulkActionBar) wired on ledger **and**
-    CategoryTree (FR-E-020), not events-only.
-  - **`GET /api/search`** global search/command-palette endpoint (FR-SYS-010) — grouped,
-    household-scoped, member-permission-aware.
-  - **Branding config** indirection — no hardcoded brand strings/assets (FR-SYS-011, UX §1.1).
-
-These are tracked here so nothing is lost between planning and implementation.
-
-<!-- ARCHITECTURE SPEC COMPLETE — sections ordered, numbering final. -->
+The complete schema (including `persons` preference columns, `fx_providers`, `entity_preferences`,
+`approved_owners`) ships in the single `0001_initial_schema` migration (§3.12). Cross-cutting
+behaviours — the FX provider chain (§5.7), generic multi-select on ledger and CategoryTree
+(FR-E-020), global search `GET /api/search` (FR-SYS-010), and branding-config indirection
+(FR-SYS-011) — are specified in their respective sections and built with the features that use them.
 

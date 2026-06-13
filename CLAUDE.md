@@ -465,6 +465,7 @@ Set `AUTH_BYPASS_ENABLED=true` in `.env` for local dev. Middleware auto-injects 
 ```
 authStore            — user identity, session token, default view (Household/My Finances)
 visualizationStore   — active date range, group-by, entity filter state
+alertStore           — unread-alert / notification panel + toast state (ARCH §6.3)
 ```
 
 Do not create new stores for entity CRUD — that belongs to TanStack Query.
