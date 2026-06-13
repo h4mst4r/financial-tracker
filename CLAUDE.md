@@ -323,6 +323,8 @@ Two-option mode toggles (e.g., Household/My Finances) use the segmented control 
 
 Tokens: `border-state` for the outer border, `border-state-subtle` for the internal divider. **Never** `border-primary/30`.
 
+**Each segment button MUST set `rounded-none` explicitly.** Default/pre-styled buttons carry a border-radius; if you don't zero it, every segment renders with rounded corners and the control looks wrong. Only the outer container is rounded (`rounded-md`) — its `overflow-hidden` clips the end segments to the container radius; interior edges stay square. The active segment is a **flat, full-bleed** fill (`bg-control-active` + `text-primary`), not an inset pill.
+
 ### 5.10 Skeleton Shimmer
 
 Skeleton components require a visible shimmer. Use `bg-surface-active` as the shimmer peak — `bg-surface-hover` is too close to `bg-surface-raised` and is nearly invisible:
@@ -398,11 +400,11 @@ Bash / WSL:          source venv/bin/activate
 
 The venv is at `venv/` in the project root. Never run `python` or `pip` without it active.
 
-### 6.0a — Always Run Alembic Against the Root Database
+### 6.0a — Run Alembic From the Project Root
 
-**The app uses `./financial_tracker.db` at the project root.** `alembic.ini` lives in `backend/` and resolves `./financial_tracker.db` relative to `backend/` — a **different file**.
+**The app uses `./financial_tracker.db` at the project root.** `alembic.ini` lives at the project root with `sqlalchemy.url = sqlite+aiosqlite:///./financial_tracker.db`, so it resolves to that same root DB.
 
-**Never** run `alembic upgrade head` from `backend/` bare. Always override the URL (see ARCH §3.12 for the exact command).
+Run `alembic upgrade head` **from the project root** (venv active). Do not add a second `alembic.ini` under `backend/` — there is one Alembic config, at the root (ARCH §3.12, §5.5).
 
 ### 6.1 — Model Column Gotchas
 

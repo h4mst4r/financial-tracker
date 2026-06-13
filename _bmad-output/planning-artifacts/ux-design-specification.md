@@ -8,7 +8,6 @@ authority: >
   token, motion, and state here was reviewed and approved before being written. Greenfield-
   buildable: an agent must be able to reproduce the UI from this doc + the EDP without the
   existing codebase. Schema-backed fields cross-reference architecture.md §3.
-supersedes: ux-design-specification-legacy.md (v3.4, archived 2026-06-11)
 ---
 
 # Financial Tracker — UX Design Specification
@@ -21,7 +20,6 @@ supersedes: ux-design-specification-legacy.md (v3.4, archived 2026-06-11)
 > 10. Currencies · 11. Formula · 12. Transactions · 13. Recurring · 14. Budgets · 15. Transfers
 > 16. Debt · 17. Dashboard · 18. States & flows
 >
-> A prior draft is archived at `ux-design-specification-legacy.md` (history only — not part of the build).
 
 ---
 
@@ -32,8 +30,8 @@ tokens; no component may introduce a raw value (hex, px, ms) that isn't a token 
 
 ### 0.1 Colour — colour-forward identity
 
-**Principle:** colour *fills* regions and pops; it is not a timid accent. This is a deliberate
-reversal of the old 4px left-accent-bar pattern (now retired).
+**Principle:** colour *fills* regions and pops; it is not a timid accent — identity is a colour
+**fill**, never a thin left-edge accent bar.
 
 - **Entity cards** carry a colour **fill**. Default is **calm** (a soft tint of the colour);
   any instance can be flipped to **vivid** (full saturated fill) — per-instance opt-in.
@@ -89,9 +87,14 @@ Schema backing (architecture.md §3): `Account.colour`, `Category.color`, `Curre
   4 greens). When `immersive=true`, *all* user-defined entity colours (category / account /
   currency / person) and the semantic colours are **remapped through that ramp** instead of using
   their true hex:
-  - **Entity colours → deterministic ramp slot.** Each entity's identity (`entity_id`) hashes to a
-    stable slot in `tint_ramp`, so two categories still read as *different shades of the tint*
-    (distinguishable in charts) yet everything is on-theme. Stable per entity across sessions.
+  - **Entity colours → ramp slot by lightness (luminance-matched).** Remap each entity's own colour
+    to the ramp step whose lightness is closest: `idx = round((1 − L) · (N − 1))`, where **L =
+    OKLab L\*** (perceptual lightness; darker source → darker step) and `N = tint_ramp.length`. This
+    preserves each entity's *relative lightness* (a light category stays light, a dark one stays
+    dark) while collapsing hue to the theme. When two entities land on the same slot, a stable
+    **`entity_id` hash** nudges one to an adjacent slot so they remain *different shades*
+    (distinguishable in charts), deterministically across sessions. Applies to entity-identity
+    colours only (category/account/currency own colour, payee `Person.colour`).
   - **Semantic colours → fixed ramp positions, not hue.** Because a monochrome tint can't carry
     red-vs-green, status/flow meaning shifts to **lightness + icon/shape**: e.g. income = lightest
     ramp step, expense = darkest; status uses the ramp's positions plus its existing iconography
@@ -152,7 +155,7 @@ Weights: 400 / 500 / 600 / 700. **Monetary font is contextual:** `.monetary-valu
 figures stack and must align. **Standalone hero figures on cards** use the **sans** face at the
 same weight (no alignment need there; it reads warmer).
 
-### 0.4 Spacing & density — 8px-based *(scale approved as-is)*
+### 0.4 Spacing & density — 8px-based
 
 `2xs 4 · xs 8 · sm 12 · md 16 · lg 24 · xl 32 · 2xl 48`.
 
@@ -161,12 +164,12 @@ heights + vertical padding for data-dense power use). Components reference densi
 tokens (e.g. row height, card padding); **every component must support both**. Per-person
 preference (Settings → Personal → App). Also there: a **reduce-motion** override (§0.7).
 
-### 0.5 Radius *(approved as-is)*
+### 0.5 Radius
 
 `sm 4 · md 8 · lg 12 · xl 16 · 2xl 24 · full`. **Card default = `lg` (12px).** Single-sided
 borders never get rounded corners.
 
-### 0.6 Elevation *(corrected — per theme)*
+### 0.6 Elevation
 
 In a dark theme, elevation = a **progressively lighter surface** *plus* a shadow (shadow alone
 muddies on dark). In a light theme, elevation = white surface + a stronger shadow. Levels:
@@ -190,8 +193,8 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 | Archive | archive | **desaturate only** (no collapse) · 550ms | instant grey |
 | Number roll-up | balances load/change | count to value, tabular · 650ms ease-out | set instantly |
 | Viz idle float | **pie charts only** | subtle idle bob **~4.0s** (calm) — the only chart that floats at idle | static |
-| Viz rebuild | **any** chart re-rendered (filter/update/open) | **CRT saturation pop** — a quick over-bright/over-saturated flash that settles; signals "updated". No flicker | instant |
-| Pie drill-down | click a pie slice | the slice **detaches / explodes outward** from the pie, then drills in | cross-fade |
+| Viz rebuild | **any** chart re-rendered (filter/update/open) | **CRT saturation pop** — a quick over-bright/over-saturated flash that settles; signals "updated". Applies to the **series / data-ink layer only** (saturate 1→1.7→1 + brightness 1→1.32→1, ~280ms ease-out); the panel background, gridlines, and axes stay static. No opacity change, no flicker | instant |
+| Pie drill-down | click a pie slice | **cross-zoom + breadcrumb** — the donut cross-fades/zooms into a sub-donut of that slice's subcategories (sub-slice colours are tints of the parent colour); a persistent breadcrumb (`All ▸ {category}`) shows state. Sub-slice click → its transactions; breadcrumb / centre / empty space → zoom back. (Supersedes the earlier "slice explodes outward" idea, which mis-read as broken.) | cross-fade |
 | Modal / drawer | open/close | modal scale 0.96→1 + fade 200ms · drawer slide-from-edge 250ms | fade |
 | Expand / collapse | tree, accordion | height + opacity · 200ms | instant |
 | Pin-pop / check-draw | favourite / save | scale-pop + star · checkmark draw 300ms | instant |
@@ -236,7 +239,7 @@ The visualization filter selectors (time range, person, category, account, curre
 chart type, metric, group-by) reuse these open/selected states; their layout is specified with
 the viewer (§later).
 
-### 0.10 Layering, breakpoints, iconography *(from existing, kept)*
+### 0.10 Layering, breakpoints, iconography
 
 - **Z-index scale:** below −1 · base 0 · raised 10 · dropdown 100 · sticky 200 · sidebar 300 ·
   modal 400 · toast 500 · tooltip 600.
@@ -246,12 +249,22 @@ the viewer (§later).
   library is a one-line swap (commercial / licensing flexibility). Current library:
   **`lucide-react`** (ISC, commercial-safe), outline, 16–20px inline. *(Phase-3 mockups used
   Tabler — the rendering tool's set — for illustration only; the app uses lucide.)*
+- **Scrollbars:** every in-app scroll region uses a **thin themed scrollbar** (never the OS
+  default): `width: 8px`, thumb = `surface-active` (hover → `border-strong`), **transparent
+  track**, `radius-full`; Firefox fallback via `scrollbar-width: thin` + `scrollbar-color`.
+  Overlay / picker panels inherit the same treatment.
 
 ### 0.11 Accessibility (WCAG 2.1 AA)
 
-Contrast floor enforced on all text (incl. contrast-aware fills). Full keyboard nav (Tab /
-Enter / Esc / arrows). ARIA labels on interactive elements. ≥44×44px touch targets.
-`prefers-reduced-motion` honoured — every §0.7 motion degrades to its fallback.
+**Contrast floor** enforced on all text (incl. contrast-aware fills). Mechanism: compute the
+**effective background** (composite the fill over its surface — calm tint = entity colour at low
+alpha; vivid = the colour itself), pick **white vs dark** text by whichever has the higher WCAG
+contrast ratio against it, and require **≥ 4.5:1** (≥ 3:1 for ≥18px / bold). If the better text
+pole still fails the floor, the **fill is auto-adjusted** — mixed away from mid-luminance (toward
+dark/white) in steps until the chosen text passes. Implemented via CSS `color-mix()` for static
+composites + a memoized JS `contrastText()` / `enforceFloor()` helper for runtime entity hex.
+Full keyboard nav (Tab / Enter / Esc / arrows). ARIA labels on interactive elements. ≥44×44px
+touch targets. `prefers-reduced-motion` honoured — every §0.7 motion degrades to its fallback.
 
 ---
 
@@ -262,10 +275,12 @@ Currencies, Formula, Budgets, and the list-lean Transactions/Recurring/Transfers
 
 ### 1.1 AppShell — Branding · Sidebar · Topbar
 
-**Branding (swappable config).** App name, logo/mark, wordmark, and favicon come from a single
-`branding` config — **never hardcoded** — so the whole identity changes in one place
-(commercial / white-label path). MVP: name "Financial Tracker" + a placeholder mark, *through*
-the config. Per-tenant white-label is post-MVP.
+**Branding (swappable config).** App name, logo/mark, wordmark, favicon — **and the default theme
+(base palette/colours) + default font** — come from a single `branding` config at
+`frontend/src/config/branding.ts` (`{ appName, mark, wordmark, favicon, defaultTheme, defaultFont }`)
+— **never hardcoded** — so the whole identity *and* look changes in one place (commercial /
+white-label path). MVP: name "Financial Tracker" + a placeholder mark, *through* the config.
+Per-tenant white-label (and a server-driven config) is post-MVP.
 
 **Sidebar** (left):
 - **Branded header** — logo mark + app name (from `branding`).
@@ -275,18 +290,26 @@ the config. Per-tenant white-label is post-MVP.
   Currencies, Formula.
 - **Active item:** `accent-subtle` fill + `accent-primary` text.
 - **Bottom:** Settings link only (no identity row — identity lives in the topbar avatar).
-- **Responsive:** user-collapsible to an **icon rail**; auto-collapses below `lg` (tablet);
-  **drawer** below `md` (mobile).
+- **Responsive:**
+  - **Icon rail** (user-collapsible; **auto-collapses below `lg`**): ~62px — labels become
+    **hover tooltips** (§5.8), group labels collapse to thin dividers, the active item keeps the
+    `accent-subtle` fill + `accent-primary` treatment, the branded header shows the **mark only**,
+    an **expand toggle** sits at the top, Settings stays pinned at the bottom. The expanded ↔ rail
+    choice persists per person.
+  - **Mobile (< `md`) — slide-up bottom sheet** (not a side drawer): a bottom **Menu** bar; tapping
+    it (or swiping up) raises a sheet with the **full grouped nav** (group labels intact) that you
+    scroll vertically and **drag down / tap to dismiss**. Closes on selection.
 
 **Topbar** (persistent across authenticated screens):
 - **Left — view context (grouped):** a **Household / Individual** segmented control **+ a
   display-currency picker**, together (both scope *what you're looking at*). In **Individual**
-  mode a **member picker** chooses whose finances to view — **members may select only
-  themselves; admins/owners may select ANY member** (parse any member's finances). Persists via
-  `Person.default_view` (FR-P-006); the chosen member sets the `person_ids` filter (FR-V-009).
-  *(The admin/owner "any member" widening needs a small PRD permission update — flagged.)*
-- **Right cluster:** **global search** (command palette — jump to any entity/module;
-  *new MVP feature — needs a search endpoint + FR, flagged*) · **alerts bell** (unread badge;
+  mode a **member picker** chooses whose finances to view — **a Member may select only
+  themselves; an Admin/Owner may select ANY household member** (the dropdown shows only the
+  permitted entries). Persists via `Person.default_view` (FR-P-006); the chosen member sets the
+  `person_ids = [member.id]` filter (FR-V-009).
+- **Right cluster:** **global search / command palette** (Cmd/Ctrl-K or click — searches across
+  entities and offers navigation + "+ New" commands; grouped, household-scoped, respects the
+  active member filter; FR-SYS-010, backed by `GET /api/search`) · **alerts bell** (unread badge;
   opens the alert panel) · **avatar menu** (the sole user menu — profile, theme + font pickers,
   sign out).
 
@@ -297,7 +320,10 @@ the config. Per-tenant white-label is post-MVP.
   the relevant entity/module**.
 - Alert types: BUDGET_WARNING/EXCEEDED · RECURRING_MISSED · FX_RATE_STALE · UPCOMING_PAYMENTS ·
   FX_API_DOWN · BACKUP_CREATED. Read state via `read_at` / `dismissed_at` (architecture §3.9).
-- Footer: "View all alerts".
+- Footer: **"View all alerts"** → the dedicated **`/alerts` page** (reachable only from the bell,
+  *not* a sidebar module): reuses these same alert rows with a **type filter** + an **unread/all**
+  SegmentedControl + **Mark all read**, **date-grouped** (Today / Earlier), showing full history.
+  Read rows desaturate; row **⋮** → mark read / dismiss.
 
 ### 1.2 EntityPage toolbar (standardized — do not bespoke per module)
 
@@ -413,6 +439,19 @@ A `PublicPage`-shell variant (no semantic-error icon — it's the entry point):
   `AUTH_BYPASS_ENABLED` (FR-SYS-002); calls `POST /auth/dev-login`.
 - `?error=not_invited` routes to the **Not Invited** page (§3), not Login.
 
+### 4.1a JoinHousehold page (`/join/:token`)
+
+The invite landing (architecture §6.5/§6.6) — a `PublicPage`-shell that validates the token, then
+routes via existing surfaces (no novel screens):
+- **Logged out + valid token:** branding wordmark/mark (from `branding`), an **invite-context
+  card** — inviter **Avatar** · "invited you to join" · **household name** · role **Badge** — and
+  the same **Continue with Google** button as Login (§4.1). After OAuth the token is consumed and
+  the accept dialogs take over.
+- **Logged in + valid token:** a brief handoff — renders the **PendingInvitationDialog** (no
+  household) or the **HouseholdConflictDialog** (already in one → §4.4 flow).
+- **Invalid / expired / revoked / already-used token:** a **§3 semantic error page** (calm icon +
+  plain copy + "Go to login").
+
 ### 4.2 Dialog convention (global)
 
 **All dialogs:** primary action **right**, ghost/cancel action **left**. Locked everywhere.
@@ -433,6 +472,14 @@ Shown when an invitee already belongs to a household. Two variants, same two act
 - **Member/admin:** "Accepting will remove you from {current} and move you to {target}."
 - **Owner:** "You must delete your current household before joining another" (owners can't
   simply leave).
+
+**Post-modal flow (both variants keep "Go to Settings").** The invitation persists server-side as
+`pending`, so there is no "find your way back" step. **Member/admin:** Settings → Danger Zone →
+**Leave Household** (ConfirmationDialog). **Owner:** Settings → Danger Zone → **Delete Household**
+(type-the-name confirm; logs out, FR-HH-005) → re-login. Either way, once the person no longer
+belongs to a household their next session is a **NULL-household session** and the
+**`PendingInvitationDialog` auto-appears** (architecture §2.6 / §6.7) — Accept joins the target
+household; Decline → the **Not Invited** page (§3).
 
 ---
 
@@ -465,8 +512,9 @@ Single column of personal preferences:
     (ok / stale / down) · ⋮ (reorder, edit, remove). **+ Add provider** → modal: type · base URL ·
     **API key** (write-only — masked `••••`, stored in Secret Manager, never echoed back, §arch 5.7).
     The first enabled provider is primary; on failure the fetcher falls through to the next.
-  - **Bank connections** — section present but **greyed-out / "Coming soon"** (post-MVP; no
-    controls, just the placeholder so the surface exists).
+  - **Bank connections** — section present but **greyed-out / "Coming soon"** (post-MVP): a
+    **dashed-border, dimmed** card with a "Coming soon" badge and a **disabled** Connect control —
+    no functional controls, just the placeholder so the surface exists.
 - **Danger Zone** (role-conditional): admin/member → **Leave Household** (confirm); owner →
   **Delete Household** (type the exact household name; removes all data, invalidates every
   member session, logs the owner out — FR-HH-005).
@@ -474,22 +522,42 @@ Single column of personal preferences:
 ### 5.3 Data tab
 
 - **CSV Import** — a 2-step wizard (FR-IE-001..005):
-  1. **Upload** — drag/drop or pick a `.csv` (≤10 MB; `text/csv`). v1-column compatible (FR-IE-005).
+  1. **Upload** — drag/drop or pick a `.csv` (≤10 MB; `text/csv`, UTF-8); accepts the documented
+     import column layout (FR-IE-005): **Name · Transaction Date · Currency Type · Amount ·
+     Amount (SGD) · Payee · Payment Method · Transaction Type · Category · Status**, plus
+     **Description** (→ `notes`), **GST Claim** (→ `is_gst_claimable`), **Personal** (Yes ⇒
+     `is_shared_expense = false`; default is shared), and optional **Gift** (→ `is_gift`). Header
+     row matched case-insensitively; **Amount (SGD)** is optional (recomputed via FX if blank);
+     **Payment Method** maps to the "Paid with" account / Cash (§12.3); **Category** matched by
+     name (`Parent > Child` ⇒ subcategory).
   2. **Preview & map** — table of parsed rows; each row's category auto-suggested
-     (**green** = matched, **yellow** = needs a pick); rows excludable; **duplicate detection**
-     surfaces a **Conflicting Transactions** modal (Keep Newer / Keep Existing / Keep Both — FR-IE-004).
+     (**green** = matched, **yellow** = needs a pick). **Unmatched categories must be mapped to an
+     existing category (or explicitly created) before Confirm — never silently auto-created.** Rows
+     excludable; **duplicate detection** surfaces a **Conflicting Transactions** modal (FR-IE-004):
+     each conflict shows the **incoming (file) row vs the existing (ledger) row** side by side with
+     a per-conflict **SegmentedControl** — **Keep newer** (imports the incoming row and **replaces
+     the existing record in place** — same id, audited) · **Keep existing** (skips the incoming
+     row) · **Keep both** (imports as a separate record) — plus an **Apply to all** bulk control.
+     **Unresolved conflicts default to Keep existing** (Apply is always enabled); the conflict list
+     scrolls when it exceeds the panel.
   3. **Confirm** — records are created **only** here; result summary (created / skipped / merged).
 - **CSV Export** — the current ledger with the active VisualizationFilter applied; filename
   `financial-tracker-export-{YYYY-MM-DD}.csv` (FR-IE-006).
-- **Backup** — last-backup timestamp + status; manual **Back up now** (admin/owner) (FR-SYS-008).
+- **Backup** — last-backup **timestamp** + a **status chip**: **Success** (green), **In progress**
+  (amber, spinner), or **Failed** (red, with a retry affordance). Manual **Back up now** is
+  **admin/owner only** (FR-SYS-008).
 
 ---
 
 ## 6. Categories (CategoryTree)
 
 Uses the §1 EntityPage scaffold — header: name + info + search + **type filter**
-(All/Expense/Income) + archived toggle + **+ New category**; a **Create defaults** action is
-surfaced when the list is near-empty (FR-C-007). Body = the **CategoryTree** (2 levels max).
+(All/Expense/Income) + archived toggle + **+ New category**. When there are **zero active
+categories**, the body shows an **EmptyState** with a **Create defaults** action (FR-C-007) — a
+one-click, idempotent create of the **13 authoritative starter categories** (EDP §9: 10 expense +
+2 income + 1 both; the same set auto-seeded at household creation), previewed as chips (income
+tinted with the semantic income colour) alongside a secondary **New category**. Otherwise the body
+= the **CategoryTree** (2 levels max).
 
 - **Parent row:** calm colour-tint fill · drag handle (hover-reveal) · expand chevron (or `–`
   if childless) · colour icon chip · name · sub-count · **right-aligned** type badge · ⋮ menu.
@@ -521,7 +589,8 @@ Every UI element resolves to a library component; **every component appears on `
   *(Modal + Input + rows)* · DensityToggle · **MiniSparkline** *(new atom)* · **FilledChip**
   *(new atom)* · **FavouriteStar** *(new atom)* · Watermark/Branding *(new atom)*.
 
-> The **ContextMenu**, **EntityModal**, and **EmojiIconPicker** are specced in detail in §8.
+> The **ContextMenu**, **EntityModal**, **EmojiIconPicker**, **ViewContextSwitcher**,
+> **CommandPalette**, and **BulkActionBar** are specced in detail in §8.
 
 ---
 
@@ -553,11 +622,106 @@ The single create/edit surface for every entity.
   chips · notes.
 - **Validation:** §0.9 focus/error states; required fields; inline messages; Save disabled until valid.
 
+### 8.2a Add value snapshot (account ⋮)
+
+From an account's **⋮ → Add value snapshot** (§8.1). An **`EntityModal<AccountSnapshot>`**
+(two-column, §8.2): **Date** (DatePicker, defaults today) · **Value** (MonetaryValueInput; currency
+defaults to the account's) · **Source** (Dropdown — user options **Manual · Appraisal ·
+Reconciliation** only; `formula` / `computed` / `import` are system-written) · **Notes** (optional).
+The header shows the account's latest snapshot for reference; **Cancel** left / **Save snapshot**
+right (§4.2). Writes an `account_snapshots` row (architecture §3.6).
+
 ### 8.3 EmojiIconPicker
 
-Used wherever an entity has a custom glyph (categories). A picker panel with **two tabs —
-Emojis | Icons** (tab pattern §0.9) · a **search** field · a scrollable **grid** of selectable
-glyphs (selected one highlighted). Opens from the icon field inside the EntityModal.
+The glyph picker for entities that carry a **custom glyph — categories only** (accounts use the
+type-default icon, no custom glyph, §8.2). Opens as a **Popover** from the icon field inside the
+EntityModal.
+- **Trigger:** the icon field shows the current glyph (or a placeholder); clicking it opens the
+  panel with the trigger in the open/accent state (picker-trigger pattern, §0.9).
+- **Panel anatomy:** **two tabs — Emojis | Icons** (picker-tab pattern, §0.9) · a **search**
+  field (filters the active tab by name/keyword; cyan picker-focus ring, §0.9) · a scrollable
+  **grid** of glyph cells. Emojis are native unicode; **Icons** are the Lucide set (so an icon
+  glyph inherits `currentColor` and reads on any entity fill). A small **Recent** row sits above
+  the grid once the household has picked glyphs before — the **last 8** picked glyphs (most-recent
+  first; mixed emojis + icons), persisted **per-person in `entity_preferences` (key
+  `recent_glyphs`)** so they follow the household across devices. The row is hidden until the
+  household has ever picked a glyph.
+- **Selection:** the chosen cell is highlighted with the selection ring (§0.9); picking it sets
+  the field and closes the panel. Grid cells hover with `surface-active` (small-button-in-panel
+  rule). An entity may also have **no glyph** — a "clear / none" affordance falls back to the
+  category's colour chip alone.
+- **Keyboard & a11y:** tabs are arrow-navigable; the grid is a roving-focus listbox (arrows move,
+  `↵` selects, `Esc` closes); search is focus-trapped within the panel.
+
+### 8.4 ViewContextSwitcher (topbar — Household/Individual + member + currency)
+
+The topbar-left view scope (FR-P-006 / FR-V-009). Three controls read as **one grouped cluster**
+(they all answer "*what am I looking at*"):
+- **Mode** — a **SegmentedControl** (§7 primitive): **Household** ↔ **Individual**.
+- **Member picker** — a **Dropdown**, **shown only in Individual mode** (hidden in Household).
+  Each option is an **Avatar + name** (avatar = Google picture, else initials on `Person.colour`,
+  §0.1). **Permission-adaptive (FR-P-006):** an **Admin/Owner** sees **every household member**;
+  a **Member** sees **only themselves** — the dropdown collapses to a single, non-interactive
+  entry (no chevron) so the restriction is obvious, never a disabled mystery.
+- **Display-currency picker** — a **Dropdown** of the household's `is_display_active` currencies,
+  each a colour chip + code (§0.1). Sets the person's display currency for all converted figures.
+
+**Behaviour:** Mode persists to `Person.default_view` (`household | personal`); on login the app
+restores the last-used mode. Selecting a member sets the global `person_ids = [member.id]` filter
+that every chart, list, and summary reads (FR-V-009). Switching back to Household clears it.
+**A11y:** the cluster is one labelled group; the SegmentedControl and Dropdowns are
+keyboard-operable with the standard focus treatment (§0.9).
+
+### 8.5 CommandPalette (global search)
+
+The keyboard-first global search + navigation surface (FR-SYS-010). **Summoned by `Cmd/Ctrl-K`
+or the topbar search affordance** (§1.1). Built from **Modal + Input + rows** (§7).
+- **Shell:** a Modal anchored **high-centre** (top third) over the standard backdrop (`bg-backdrop`),
+  `surface-overlay` panel, `max-w` capped; opens with the standard modal motion (§0.7).
+- **Input:** full-width, leading search icon, placeholder "Search or jump to…"; the focus ring is
+  the text-input focus treatment (`ring-glow-primary`, §0.9). Typing filters live (debounced).
+- **Results — grouped by type**, each group under a muted label header, in the FR-SYS-010 order:
+  **Transactions · Accounts · Categories · Currencies · Budgets · Members**, then a **Commands**
+  group (navigation: "Go to {module}"; creation: "+ New {entity}"). Each group is **capped**, with
+  a count.
+- **Row anatomy:** a leading **FilledChip** (entity type colour, §0.1) or **Avatar** (members) ·
+  **label** (primary) · **sublabel** (muted — e.g. amount+date, parent category, account type) ·
+  a right-aligned **↵ hint** on the active row. The active row uses the selection fill (§0.9).
+- **Ranking (default, FR-SYS-010):** exact > prefix > substring/fuzzy; tie-break by `updated_at`
+  desc; then fixed type weight (transactions > accounts > categories > currencies > budgets >
+  members); **archived items rank last**.
+- **Scope:** household-scoped; in **Individual** mode it respects the active member filter and the
+  FR-P-006 member-selection permission (a Member never surfaces others' personal entities).
+- **Keyboard:** `↑/↓` move the active row across groups, `↵` opens it (navigates, carrying filter
+  state where relevant) or runs the command, `Esc` closes. Fully pointer-operable too.
+- **States:** **empty query** → recent / suggested destinations; **loading** → 3–4 **Skeleton**
+  rows (§7); **no results** → **EmptyState** with a "+ New" shortcut for the typed text where it
+  makes sense.
+- **A11y:** focus is trapped in the palette; the input owns the listbox via `aria-activedescendant`;
+  results are an `aria-listbox`. Reachable by both keyboard and pointer (FR-SYS-010 acceptance).
+
+### 8.6 BulkActionBar (generic multi-select)
+
+The action bar for **`useMultiSelect`** (FR-E-020) — **one generic component**, used on the
+Transactions ledger **and** the CategoryTree (§12.4, §6), extensible to any entity list.
+- **Appearance:** hidden at zero selection; when **≥1 row** is selected it **slides up** as a
+  sticky bar pinned to the bottom of the list region (`surface-overlay`, elevated shadow). Selecting
+  rows uses each surface's selected-row treatment (ledger checkbox; CategoryTree selected-row
+  fill, §6).
+- **Anatomy (left→right):** **"{N} selected"** count · a **Clear** (`×`) control that deselects all ·
+  the **action cluster** · destructive actions sit **after a divider** (mirrors the ContextMenu
+  destructive-grouping rule, §8.1).
+- **Actions are per-surface** (the editable set differs, FR-E-020):
+  - **Events (ledger):** **Edit shared fields** (category · payment_method · transaction_status ·
+    payee · is_shared_expense) · **Duplicate** · **Archive/Restore** · **Delete-if-empty** ·
+    **Visualize** (→ Viewer, §9.1).
+  - **Categories (tree):** **Edit type** (Expense/Income) · **Archive/Restore** (archiving a parent
+    archives its branch, FR-C-005) · **Merge** (fold selected into one).
+- **Permission-adaptive:** actions a **Member** can't take on others' items are greyed with a reason
+  (per-item rule — Member acts on own only; Admin/Owner on any).
+- **Safety & side-effects:** a **single confirmation** precedes destructive bulk actions; **each
+  affected item writes its own audit entry**; for events, **budget actuals recompute once** after
+  the batch (FR-E-020 acceptance).
 
 ---
 
@@ -565,14 +729,38 @@ glyphs (selected one highlighted). Opens from the icon field inside the EntityMo
 
 The single reusable viewer (FR-V-011..015) — opened from any mini-chart (card/row) via the
 expand animation, or full-screen. Specced once, reused everywhere.
-- **Header:** title · **chart-type** toggle (line / bar / area / pie / stacked — only types valid
-  for the current data are enabled, FR-V-014) · close.
+- **Header:** title · **chart-type** toggle (line / bar / area / pie / stacked / **table** /
+  **calendar** — only types valid for the current data are enabled, FR-V-014; **table** and
+  **calendar** require date-dimensioned event data) · close.
 - **Control bar:** **date range** (presets **+ Custom range picker**) · **group-by**
   (day / month / quarter / year). **Contextual controls** appear only when relevant: **metric**
   (count / sum / avg) for event-group aggregation (FR-V-013); **raw/converted** toggle for
   multi-currency (FR-V-004 / FR-CU-008).
 - **Chart area:** axes, gridlines, series; **drill-down** — click a point/segment to filter
   (FR-V-002), or **View as table**.
+- **View as table** (chart-type): swaps the chart for a `Table` (header + control bar persist).
+  It shows the **aggregated series behind the current chart — not the ledger's individual
+  transactions**. Columns are **derived from the active group-by + metric**: a **dimension**
+  column (the group-by — Month / Category / Account / Payee / Currency; entity dimensions render
+  with their `FilledChip`/colour), a **Txns** count column, the **metric value** column
+  (Sum / Count / Avg — mono, right-aligned, sortable, default sort desc), and a **Share %** column
+  for proportional metrics (omitted for Avg), plus a pinned **Totals** row. A two-dimension
+  (stacked) chart becomes a **matrix** — bucket rows × series columns + Total. Sortable headers
+  (Table primitive); **row click drills down** like a chart segment (FR-V-002).
+- **Calendar** (chart-type): a **month heatmap** — each day tinted by the active metric
+  (`accent-secondary` ramp, so it reskins under immersive themes; high-intensity cells flip to
+  dark text via the §0.11 contrast floor). Days backed by a `RecurringEventSource` /
+  `occurrence_record` carry a **↻ marker** (so a weekly charge lights up the same weekday) — driven
+  by **known recurring data only, never inferred**. Month nav + metric control in the control bar;
+  **day click drills down** (FR-V-002). Enabled only for date-dimensioned event data.
+- **Custom range picker** (the date-range control's "Custom" mode): a picker `Popover` themed in
+  `accent-secondary` (cyan). **Desktop/tablet** — a preset rail (Last 7/30 days · This/Last month ·
+  This quarter · This year · Year to date · All time · **Custom range**; selected preset uses the
+  picker-panel-selected style `bg-accent-active`+`text-accent`) · Start/End date fields (active =
+  cyan ring) · a **two-month** calendar. **Mobile (< md)** — a bottom sheet with **Custom mode
+  only** (no preset chips), a **single** month + month nav. Selection is one **continuous tinted
+  band** rounded around the whole selection (rounded at the true start/end and at each week-wrap);
+  the start/end days are solid `accent-secondary` endpoints. Footer: Cancel / Apply.
 - **Axis scaling (granularity):** the value axis **auto-fits to the data range** ("nice" rounded
   bounds), not forced to zero — so small variations stay legible — with a **"Start at zero"**
   toggle for honest magnitude comparison (default on for bars, off for tight trend lines). The
@@ -585,12 +773,12 @@ expand animation, or full-screen. Specced once, reused everywhere.
   on screen) and **drills** (sets the filter to that point); click empty space to release. Markers
   and crosshair use the series' deterministic colour (§0.1); reduced-motion disables the crosshair
   glide (§0.7).
-- **Visual treatment — subtle depth (not gimmick 3D).** Charts carry a *slight* top-down
-  perspective: bars/columns get a thin extruded edge + soft ground shadow, pie/donut a gentle
-  top-down tilt — just enough to read as dimensional. **Hard rule: depth is decorative only and
-  must never distort comparison** — bar heights, slice angles, and axis positions stay
-  geometrically true (no foreshortened "3D bar chart" that misreads values). Drop the extrusion
-  under reduced-motion / flat preference. A finish, not a data encoding.
+- **Visual treatment — flat (no faux 3D).** Charts are **flat**: no extruded edges, no ground
+  shadows, no top-down tilt on pie/donut. The earlier "subtle depth" treatment was dropped — it
+  added little and risked mis-reading values. Bars retain only a `radius-sm` (4px) **top cap**
+  (same radius token family as buttons / SegmentedControl) for visual consistency; everything
+  else is a clean flat fill. Heights, slice angles, and axis positions are always geometrically
+  true. The only chart motion is the §0.7 set (idle float on pie, CRT pop on rebuild, drill-down).
 - **Series & comparison (FR-V-005/006):** the legend lists each series with its colour, each
   **toggleable**. **"Add series to compare"** opens a picker to overlay another series — another
   currency's rate, or another person / category / account — drawn as an additional auto-coloured
@@ -610,10 +798,23 @@ All open the **same** Viewer, seeded with the launching context's filter:
 
 ### 9.2 MiniSparkline (card mini-chart)
 
-A compact inline chart on cards/rows summarising an entity's history/usage (account value,
-currency FX, budget trend). **Line or bar**, reads the entity's series, deterministic colour
-(§0.1). **Clickable** with a hover "expand" affordance → opens the Viewer (§9.1) seeded with that
-entity. A new atom (§7); reused everywhere a card shows history.
+A compact inline chart on cards/rows summarising an entity's recent history/usage (account value,
+currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows history.
+- **Form:** axis-less and label-less — pure trend. **Line** for continuous series (account value,
+  FX rate), **bar** for discrete/period series (budget months). Renders the **last N points** of
+  the entity's series (≈12, capped to the card width); the line carries a soft area fill beneath.
+- **Colour:** the entity's **deterministic identity colour** (§0.1) — so the sparkline matches the
+  card's fill/chip and stays consistent under immersive themes (the ramp remap, §0.2).
+- **Latest-point emphasis:** the most recent point gets a small end-dot; an optional **delta
+  caption** (▲▼ + % vs the first visible point) sits beside it, using the semantic inflow/outflow
+  colours (§0.1), not the series colour.
+- **Interaction:** **clickable** with a hover "expand" affordance (and a keyboard-focusable
+  control) → opens the **Viewer** (§9.1) seeded with this entity's series and filter. Hover shows
+  the nearest point's value/date in a lightweight tooltip; full crosshair/pinning lives in the
+  Viewer, not here.
+- **States:** **< 2 points** → a muted "no history yet" placeholder line (never a broken/empty
+  chart); **loading** → a Skeleton bar sized to the sparkline footprint (§7). Reduced-motion
+  disables the draw-on-mount animation (§0.7).
 
 ## 10. Currencies
 
@@ -631,10 +832,16 @@ EntityPage scaffold; rows: name · expression (mono) · applies-to badge · **Sy
 read-only) vs **Custom** (⋮ edit/delete). **Each System formula has an info tooltip** explaining
 in plain language what it computes (straight-line / declining-balance depreciation, compound
 interest, loan amortisation, FX delta, budget variance, net worth). **+ New formula** and edit
-use the **Formula editor modal**: name · applies-to · **expression** with insertable variable
-chips · **variables** table (name · default · description) · a **Test row** (sample inputs →
-live result) · Cancel / Save. Computed results are **hover-revealed** on asset/capital cards
-(FR-F-004).
+use the **Formula editor** — the EntityModal **side-drawer** variant (§8.2; it's a tall form):
+name · applies-to · **expression** with insertable variable chips · **variables** table
+(name · default · description) · a **Test row** (sample inputs → live result) · Cancel / Save.
+**Validation has two severities. Errors block Save** (red `error` ring, §0.9): syntax error ·
+**unknown variable** (the offending token is highlighted inline, with a fuzzy *"did you mean …?"*
+suggestion) · invalid variable name · duplicate variable name. **Warnings don't block** (amber):
+an unused variable · a missing default · a Test-row evaluation failure from the sample inputs
+(e.g. divide-by-zero / NaN — the formula may still be valid for real inputs). Known variables
+render as chips; the footer shows a live *"N error · N warning"* count and disables Save while any
+error remains. Computed results are **hover-revealed** on asset/capital cards (FR-F-004).
 
 ---
 
@@ -649,7 +856,7 @@ checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-
 (avatar) · **Category** (filled chip — *colour leads*, anti-rainbow §0.1) · **Currency** (chip) ·
 **Amount** (original, sortable, mono) · **Base SGD** (prominent, sortable, mono) · **status**
 (faint dot) · ⋮.
-- **Currency + Amount + Base are first-class** (the figures that matter most, per v1 use).
+- **Currency + Amount + Base are first-class** (the figures that matter most).
   Outflow/inflow is conveyed by amount **sign + colour** (red/green), not a separate column.
 - **Status is de-emphasized** — a faint dot (green paid · amber pending · grey cancelled);
   rarely edited, full state in the detail modal.
@@ -669,11 +876,20 @@ name · payer · **payment method** · category · currency · amount (→ base 
 commits; the **full modal** is still used for detail / foreign-currency / FX-formula entry
 (brief "quick entry").
 
+> **"Payment method" is the "Paid with" account picker — not a free enum.** The control is an
+> **account dropdown** plus a **Cash** option (same control as the modal's "Paid with", §12.7).
+> Field mapping (EDP §7.1): selecting an account sets **`source_account_id`** and leaves
+> `payment_method = null`; selecting **Cash** sets `payment_method = "cash"` and
+> `source_account_id = null`. There is no standalone "payment method" string the user types.
+
 ### 12.4 Selection & bulk
 Rows are **multi-selectable** (checkboxes) → the **BulkActionBar** (Edit shared fields · Duplicate
 · Archive · Delete). **Bulk multi-select is a GENERIC capability** (`useMultiSelect` +
-`BulkActionBar`) — **not events-only**: it also applies to **Categories** (bulk edit / archive /
-merge) and other entity lists where useful. *(Widens FR-E-020 — flagged for PRD.)*
+`BulkActionBar`, FR-E-020) — **not events-only**: it also applies to the **CategoryTree** (bulk
+edit / archive / **merge**) and is extensible to any future entity list. Per surface the editable
+field set differs (events: category, payment_method, transaction_status, payee, is_shared_expense;
+categories: type, archive/restore, merge). Permission applies per item — a Member may bulk-act
+only on their own events, an Admin/Owner on any.
 
 ### 12.5 Interactions
 Row click → **flip-expand into the transaction modal** (§8.2). ⋮ → ContextMenu (§8.1).
@@ -728,7 +944,8 @@ EntityPage scaffold. **Header:** name + info (next due) + **+ New recurring**. *
   sub-line · amount (mono) · **source badge** — Explicit / **Asset-/Capital-/Insurance-linked**
   (FR-A-017) · ⋮.
 - **Occurrence history (expand):** a timeline of expected occurrences with status badges —
-  **upcoming · processed · skipped · missed · manual · failed** (FR-E-013). Processed shows the
+  **upcoming · processed · skipped · missed · failed** (FR-E-013; a manually-triggered run lands on
+  `processed` — there is no separate `manual` status, architecture §3.6). Processed shows the
   **linked transaction — clickable → opens it in the Transactions module** (cross-module nav,
   FR-V-003); **missed is highlighted red**. Per-occurrence actions: **Skip** (FR-E-014),
   **Trigger now** (manual, FR-E-015), **Process now** (a missed one).
@@ -815,8 +1032,15 @@ comes from the topbar (§1.1).
   ghost tile + a header action open a **side drawer/panel** (§8 composite). The catalog is a
   **fixed, curated set of widget *types*** grouped by module (Accounts / Transactions / Budgets /
   Debt / Insights); each tile = icon + name + **live mini-preview** + default size badge.
-  **Templates are pre-generated; each instance binds to your data via an optional `scope`** chosen
-  at add-time (e.g. "Budget health" → pick which budget; "Account balances" → all or one account).
+  **Templates are pre-generated; each instance binds to your data via a `scope` chosen at add-time.**
+  Each gallery tile carries an inline **scope `Dropdown`** (household-scoped, respecting the
+  Individual-mode member filter): **unscoped** types (net worth; the spending/income/debt stat
+  cards) have none and are household-wide; **optional all-or-one** types (account balances,
+  spending-by-category, recent transactions, upcoming payments, debt summary) default to *All*;
+  **required** types (budget health) must target exactly one entity — **Add is disabled until a
+  scope is chosen**. Persisted in `dashboard_layout` as
+  `scope?: { kind: 'account' | 'category' | 'budget' | 'all', id?: uuid }` (omitted / `all` =
+  household-wide).
   Click adds it at its default span to the end of the grid. Already-pinned types show a **"✓ pinned"**
   marker but remain addable (multiples allowed — two budget widgets scoped to different budgets).
 - **Widgets** include: spending-by-category (**pie — the one chart that idle-floats**, §0.7),
@@ -836,7 +1060,3 @@ every screen must honour:
   §0.7/§3) · **Error** (inline + the §3 pages) · **Archived** (desaturated + dashed, §2.3).
 - **Reduced-motion** fallbacks (§0.7) and **density** (§0.4) apply everywhere.
 - **Responsive** collapse follows the §12.6 pattern (table→fewer-columns→cards; sidebar→drawer).
-
-<!-- UX SPEC SCREENS COMPLETE — remaining: final consolidation pass (renumber + fold Phase-3 features into PRD/architecture); EDP rebuild -->
-
-

@@ -127,12 +127,18 @@ IF an invitation was declined, the invitation status changes from `pending` to `
 or expired join URL shows the Invalid/Expired Error page.
 
 **FR-HH-005 — Household Permanent Deletion**
-The household owner may permanently and irreversibly delete the entire household and all
-associated data (persons, accounts, events, budgets, categories, invitations, sessions).
+The household owner may permanently and irreversibly delete the entire household and all its
+household-scoped data (accounts, events, budgets, categories, currencies, formulas, invitations).
 The action requires typing the exact household name as confirmation.
-*Acceptance:* Household and all child records removed from the database; all active
-sessions for household members are invalidated; owner is logged out and redirected to
-the login page; action is owner-only (admin/member receives 403).
+**`Person` rows are NOT deleted** — each member is **detached** (`household_id → NULL`) so the
+person/identity survives and can re-enter the seed flow on next login (architecture §2.6/§2.12).
+Their *household-scoped data* (their accounts, events, etc.) is deleted with the household; only
+the identity row persists. Member sessions are invalidated.
+*Acceptance:* Household and all its child records removed from the database **except `persons`**,
+which are detached to `household_id = NULL`; all active sessions for household members are
+invalidated; owner is logged out and redirected to the login page; action is owner-only
+(admin/member receives 403). (On re-login: the ex-owner re-seeds a household only if still an
+active approved-owner; other members get `NotInvitedError` — EDP §5.1 Path A.)
 
 ---
 
@@ -276,10 +282,12 @@ AccountCard and in the CreditCard detail view. It updates in real time as events
 FR-D-002.
 
 **FR-A-012 — Capital: Investment Type and Values**
-A CapitalAccount captures `investment_type` (stock, bond, fund, cpf, fixed_deposit),
-`cost_basis`, and `current_value`.
-*Acceptance:* All three fields visible on CapitalCard. Return on investment
-(`current_value - cost_basis`) shown as a derived display field.
+A CapitalAccount captures `investment_type` (stock, bond, fund, cpf, fixed_deposit) and
+`cost_basis`. **Current value is not a stored column** — it is the latest `AccountSnapshot`
+by date (FR-A-008; architecture §3.5, EDP §6.2a).
+*Acceptance:* `investment_type`, `cost_basis`, and the derived current value visible on
+CapitalCard. Return on investment (`current_value − cost_basis`, where `current_value` = latest
+snapshot) shown as a derived display field.
 
 **FR-A-013 — Asset: Purchase and Depreciation**
 An AssetAccount captures `asset_type`, `purchase_date`, `purchase_value`, and
@@ -301,14 +309,22 @@ grouped by month or year, sourced from `AccountSnapshot` records (FR-A-008) via 
 raw and converted currency modes, and expands into the full visualization viewer (FR-V).
 
 **FR-A-016 — Insurance: Policy Details**
-An InsuranceAccount captures `policy_type`, `coverage_types[]`, `premium_frequency`,
-`purchase_date`, `coverage_amount`, and `insurer`.
-*Acceptance:* All fields visible on InsuranceCard. Coverage types rendered as tags.
+An InsuranceAccount captures `policy_no`, `insurer`, `policy_type` (life/term/health),
+`policy_status`, `purchase_date`, `premium_frequency`, the per-coverage amounts
+(`coverage_death`, `coverage_tpd`, `coverage_ci`, `coverage_early_ci`,
+`coverage_personal_accident`), `coverage_hospital` (text), and `surrender_value` /
+`surrender_inquiry_date`. These are individual typed columns, not a JSON blob (architecture §3.5,
+EDP §6.2).
+*Acceptance:* All populated fields visible on InsuranceCard; the per-coverage amounts render as
+labelled rows/tags. Empty coverages are hidden.
 
 **FR-A-017 — Account-Linked Recurring Payment**
 For Asset, Capital, and Insurance accounts, Admin or Owner may enable a recurring payment.
-Doing so creates a real `RecurringPayment` entity (FR-E-011) linked back to the account via
-`source_account_id`, with its own `frequency_text`, payee, category, and amount. It appears
+Doing so creates a real `RecurringPayment` entity (FR-E-011) linked back to the originating
+account via the polymorphic pair **`source_entity_type`** (`capital`/`asset`/`insurance`) +
+**`source_entity_id`** (the account id) — *not* `source_account_id`, which is the "Paid with"
+account on plain events (EDP §7.3, architecture §3.6). It carries its own `frequency_text`,
+payee, category, and amount. It appears
 natively in the Recurring Payments module like any other recurring payment.
 *Acceptance:* Enabling creates a linked RecurringPayment; the scheduler processes it through
 the single recurring path (FR-SYS-006) — no separate account-source scanning. Disabling the
@@ -416,7 +432,10 @@ that date. Subsequent occurrences continue as scheduled.
 
 **FR-E-015 — Trigger Occurrence**
 User may manually trigger an occurrence without deleting the recurring payment on the current date
-*Acceptance:* OccurrenceRecord status = `manual`.
+*Acceptance:* The triggered occurrence generates its linked transaction and the `OccurrenceRecord`
+status becomes `processed` (same terminal state as a scheduler-run occurrence — there is no
+separate `manual` status; the occurrence enum is `upcoming|processed|skipped|missed|failed`,
+architecture §3.6).
 
 **FR-E-016 — Missed Occurrence Alert**
 If an expected occurrence date passes without a processed transaction and no skip
@@ -564,11 +583,14 @@ A category with zero linked events, budgets, or recurring payments may be hard-d
 *Acceptance:* Dependency scan runs. If any reference exists, hard delete is blocked.
 
 **FR-C-007 — Default Category Creation**
-A one-click button in the Categories module creates 17 default categories
-(12 expense + 5 income) tailored to household use. This is idempotent — running
-it twice does not create duplicates.
-*Acceptance:* 17 categories created with predefined names, colors, and icons.
-Existing categories with matching names are skipped.
+A one-click button in the Categories module creates the 13 default categories
+(10 expense + 2 income + 1 both) tailored to household use — the authoritative
+seed list defined in the Entity Design Philosophy (§9). This is the same set
+auto-seeded at household creation; the button is the recovery path, surfaced only
+when there are zero active categories. It is idempotent — running it twice does
+not create duplicates.
+*Acceptance:* 13 categories created with predefined names, colors, and icons.
+Existing categories with matching names (case-insensitive) are skipped.
 
 **FR-C-008 — Category Spending Rollup**
 When computing budget actuals or visualization totals for a parent category, all
@@ -946,7 +968,11 @@ The CSV importer must correctly parse exports from the v1 Google Sheets
 Financial Tracker, mapping v1 column names to v4 entity fields.
 *Acceptance:* A v1 transaction CSV import produces correct records for all
 columns: Name, Transaction Date, Currency Type, Amount, Amount (SGD), Payee,
-Payment Method, Transaction Type, Category, Status.
+Payment Method, Transaction Type, Category, Status. The importer additionally
+accepts the v4 columns Description (→ `notes`), GST Claim (→ `is_gst_claimable`),
+Personal (Yes ⇒ `is_shared_expense = false`), and Gift (→ `is_gift`).
+Categories that don't match an existing one are flagged in the preview and must
+be mapped or explicitly created — never silently auto-created (UX §5.3).
 
 **FR-IE-006 — CSV Export**
 Any user may export transactions to CSV with all active `VisualizationFilter`
