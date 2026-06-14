@@ -12,9 +12,9 @@ export function ToastContainer() {
   if (toasts.length === 0) return <></>
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed bottom-md right-md z-toast flex flex-col gap-xs">
       {toasts.map((t) => (
-        <div key={t.id} className="rounded-md bg-surface-raised px-4 py-2 text-sm text-text-primary shadow-lg">
+        <div key={t.id} className="rounded-md bg-surface-raised px-md py-xs text-sm text-text-primary shadow-lg">
           {t.message}
         </div>
       ))}

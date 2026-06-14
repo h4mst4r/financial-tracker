@@ -20,6 +20,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# Frontend TS source dir falsely matched by the Python `lib/` ignore above
+!frontend/src/lib/
+
 # Virtual Environment
 .venv/
 venv/
