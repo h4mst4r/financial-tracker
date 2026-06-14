@@ -10,8 +10,8 @@ authority: Plain-language product vision
 
 > **Design authority:** All entity definitions, field names, inheritance rules, and
 > architectural patterns referenced in this document are formally specified in
-> `entity-design-philosophy.md`. This brief describes *what* the system does and *why*.
-> The philosophy document specifies *how* it is structured.
+> `architecture.md` (§3 — data model & entity-design philosophy). This brief describes *what*
+> the system does and *why*. The architecture document specifies *how* it is structured.
 
 ---
 
@@ -319,4 +319,4 @@ will be automatically flagged
 ---
 
 *Open questions are tracked in `prd.md`. Technical detail is in `architecture.md`.
-Entity hierarchy authority is `entity-design-philosophy.md`.*
+Entity hierarchy authority is `architecture.md` §3.0a.*

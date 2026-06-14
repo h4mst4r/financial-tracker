@@ -6,8 +6,8 @@ created: 2026-06-11
 authority: >
   The visual + interaction contract. Built BACKWARDS from signed-off visuals — every
   token, motion, and state here was reviewed and approved before being written. Greenfield-
-  buildable: an agent must be able to reproduce the UI from this doc + the EDP without the
-  existing codebase. Schema-backed fields cross-reference architecture.md §3.
+  buildable: an agent must be able to reproduce the UI from this doc + architecture.md §3
+  (entity model) without the existing codebase. Schema-backed fields cross-reference architecture.md §3.
 ---
 
 # Financial Tracker — UX Design Specification
@@ -250,6 +250,13 @@ the viewer (§later).
   modal 400 · toast 500 · tooltip 600.
 - **Breakpoints:** xs 480 · sm 640 · md 768 · lg 1024 · xl 1280 · 2xl 1536. Core flows usable at
   desktop ≥1280, tablet ≥768, mobile ≥375 (FR-SYS-009).
+- **Responsive default (modules without a bespoke spec).** Only **Transactions (§12.6)** — and the
+  Transfers / Debt-drill / Budget-drill ledgers that explicitly follow §12.6 — carry a hand-tuned
+  collapse. **Every other module inherits the standard reflow, which needs no per-module spec:**
+  EntityPage **card grids** reflow via `auto-fit minmax` (§1.3), multi-column → single column; the
+  **CategoryTree** stays a single-column strip with its indentation preserved; **pickers / modals**
+  become bottom sheets below `md` (the §9 Custom-range picker is the precedent). A module only needs
+  its own responsive spec if it diverges from these defaults — and any such divergence is post-MVP.
 - **Icons:** all icons go through a single **`Icon` wrapper component** so the underlying
   library is a one-line swap (commercial / licensing flexibility). Current library:
   **`lucide-react`** (ISC, commercial-safe), outline, 16–20px inline. *(Phase-3 mockups used
@@ -289,7 +296,7 @@ Per-tenant white-label (and a server-driven config) is post-MVP.
 
 **Sidebar** (left):
 - **Branded header** — logo mark + app name (from `branding`).
-- **Grouped nav** (14 modules are too many flat — sectioned with muted group labels):
+- **Grouped nav** (13 modules + Settings — too many to list flat, so sectioned with muted group labels):
   OVERVIEW → Dashboard · ACCOUNTS → Accounts, Capital, Assets, Insurance · ACTIVITY →
   Transactions, Recurring, Transfers · INSIGHTS → Budgets, Debt · SETUP → Categories,
   Currencies, Formula.
@@ -424,8 +431,8 @@ branded spinner**; in-app loading uses skeletons (§0.7).
 | Generic Error | alert-triangle | error | uncaught 500 (7807) | Try again |
 | Logout | logout | neutral | after sign-out | Sign in |
 | Maintenance | tool | info | maintenance mode | (passive — retry later) |
-| Household Deleted | home-x | error | member's household deleted by owner | Sign out / await new household |
-| Removed from Household | user-x | warning | member removed by owner/admin | Sign out / await re-invite |
+| Household Deleted | home-x | error | re-login after owner deleted the household — `?error=household_deleted` (ARCH §5.8 / §2.8a Path A) | Sign out / await new household |
+| Removed from Household | user-x | warning | re-login after removal by owner/admin — `?error=removed` (ARCH §5.8 / §2.8a Path C) | Sign out / await re-invite |
 
 Copy is **calm and plain** throughout. Rate-limited (429) surfaces as a toast, not a full page.
 
@@ -514,7 +521,7 @@ Single column of personal preferences:
   distinct: **Archive/Restore** is the in-household lifecycle archive of the Person record
   (membership intact); **Remove** detaches the member (`household_id=NULL`), **archives all their
   data**, and **invalidates their sessions** → they hit the "Removed from Household" page (§3) and
-  are re-invitable with data restored (admin/owner only; EDP §5.1 Path C). The owner is not
+  are re-invitable with data restored (admin/owner only; ARCH §2.8a Path C). The owner is not
   removable.
 - **Invitations:** **+ Invite** → modal (Google email). Rows: email · status
   (pending/accepted/declined/expired/revoked) · expiry. Actions: Copy join link (`/join/<id>`),
@@ -530,7 +537,12 @@ Single column of personal preferences:
     no functional controls, just the placeholder so the surface exists.
 - **Danger Zone** (role-conditional): admin/member → **Leave Household** (confirm); owner →
   **Delete Household** (type the exact household name; removes all data, invalidates every
-  member session, logs the owner out — FR-HH-005).
+  member session, logs the owner out — FR-HH-005). **Post-deletion landing:** the owner is sent to
+  `/login`, and on next sign-in `seed_household_if_needed` gives them a **fresh empty household**
+  (ARCH §2.6); other members — now `household_id = NULL` with `detachment_reason='household_deleted'`
+  — hit the **"Household Deleted"** page (§3) on re-login until re-invited (ARCH §2.8a Path A). No
+  transitional in-app "deleted" state: the invalidated session simply fails the next request
+  (→ Lost Connection), and re-login routes them by `detachment_reason` (ARCH §5.8).
 
 ### 5.3 Data tab
 
@@ -558,6 +570,9 @@ Single column of personal preferences:
      **Unresolved conflicts default to Keep existing** (Apply is always enabled); the conflict list
      scrolls when it exceeds the panel.
   3. **Confirm** — records are created **only** here; result summary (created / skipped / merged).
+     Every imported event **and** any inline-created category is written with **`actor_id` = the
+     importing person** (whoever ran the wizard) and gets its **own audit row** (ARCH §4.7);
+     imported events carry `source = csv_import` (ARCH §3.6).
 - **CSV Export** — the current ledger with the active VisualizationFilter applied; filename
   `financial-tracker-export-{YYYY-MM-DD}.csv` (FR-IE-006).
 - **Backup** — last-backup **timestamp** + a **status chip**: **Success** (green), **In progress**
@@ -571,10 +586,17 @@ Single column of personal preferences:
 Uses the §1 EntityPage scaffold — header: name + info + search + **type filter**
 (All/Expense/Income) + archived toggle + **+ New category**. When there are **zero active
 categories**, the body shows an **EmptyState** with a **Create defaults** action (FR-C-007) — a
-one-click, idempotent create of the **13 authoritative starter categories** (EDP §9: 10 expense +
+one-click, idempotent create of the **13 authoritative starter categories** (ARCH §3.7: 10 expense +
 2 income + 1 both; the same set auto-seeded at household creation), previewed as chips (income
 tinted with the semantic income colour) alongside a secondary **New category**. Otherwise the body
 = the **CategoryTree** (2 levels max).
+
+> **CategoryTree is the one sanctioned exception to the EntityCard layer (CLAUDE.md §8.3).** It is
+> a *tree*, not a card grid, so it does **not** render `EntityCard` — it uses its own flat
+> flex-strip rows (CLAUDE.md §5.11). It still reuses the rest of the generic layer (EntityPage
+> scaffold, EntityModal, `useEntityManager`, `useMultiSelect` + BulkActionBar). "No bespoke CRUD
+> pages" still holds: the tree is a shared, specced component, not a one-off — and it is the *only*
+> entity surface exempt from `EntityCard`.
 
 - **Parent row:** calm colour-tint fill · drag handle (hover-reveal) · expand chevron (or `–`
   if childless) · colour icon chip · name · sub-count · **right-aligned** type badge · ⋮ menu.
@@ -807,6 +829,14 @@ expand animation, or full-screen. Specced once, reused everywhere.
   currency's rate, or another person / category / account — drawn as an additional auto-coloured
   line (or grouped bars). Series colours are deterministic per identity (§0.1); limits 2–4
   persons, 2–8 categories.
+- **Empty / error / stale states (every entry point).** **Zero data points** in the active range →
+  the chart area shows an **EmptyState** (§1.3: "No data for this range" + a *Reset range* action),
+  never blank axes. **Range wider than the available history** → render what exists and show a subtle
+  "data starts {date}" caption rather than padding empty buckets. **A scoped entity since archived**
+  (a dashboard widget or saved drill bound to it) → an **AlertBanner** ("{name} is archived") above
+  the chart, still rendering its historical series. **Query failure** → an inline error with
+  **Retry** (the §18 Error state), never a silent empty chart. Loading → a chart-shaped Skeleton
+  (§5.10 / §9.2).
 - Sources: `/api/visualizations/*` (read-only).
 
 ### 9.1 Entering the Viewer — every entry point
@@ -877,7 +907,7 @@ for secondary filters (account, person, status, GST/gift, reconciled).
 
 ### 12.1 Columns (desktop)
 checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-line) · **Payee**
-(avatar — the `payee_person_id` PersonRef, EDP §3.3; header reads "Payee" to match the data model) ·
+(avatar — the `payee_person_id` PersonRef, ARCH §3.2; header reads "Payee" to match the data model) ·
 **Category** (filled chip — *colour leads*, anti-rainbow §0.1) · **Currency** (chip) ·
 **Amount** (original, sortable, mono) · **Base SGD** (prominent, sortable, mono) · **status**
 (faint dot) · ⋮.
@@ -903,7 +933,7 @@ commits; the **full modal** is still used for detail / foreign-currency / FX-for
 
 > **"Payment method" is the "Paid with" account picker — not a free enum.** The control is an
 > **account dropdown** plus a **Cash** option (same control as the modal's "Paid with", §12.7).
-> Field mapping (EDP §7.1): selecting an account sets **`source_account_id`** and leaves
+> Field mapping (ARCH §3.6): selecting an account sets **`source_account_id`** and leaves
 > `payment_method = null`; selecting **Cash** sets `payment_method = "cash"` and
 > `source_account_id = null`. There is no standalone "payment method" string the user types.
 
@@ -976,7 +1006,9 @@ EntityPage scaffold. **Header:** name + info (next due) + **+ New recurring**. *
   **Trigger now** (manual, FR-E-015), **Process now** (a missed one).
 - **Create/edit modal:** EntityModal + the **RecurringDateInput** — free-text `frequency_text`
   ("8th of every month") that **parses and shows the next occurrence for confirmation** before
-  saving (the 9 patterns, FR-E-011/012).
+  saving (the 9 patterns, FR-E-011/012; enumerated with their `frequency_rule` shapes in ARCH §3.6).
+  A free-text entry matching **none** of the 9 patterns is a **blocking** error — Save is disabled,
+  nothing is stored (never a silent guess).
 - Account-linked recurring are created from their account (FR-A-017) and appear here read-linked.
   Missed occurrences raise RECURRING_MISSED alerts (FR-E-016).
 
@@ -993,7 +1025,7 @@ EntityPage scaffold. **Header:** name + info (over/near counts) + **+ New budget
 - **Actuals are computed live**, never stored (FR-B-003).
 - **Subcategory rollup (important).** A budget on a **parent** category counts spending in **all its
   child categories** too — `actual_spent` is the whole-subtree total, not just events tagged to the
-  parent directly (EDP §8). This is a frequent source of confusion, so it is called out explicitly
+  parent directly (ARCH §3.7). This is a frequent source of confusion, so it is called out explicitly
   rather than buried.
 - **3-level drill-down (FR-B-006/007):** card → contributing **transactions** → **subcategory**
   breakdown.
@@ -1033,6 +1065,14 @@ Auto-cleared by transfers (FR-D-004/005). Also surfaced on the Dashboard debt su
 CreditCard cards. **Drill-downs render the contributing transactions in the ledger-style table
 (§12)** — consistent with Transactions/Transfers.
 
+> **Drill filter (resolved).** The contributing set is exactly the derivation in ARCH §3.10 — not a
+> free-form query. *Credit-card row →* events with `source_account_id = <that card>` AND
+> `transaction_type = outflow` (less its `is_debt_repayment` transfers). *Household-owes-person row
+> →* events with `payee_person_id = <person>` AND `is_shared_expense = true` AND a source account
+> personal to them (less repayment transfers to them). Both seed the ledger Viewer/table via a
+> `VisualizationFilter` (the internal case sets `is_shared_expense = true`, ARCH §4.12) — there is
+> **no dedicated drill endpoint**.
+
 ---
 
 ## 17. Dashboard
@@ -1052,7 +1092,7 @@ comes from the topbar (§1.1).
 - **Data loading.** Each widget fetches **its own** data via TanStack Query, keyed by
   `widget_type` + its `scope` + the active VisualizationFilter + topbar context (Household/member +
   display currency), against the read-only visualization contracts (`/api/visualizations/...`,
-  EDP §13.5 / ARCH §6.4). No batch endpoint in MVP; the shared query cache de-dupes overlapping
+  ARCH §4.12 / §6.4). No batch endpoint in MVP; the shared query cache de-dupes overlapping
   widgets.
 - **Widget sizing — discrete spans, resized in place.** In edit mode the S/M/L control rescales
   the widget **live on the grid** (no separate dialog); widgets snap to the responsive grid (same

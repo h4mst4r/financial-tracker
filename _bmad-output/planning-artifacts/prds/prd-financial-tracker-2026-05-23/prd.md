@@ -18,7 +18,7 @@ authority: Feature requirements and acceptance criteria.
 ## 0. Entity Philosophy
 
 All features in this PRD are expressed in terms of the entity hierarchy defined in
-`entity-design-philosophy.md`. Requirements are grouped by entity family. Each entity
+`architecture.md` §3 (data model & entity hierarchy). Requirements are grouped by entity family. Each entity
 family's requirements apply to **all subtypes** unless a subtype is explicitly named.
 
 The entity families in scope:
@@ -138,7 +138,7 @@ the identity row persists. Member sessions are invalidated.
 which are detached to `household_id = NULL`; all active sessions for household members are
 invalidated; owner is logged out and redirected to the login page; action is owner-only
 (admin/member receives 403). (On re-login: the ex-owner re-seeds a household only if still an
-active approved-owner; other members get `NotInvitedError` — EDP §5.1 Path A.)
+active approved-owner; other members get `NotInvitedError` — architecture §2.8a Path A.)
 
 ---
 
@@ -284,7 +284,7 @@ FR-D-002.
 **FR-A-012 — Capital: Investment Type and Values**
 A CapitalAccount captures `investment_type` (stock, bond, fund, cpf, fixed_deposit) and
 `cost_basis`. **Current value is not a stored column** — it is the latest `AccountSnapshot`
-by date (FR-A-008; architecture §3.5, EDP §6.2a).
+by date (FR-A-008; architecture §3.5).
 *Acceptance:* `investment_type`, `cost_basis`, and the derived current value visible on
 CapitalCard. Return on investment (`current_value − cost_basis`, where `current_value` = latest
 snapshot) shown as a derived display field.
@@ -313,8 +313,7 @@ An InsuranceAccount captures `policy_no`, `insurer`, `policy_type` (life/term/he
 `policy_status`, `purchase_date`, `premium_frequency`, the per-coverage amounts
 (`coverage_death`, `coverage_tpd`, `coverage_ci`, `coverage_early_ci`,
 `coverage_personal_accident`), `coverage_hospital` (text), and `surrender_value` /
-`surrender_inquiry_date`. These are individual typed columns, not a JSON blob (architecture §3.5,
-EDP §6.2).
+`surrender_inquiry_date`. These are individual typed columns, not a JSON blob (architecture §3.5).
 *Acceptance:* All populated fields visible on InsuranceCard; the per-coverage amounts render as
 labelled rows/tags. Empty coverages are hidden.
 
@@ -323,7 +322,7 @@ For Asset, Capital, and Insurance accounts, Admin or Owner may enable a recurrin
 Doing so creates a real `RecurringPayment` entity (FR-E-011) linked back to the originating
 account via the polymorphic pair **`source_entity_type`** (`capital`/`asset`/`insurance`) +
 **`source_entity_id`** (the account id) — *not* `source_account_id`, which is the "Paid with"
-account on plain events (EDP §7.3, architecture §3.6). It carries its own `frequency_text`,
+account on plain events (architecture §3.6). It carries its own `frequency_text`,
 payee, category, and amount. It appears
 natively in the Recurring Payments module like any other recurring payment.
 *Acceptance:* Enabling creates a linked RecurringPayment; the scheduler processes it through

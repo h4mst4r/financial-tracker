@@ -4,8 +4,10 @@ version: 4.0
 created: 2026-06-11
 authority: >
   The implementation contract for the backend, security model, data model, and
-  infrastructure. Feature-level API contracts (entities, events, visualizations) are
-  specified per story in epics.md, co-designed with the UX specification.
+  infrastructure. Together with the UX specification this is self-sufficient: per-feature API
+  contracts are DERIVABLE from the entity schemas (§3), the Pydantic conventions (§4.5), and the
+  generic CRUD template (§4.10), with every bespoke endpoint specified inline. epics.md is a
+  derived work plan generated from this document and the UX spec — not a third source of authority.
 ---
 
 # Financial Tracker — Architecture
@@ -32,9 +34,16 @@ schemas (DDL), algorithms (numbered steps), and contracts (request/response shap
 document — all of which stand alone.
 
 **Scope of this document:** the foundational, stable layers — stack, auth, security, data model,
-backend layering, infrastructure, frontend skeleton. **Per-feature API request/response contracts**
-(entities, events, budgets, currencies, visualizations) are specified **per story in `epics.md`**,
-alongside the screen that consumes each one, so data shape and UI are pinned together.
+backend layering, infrastructure, frontend skeleton.
+
+**Per-feature API request/response contracts are *derivable*, not deferred.** Standard entity
+endpoints follow mechanically from the per-entity schemas (§3), the Pydantic `Create`/`Update`/
+`Response` conventions (§4.5), and the generic CRUD template (§4.10); the bespoke endpoints —
+global search (§4.11), visualizations (§4.12), debt (§3.10), alerts (§3.9), FX (§5.7) — are
+specified inline here. Together with the UX specification, **these two documents are
+self-sufficient**: anything an agent needs to build a feature is present here or in the UX spec, or
+derivable from them. `epics.md` and its per-story contracts are **generated from this document and
+the UX spec** — a derived build plan, **not** a third source of authority.
 
 ---
 
@@ -152,7 +161,7 @@ From the brief and PRD, non-negotiable:
   makes the UX spec enforceable and a coding agent's output checkable.
 - **Alternatives rejected:** CSS-in-JS (runtime cost, weaker token discipline); component
   libraries like MUI/Chakra (impose their own design language, fighting the custom token
-  system and the EDP).
+  system and the entity-design philosophy in §3.0a).
 
 ### 1.10 Client state → **Zustand (UI/session state) + TanStack Query (server state)**
 
@@ -232,7 +241,7 @@ CSRF protection of the OAuth round-trip is an **HMAC-signed `oauth_state` cookie
 |---|---|---|
 | 1 | `GET /auth/login` | Generate random state, HMAC-sign with `SESSION_SECRET`, set `oauth_state` cookie (HttpOnly, SameSite=Lax, 10-min TTL, path `/auth/callback`), 302 → Google. |
 | 2 | `GET /auth/callback` | Verify signed state == returned state; exchange code (+`client_secret`) for tokens; validate ID token via `google-auth` (audience + signature + expiry, 10s skew); **require `email_verified is True`** before trusting the email; `get_or_create_person`; `seed_household_if_needed`; `create_session`; set `session_id` cookie; 302 → frontend. |
-| — | failure | Any failure 302 → `{FRONTEND_URL}/login?error=oauth_error` (or `?error=not_invited`). Never a 500 to the user. |
+| — | failure | Any failure 302 → `{FRONTEND_URL}/login?error=oauth_error` (or `?error=not_invited` / `?error=removed` / `?error=household_deleted`, chosen from `detachment_reason`, §2.6 step 4). Never a 500 to the user. |
 
 Scopes requested: `openid email profile`. Prompt: `select_account`.
 The ID-token audience is validated against `GOOGLE_CLIENT_ID`.
@@ -314,8 +323,10 @@ the 30-min staleness check) and adds `Set-Cookie` + `X-Session-Id` to the respon
 
 **It persists real rows (clarified).** On first activation the middleware **upserts a dev
 `Person`** (`google_sub=dev-bypass-user-001`, seeded through the normal
-`get_or_create_person` + `seed_household_if_needed` path so it lands in a real household) **and
-inserts a dev `Session` row** (`user_agent="dev-bypass"`). Both are real DB rows — so
+`get_or_create_person` + `seed_household_if_needed` path so it lands in a real household — its
+synthetic email is **auto-approved at bypass init** (inserted into `approved_owners`, mirroring
+`BOOTSTRAP_OWNER_EMAILS`, §2.7) so `seed_household_if_needed` step 3 creates that household instead
+of raising `NotInvitedError`) **and inserts a dev `Session` row** (`user_agent="dev-bypass"`). Both are real DB rows — so
 `get_current_person`/`validate_session` find them with their ordinary lookups (no mock object,
 no special-case in the dependency). The dev rows persist across restarts; the fail-safe in §2.14.B
 step 6 is what neutralizes them once the flag is turned off.
@@ -352,12 +363,17 @@ step 6 is what neutralizes them once the flag is turned off.
    frontend renders the PendingInvitationDialog. A NULL-household session is **not a bug**.
 3. email ∈ active `approved_owners` (§2.7) → create + seed a household, `role=owner`.
 4. else → raise `NotInvitedError`. The `Person` row is **still persisted** (valid Google
-   identity, no rights); no session is created; callback redirects to `?error=not_invited`.
+   identity, no rights); no session is created. The callback picks the redirect from
+   `person.detachment_reason` (§3.4): `household_deleted` → `?error=household_deleted`, `removed` →
+   `?error=removed`, otherwise (`left` / NULL — a genuine never-invited user) → `?error=not_invited`.
+   §5.8 maps each error code to its §3 page.
 
 `_create_and_seed_household` creates the `Household` (default `SGD` / `Asia/Singapore`),
 flushes (to satisfy the `Household.created_by → persons.id` FK ordering), sets
-`person.household_id` + `role=owner`, seeds the base `SGD` `Currency`, and seeds default
-categories via `category_service.seed_default_categories`.
+`person.household_id` + `role=owner`, **clears `detachment_reason`/`detached_at` to NULL** (the
+person is in a household again), seeds the base `SGD` `Currency`, and seeds default
+categories via `category_service.seed_default_categories`. The invitation-accept path likewise
+clears `detachment_reason`/`detached_at` when it sets `household_id`.
 
 ### 2.7 Approved Owners
 
@@ -421,6 +437,40 @@ approved-owners match in `seed_household_if_needed`.
   to another household — cross-household access is impossible at the data layer.
 - `require_role(min)` enforces a minimum role against the hierarchy
   `{member:1, admin:2, owner:3}`, 403 below threshold.
+
+**Role capabilities:** `owner(3)` — full control, can delete the household and change roles;
+`admin(2)` — invite/remove members, manage categories and all entities; `member(1)` — create/edit
+own transactions, read-only on others' private data. A person belongs to **at most one
+household**; joining a new one requires leaving the current.
+
+### 2.8a Household Membership Transitions
+
+Because a person belongs to at most one household, the lifecycle has three exit paths plus the
+join flow:
+
+- **Path A — Owner deletes household** (owner only): hard-deletes the household and ALL its data
+  (the FR-HH-005 teardown, §3.0 principle 4). On next login `can_create_household` is **recomputed
+  from `approved_owners`** (§2.7) — the ex-owner re-seeds a household only if still approved; it is
+  **not** an automatic "you were owner" grant. Other members get `household_id=NULL` with
+  **`detachment_reason='household_deleted'`**, **their sessions are deleted at teardown**
+  (§2.14.B.1), and on re-login they land on the **Household Deleted** page (§5.8) unless separately
+  invited. **Irreversible.**
+- **Path B — Admin/Member leaves** (self): detaches the person (`household_id=NULL`,
+  `detachment_reason='left'`) and **archives** all their data (kept in the dataset, excluded from
+  active queries). Re-joining via a new invitation restores access. **Reversible.** Backend:
+  `POST /api/household/leave`.
+- **Path C — Admin/Owner removes a member** (`require_role(admin)`; owner not removable): **same
+  data outcome as Path B** but initiated by another member (sets `detachment_reason='removed'`). The
+  `Person` row **survives** (never hard-deleted — audit integrity). **Invalidates the removed
+  member's sessions** → they land on the "Removed from Household" page (UX §3); re-invitable, data
+  restored on re-join. Distinct from
+  ⋮ Archive/Restore (the in-household lifecycle archive — membership intact). Backend:
+  `POST /api/household/members/:id/remove`.
+- **Join (pending invitation):** on login with a pending invitation to a *different* household, the
+  `PendingInvitationDialog` (UX §4.3) shows role-aware consequences; on confirm an owner runs
+  delete-then-accept, an admin/member runs leave-then-accept; on dismiss the invitation stays
+  pending and reappears next login. Invitation states: `pending | accepted | declined | revoked |
+  expired` (7-day expiry; `revoked` is the sole "cancelled" state — §3.4).
 
 ### 2.9 Security Headers & CSP
 
@@ -535,6 +585,28 @@ Dev sessions use a 24-hour expiry and are exempt from step 7.
 > disagree (e.g. a DB restored from an older backup); step 7 is the idle rule for non-dev sessions.
 > A rejected session here is also a cleanup candidate (§2.14.F).
 
+**B.1 Edge cases the algorithm deliberately handles (resolved).**
+
+- **Household deleted out from under a live session (Path A teardown / Path C removal, §2.8a).**
+  `sessions` has no `household_id`, so a stale session is not auto-detected by `validate_session`.
+  Both flows therefore **delete the affected persons' `sessions` rows** at the point of teardown/
+  removal (by `person_id` — Path A deletes sessions for every member, Path C for the removed
+  member only). Effect: the next request finds no session row (algorithm step 3 → `None`) and the
+  user re-enters auth — landing on the seed flow (ex-owner) or, for a detached member, the page
+  chosen from `detachment_reason` at re-login (§2.6 step 4): **Household Deleted** (Path A) or
+  **Removed from Household** (Path C). This makes the change **immediate**, not lazy. *Defense in depth even if a session row
+  survives:* its `person.household_id` is now `NULL`, so every household-scoped route 401s via
+  `get_household_id` (§2.8) — the user can never reach household data, only `/auth/me`.
+- **`can_create_household` changes mid-session.** The flag on `persons` is a **denormalized cache
+  of `approved_owners`, synced only at login** in `seed_household_if_needed` (§2.7) —
+  `validate_session` does **not** re-query `approved_owners` per request (it would add a read to a
+  write-heavy path for no MVP benefit). So toggling someone's approval does not retroactively
+  rewrite live sessions, and that is correct: the flag is **advisory for UI only**. The
+  **authoritative** gate is re-evaluated at the moment it matters — the next login / household-seed
+  attempt re-reads `approved_owners`. A user who loses approval keeps their current session and
+  household (they already have one); they simply can't seed a *new* household later. A user who
+  gains approval sees it reflected after their next login.
+
 **C. `GET /auth/me` response contract** (also returned verbatim by `POST /auth/dev-login`):
 
 ```jsonc
@@ -593,9 +665,59 @@ Any change to this shape requires updating the frontend `authStore.setAuth()` in
 
 ## 3. Data Model & Schema
 
-The authoritative schema for every table. UUID PKs, household scoping, exact-decimal money,
-and the migration plan (§3.12). This section is the DDL contract; the Entity Design
-Philosophy doc covers the conceptual model behind it.
+The authoritative schema for every table **and the entity-design philosophy behind it** — the
+conceptual model, design tenets, and hierarchy (§3.0a) plus the DDL contract (§3.0 onward) now
+live together here. UUID PKs, household scoping, exact-decimal money, and the migration plan
+(§3.12).
+
+### 3.0a Entity Design Tenets & Hierarchy
+
+**The core promise:** add a new financial entity type and every part of the system — data model,
+API, UI card, modal, page, audit trail, archive pattern, currency handling — works without
+rewriting shared infrastructure.
+
+**Design tenets** (a divergence from these is a code-review failure):
+
+1. **Hierarchy over repetition.** Every entity inherits from a base; shared behaviour is defined
+   once and inherited. Duplication is a bug.
+2. **Generic first, specific second.** Build `EntityCard<T>` before `AccountCard`,
+   `BaseFinancialEvent` before `Transaction`. Specifics extend generics, never replace them.
+3. **One change, everywhere.** A colour token, base field, or CRUD behaviour changed in one place
+   must propagate to every entity that uses it.
+4. **Extensibility by design.** A new account type (CryptoWallet) or event type (TaxPayment)
+   should need only a new subclass + a config object — not new infrastructure.
+5. **Computed over stored where safe.** Debt, budget variance, net worth, forex delta, current
+   balance are **derived from source entities, not stored** — eliminating synchronisation bugs.
+6. **No orphan logic.** Every formula, status rule, and validation belongs to an entity class.
+7. **UI reflects structure.** The frontend component hierarchy mirrors this entity hierarchy.
+
+**The entity hierarchy:**
+
+```
+EntityHousehold
+│
+├── EntityPersons                    (User + HouseholdMember unified)
+│   ├── EntityAccounts               (BaseAccount — discriminated by account_type; §3.5)
+│   │   ├── BankAccount             (interest_rate set ⇒ behaves as savings; no separate type)
+│   │   ├── CreditCard               ↳ also a DebtSource (§3.10)
+│   │   ├── Capital / Investment     ↳ also a RecurringEventSource
+│   │   ├── Asset                    ↳ also a RecurringEventSource
+│   │   └── Insurance                ↳ also a RecurringEventSource
+│   └── EntityEvents                 (BaseFinancialEvent; §3.6)
+│       ├── Transaction
+│       ├── RecurringPayment         ↳ source: RecurringPayments, Capital, Assets, Insurance
+│       └── Transfer                 ↳ auto-clears EntityDebt; optionally flagged
+│
+├── EntityBudgets                    (monthly/yearly aspirational targets; §3.7)
+├── EntityCategories                 (household-specific, hierarchical, max 2 levels; §3.7)
+├── EntityCurrencies                 (base configurable + daily FX + fees + multi-display; §3.8)
+├── EntityFormulas                   (system defaults + user-configurable registry; §3.8)
+└── EntityDebt                       (computed view — derived, never stored; §3.10)
+```
+
+`↳` = a secondary role (a CreditCard is primarily an account but also behaves as a DebtSource).
+`EntityDebt` is household-level (debt exists between persons in a household) and is a **computed
+view with no table** (§3.10) — listed here only for conceptual completeness.
 
 ### 3.0 Schema Principles (apply to every table)
 
@@ -610,7 +732,7 @@ Philosophy doc covers the conceptual model behind it.
    exception — household teardown (FR-HH-005):** deleting a household cascades a **hard delete of
    ALL its rows** (accounts, events, categories, budgets, …) — the account-closure path —
    bypassing the "hard-delete only if empty" rule. Member `Person` rows survive with
-   `household_id=NULL` (§2.6); do not soft-delete first. See EDP §5.1 Path A.
+   `household_id=NULL` (§2.6); do not soft-delete first. See §2.8a Path A.
 5. **Dates** stored/transmitted ISO 8601 (`YYYY-MM-DD`); display `DD-MM-YYYY` is a frontend
    concern (FR-V-010). Timestamps are tz-aware UTC.
 6. **Audit:** every create/update/archive/restore/delete writes an `audit_logs` row
@@ -649,7 +771,7 @@ Pure column mixin — does not inherit Base. **Accounts do NOT use this mixin:**
 single "amount" (its value is the `opening_balance` ledger anchor plus the `account_snapshots`
 series, §3.5), so forcing the `amount NOT NULL` block onto it would be wrong. The flat
 destination-leg columns on a Transfer (`dest_*`, §3.6) and `account_snapshots`' own
-`value`/`currency`/`value_base` columns are likewise standalone, not this mixin (EDP §3.2 carve-out).
+`value`/`currency`/`value_base` columns are likewise standalone, not this mixin (§3.2 carve-out).
 
 ```sql
 currency               VARCHAR(3)    NOT NULL,          -- ISO 4217 of the entered amount
@@ -676,6 +798,34 @@ fx_rate_date           DATE          NULL,   -- the date the rate applies to; im
   date for a backfill); **immutable** thereafter — a later re-FX writes a correcting row, it never
   mutates this. It is **NULL only when `currency == base_currency`** (no FX applied); for any
   foreign-currency row it is required (non-NULL).
+
+**`amount_base_calculated` fill priority (override flow):** the system fills the calculated base
+amount, then the user may override the actual `amount_base`:
+1. **Account FX formula** — if the "paid with" account has `fx_formula_id` set, evaluate it with
+   the formula's `variables` (`{amount, rate, fee_pct, fee_fixed}`, §3.8). Most accurate.
+2. **Spot rate** — else `amount_base_calculated = amount × rate_to_base` from the currency (§3.8).
+3. **Cash / no account** — same spot-rate fallback.
+
+The UI shows how it was derived (`formula` / `spot rate` / `manual`). `amount_base` defaults to
+`amount_base_calculated`; the user may override it with the exact bank-statement figure (indicator
+→ `manual`), and `fx_delta` recomputes. Accumulated `fx_delta` across transactions is the total
+household forex cost — a primary dashboard metric, **always shown, never hidden**. Original
+`currency`/`amount` are preserved (never overwritten) so raw-currency breakdowns stay available
+for visualisation (§3.8).
+
+**`PersonRef` — the unified person reference.** `Owner`, `Payee`, `Payer` are the same concept: a
+reference to an `EntityPerson`. The field name differs by context; the type is always `PersonRef`.
+A name is **never stored as a string** — only the `*_person_id` FK is persisted; display name,
+avatar, and identity colour resolve at render time from the persons cache.
+
+```typescript
+type PersonRef = {
+  person_id: UUID;
+  display_name: string;
+  avatar_url?: string;   // Google picture_url — used FIRST when present
+  colour?: HexColor;     // Person.colour — fallback initials-avatar background
+};
+```
 
 ### 3.3 Inheritance map — which tables get the audit trail
 
@@ -714,13 +864,19 @@ and `colour` (hex; **fallback** initials-avatar background for payee identity �
 (FR-P-003 / FR-DB-003): `font` (str, def `'base'`), `density` (`comfortable|compact`, def
 `comfortable`), `reduce_motion` (bool, def false), `notification_prefs` (JSON — per-alert-type
 opt-in map, FR-SYS-007), `dashboard_layout` (JSON — `{widget_type, span, order, scope?}[]`,
-FR-DB-003). Index: `(household_id, email)`.
+FR-DB-003).
+**Detachment tracking (§2.8a):** `detachment_reason` (enum `left | removed | household_deleted`,
+nullable — NULL while in a household) and `detached_at` (timestamp, nullable) record *why* a
+person's `household_id` went NULL, so re-login can route them to the correct §3 page
+(`household_deleted` → Household Deleted; `removed` → Removed from Household; `left` / NULL →
+Not Invited). Both are **cleared back to NULL** the moment the person seeds or joins a household
+again. Index: `(household_id, email)`.
 
 **`sessions`** (Base) — see §2.14.A (full DDL there). No `household_id`.
 
 **`household_invitations`** (Base) — `id, household_id, invited_email(320), invited_by(FK
 persons), created_at, expires_at, accepted_at, status`. **Status enum** (type `InvitationStatus`,
-EDP §14.3): `pending | accepted | declined | revoked | expired`. **Expiry = 7 days** per FR-HH-003.
+§4.13): `pending | accepted | declined | revoked | expired`. **Expiry = 7 days** per FR-HH-003.
 
 > **Token validation has no separate "already-used" state (resolved).** A join token is
 > actionable **only** while `status=pending` (and not past `expires_at`). Validation returns a
@@ -759,13 +915,20 @@ running balance, FR-A-008); NULL for asset-like types.
 
 > **Insurance coverage is individual typed columns, not a JSON blob** (resolved 2026-06-13) — the
 > per-coverage amounts (`coverage_death`/`tpd`/`ci`/`early_ci`/`personal_accident`) are first-class
-> nullable columns so they are queryable/sortable and match EDP §6.2. There is **no
+> nullable columns so they are queryable/sortable. There is **no
 > `coverage_types(JSON)` / `coverage_amount` column** (an earlier draft used those; they are
 > superseded).
 
 **Formula assignment columns** (FR-F-003): `depreciation_formula_id` (asset),
 `fx_formula_id(FK formulas, null)` for bank/credit_card, and `interest_formula_id(FK
 formulas, null)` for capital/asset. Index: `(household_id, account_type)`.
+
+**Default icon per `account_type` (accounts carry no custom glyph, UX §8.2).** Accounts render a
+fixed Lucide icon keyed off the discriminator (the EmojiIconPicker is **categories-only**, §3.7);
+there is **no per-account icon column**. The map lives in one frontend constant
+(`ACCOUNT_TYPE_ICON`): `bank → Landmark`, `credit_card → CreditCard`, `capital → TrendingUp`,
+`asset → Building2`, `insurance → ShieldCheck`. Colour identity still comes from the instance's own
+`colour` (§3.0a / UX §5.5) — the icon is type-derived, the colour is per-instance.
 
 > **Current value** for asset-like accounts (capital, asset, insurance) is the latest
 > `account_snapshot` by date — single source of truth, no drift. `cost_basis` is the basis,
@@ -795,7 +958,7 @@ link back to the originating account, so FR-A-017 creates a recurring-payment ev
 `transaction|recurring_payment|transfer`).
 
 *Base event columns:* `name, event_date(INDEX), event_type,
-payee, transaction_status(pending|completed|cancelled|reconciled, def completed),
+transaction_status(pending|completed|cancelled|reconciled, def completed),
 payee_person_id(FK persons), payment_method, category_id(FK categories), transaction_type
 (inflow|outflow|transfer), is_shared_expense(bool), notes, is_gst_claimable(bool),
 is_gift(bool), source_account_id(FK accounts, null)` *(the single account link — **no separate
@@ -803,10 +966,18 @@ is_gift(bool), source_account_id(FK accounts, null)` *(the single account link �
 `source (manual|csv_import|bank_feed, def manual)`, `external_ref(null)` — provenance
 (FR-E-001), bank-feed hook.
 
+> **`payee` is the paying household member, FK-only (resolved).** "Payee" here = the household
+> member who paid (the payer) — stored **only** as `payee_person_id` (a `PersonRef`, §3.2), never
+> as a string. There is **no free-text `payee` column** (an earlier draft listed one; it duplicated
+> `payee_person_id` and broke the never-store-a-person-as-a-string rule, §3.2). The transaction
+> `name` holds the **good/service**; the **merchant/vendor** name, if recorded, goes in `notes`.
+> All person-matching — budget owner (§3.7), internal debt (§3.10), duplicate detection (§4.10) —
+> compares `payee_person_id`.
+
 > **One account link: `source_account_id` (resolved 2026-06-13).** The originating account is
 > `source_account_id` (NULL only for Cash, where `payment_method='cash'`); a Transfer's far leg is
 > `destination_account_id`. There is **no separate `account_id` column** — an earlier draft listed
-> one, but it duplicated `source_account_id` and nothing referenced it (EDP §7.1 and the PRD only
+> one, but it duplicated `source_account_id` and nothing referenced it (§3.6 and the PRD only
 > know `source_account_id`). Account ledger/history queries (FR-A-007) filter on `source_account_id`
 > (plus `destination_account_id` for incoming transfer legs).
 
@@ -832,7 +1003,32 @@ forex-loss tracking); the destination leg is captured by `dest_*`. A future remi
 occurrence_status(upcoming|processed|skipped|missed|failed), generated_event_id(FK events,
 null), processed_at, notes`. A user-triggered run (FR-E-015 manual trigger) records the
 occurrence as `processed` — there is **no separate `manual` status** (resolved 2026-06-13; the
-enum is exactly the five values above, matching EDP §7.3). Index: `(recurring_event_id, expected_date)`.
+enum is exactly the five values above). Index: `(recurring_event_id, expected_date)`.
+
+**Recurring frequency — the 9 patterns, parse + storage (FR-E-011/012).** `frequency_text` is the
+user's free-text input; a **pure, deterministic** parser (no I/O — same text always yields the same
+rule) resolves it to a structured `frequency_rule` (JSON) plus a computed `next_occurrence`. The
+**nine supported patterns are the only ones the parser accepts** (weekday `0=Sun..6=Sat`, month
+`1–12`):
+
+| # | Pattern | Example | `frequency_rule` |
+|---|---|---|---|
+| 1 | every [weekday] | "every Sunday" | `{kind:'weekly', weekday:0}` |
+| 2 | weekly | "weekly" | `{kind:'weekly', weekday:<start>}` |
+| 3 | monthly | "monthly" | `{kind:'monthly_day', day:<start>}` |
+| 4 | [N]th of every month | "8th of every month" | `{kind:'monthly_day', day:8}` |
+| 5 | every [N] days | "every 10 days" | `{kind:'every_n_days', n:10}` |
+| 6 | every [N] weeks | "every 4 weeks" | `{kind:'every_n_weeks', n:4}` |
+| 7 | [Nth] [weekday] of [month] | "2nd Tuesday of March" | `{kind:'nth_weekday', nth:2, weekday:2, month:3}` |
+| 8 | [month] [day] | "April 10" | `{kind:'yearly_date', month:4, day:10}` |
+| 9 | yearly | "yearly" | `{kind:'yearly_date', month:<start>, day:<start>}` |
+
+`<start>` anchors to `recurrence_start_date`. `monthly_day` **clamps to month length** (a `day:31`
+rule fires on the last day of short months). **No-match fallback:** text matching no pattern returns
+a parse error — the RecurringDateInput (UX §13) surfaces it as a **blocking** validation error and
+**Save is disabled**; nothing is stored (never a silent guess). `next_occurrence` is always
+recomputed server-side from `frequency_rule` (never trusted from the client); the scheduler (§5.6)
+advances it as occurrences process.
 
 ### 3.7 Budgets, Categories
 
@@ -842,9 +1038,61 @@ period_start, period_end, alert_threshold_pct(int, def 80), rollover(bool)`. **N
 `actual_spent` column — actuals are always computed at query time** (FR-B-003). Indexes:
 `(household_id, period_start, period_end)`, `(category_id, period_start)`.
 
+**Budget actuals — computed linkage (FR-B-003).** `actual_spent` is summed at query time over
+`financial_events` where: `event_date ∈ [period_start, period_end]` · `category_id` matches
+(**including child categories** — spending rolls up to the parent) · `payee_person_id` matches the
+budget `owner_person_id` (any person if household-wide) · `transaction_type = outflow` ·
+`transaction_status ≠
+cancelled`. `variance = limit_amount_base − actual_spent`. Neither is stored. A monthly job
+creates next month's record at month-end, copying `limit` unless overridden; monthly + yearly
+budgets may coexist for one category.
+
+**Budget rollover (FR-B-009) — computed, no stored carryover.** When `rollover=true`, a period's
+unspent balance carries into the next period's *effective* limit. Like actuals, the carryover is
+**derived at query time, never stored** (no `rollover_amount` column):
+- `carryover_in(P) = max(0, prior.effective_limit − prior.actual_spent)` where `prior` is the
+  immediately preceding period **for the same category+owner** and `prior.rollover = true`;
+  otherwise `carryover_in(P) = 0`. Only **unspent** carries — an overspend does not roll a deficit
+  forward (the chain floors at 0).
+- `effective_limit(P) = limit_amount_base + carryover_in(P)`. Health, `alert_threshold_pct`, and
+  `variance = effective_limit − actual_spent` all measure against `effective_limit`, not the raw
+  `limit_amount_base`.
+- The chain is **recursive across consecutive rollover periods** and **breaks** at any period with
+  `rollover=false` (carryover resets to 0 for the next). Because every term is recomputed from the
+  contributing events, nothing drifts.
+- **Mid-period limit edit:** editing `limit_amount` changes the current period's base limit and
+  thus its `effective_limit` immediately; `carryover_in` (from the *prior* period) is unaffected.
+  Past periods are read-only, so historical carryover never changes retroactively.
+
 **`categories`** (BaseEntity) — `name, color(7), icon(50), category_type
 (income|expense|both, def expense), parent_id(FK self, ON DELETE SET NULL), depth(int)`.
 CHECK `depth <= 1` (max 2 levels). Index: `(household_id, parent_id)`.
+
+**Category behaviour rules:**
+- **Max 2 levels** (parent → child, no grandchildren). A top-level category with children cannot
+  itself become a subcategory — `depth` must stay 0 while children exist.
+- **Archive cascades the whole branch (FR-C-005):** archiving a parent archives its subcategories
+  *together*; children are **not** auto-promoted. Restoring the parent restores the branch.
+  Returns **200, not 409**. Archived categories keep their references on existing events
+  (excluded from dropdowns, preserved for historical accuracy). **Bulk-archiving a parent *and* one
+  of its own children together is idempotent** (FR-E-020 multi-select): the branch cascade is
+  authoritative, so the explicitly-selected child is already archived by the parent's cascade — the
+  redundant child archive is a **no-op** (one audit row per item, no double-archive, no error).
+  Selecting both is allowed, never blocked.
+- **Hard vs soft delete (§3.0a tenet 5 / §4):** hard-delete only if zero downstream deps (no
+  events/budgets/recurring reference it); otherwise archive.
+- **Merge:** one or more sources merge into a target — all `financial_events.category_id` on
+  sources reassign to the target, sources' subcategories reassign (name clash → append `" (2)"`),
+  sources are archived. Transactional (all-or-nothing).
+- **Promote:** a subcategory → top-level by setting `parent_id = null` (`depth` → 0).
+- **Reassign:** a subcategory → a different top-level parent by updating `parent_id` (`depth`
+  stays 1).
+- **Spending rollup:** a parent's totals include all child-category spending.
+- **Seed:** **13 starter categories** seeded idempotently at household creation — **Expense (10):**
+  Food & Dining, Groceries, Transport, Housing, Utilities, Healthcare, Shopping, Entertainment,
+  Insurance, Education · **Income (2):** Salary, Investment Income · **Both (1):** Miscellaneous.
+  All household-specific; **no system categories exist**; all owner-editable. This is the
+  authoritative seed list (UX §6, epics Story 3.1).
 
 ### 3.8 Currencies, Formulas
 
@@ -879,8 +1127,48 @@ the row is still created `is_enabled=false` (no usable chain → FX uses last-kn
 raises `FX_API_DOWN` per §5.7) rather than being skipped — so the Integrations UI (UX §5.2) always
 has a row to configure. Seeding is idempotent (keyed on `(household_id, provider_type)`).
 
-**`formulas`** (BaseEntity) — `name, expression(text), applies_to(str), is_system(bool),
-description`. System formulas (`is_system=true`) are seeded and undeletable (FR-F-001).
+**`formulas`** (BaseEntity) — `name, formula_key(str, machine key e.g.
+`depreciation_straight_line`), expression(text), applies_to(str), variables(JSON — variable
+definitions with types and defaults), is_system(bool), is_active(bool, def true), description`.
+System formulas (`is_system=true`) are seeded and undeletable (FR-F-001); `is_active=false`
+disables a formula for the household without deleting it. `variables` carries the per-formula
+defaults the override flow reads — e.g. `fx_fee_calculation` defines `{amount, rate, fee_pct
+(def 0), fee_fixed (def 0)}` (§3.2). UNIQUE `(household_id, formula_key)`.
+
+**System default formulas** (seeded, `is_system=true`):
+
+| `formula_key` | `applies_to` | Expression | Purpose |
+|---|---|---|---|
+| `depreciation_straight_line` | Asset | `purchase_value × (1 - rate × years)` | Linear asset depreciation |
+| `depreciation_declining_balance` | Asset | `purchase_value × (1 - rate)^years` | Exponential depreciation |
+| `compound_interest` | Capital | `principal × (1 + rate/n)^(n×t)` | Compound interest growth |
+| `loan_amortisation` | Asset (mortgage) | Standard amortisation schedule | Monthly repayment breakdown |
+| `fx_delta` | All MonetaryValue | `amount_base_calculated - amount_base` | Forex cost per transaction |
+| `fx_fee_calculation` | BankAccount, CreditCard | `amount × rate × (1 + fee_pct/100) + fee_fixed` | Actual base amount incl. card FX fee |
+| `budget_variance` | Budget | `limit - actual_spent` | Budget remaining |
+| `net_worth` | Household | `Σ(account values) - Σ(computed debts)` | Overall financial position |
+
+**Account FX-formula assignment (FR-F-003):** `BankAccount` and `CreditCard` carry
+`fx_formula_id` (FK formulas, §3.5). When set, that formula is evaluated during transaction
+creation to produce `amount_base_calculated` instead of the raw spot rate (§3.2) — encoding the
+card's real-world fee structure (e.g. an Altitude Visa with `fx_fee_calculation`, `fee_pct=1.5`,
+auto-fills `amount × rate × 1.015`, matching the statement without manual correction). Formula
+results are surfaced **on hover only** (tooltip: name · inputs · result · source); the one
+exception is `fx_delta`, always visible on transaction rows (§3.2).
+
+**Formula evaluation — sandboxed AST, never `eval()` (FR-F-002, security).** `expression` is run by
+a **restricted arithmetic evaluator built on Python's `ast`**: `ast.parse(expr, mode='eval')`, then
+walk the tree against a strict **allow-list** of node types — `Expression, BinOp, UnaryOp,
+Constant(int|float), Name (a declared variable only), Call (whitelisted functions only)` — operators
+`+ − × ÷ // % **`, functions `min, max, abs, round, pow, sqrt`. **Any other node rejects the
+formula**: no `Attribute`, `Subscript`, `Lambda`, comprehension, name outside the declared
+`variables`, or dunder. There is **no `eval`/`exec`/`compile`-to-code path** and no access to
+builtins or globals. Guards: a max node-count and an exponent cap on `**` stop expansion bombs;
+`÷0`/NaN/overflow are caught and returned as a Test-row **warning** (UX §11), not a 500. `variables`
+(JSON) supplies the bound `Name`s and their defaults; an unbound token is the editor's blocking
+**'unknown variable'** error. The **frontend Test row mirrors the same allow-list** in a small JS
+parser for live preview, but **server evaluation is authoritative** — the client never submits a
+result to be trusted.
 
 ### 3.9 System tables
 
@@ -888,6 +1176,22 @@ description`. System formulas (`is_system=true`) are seeded and undeletable (FR-
 entity_id(UUID, null), read_at(null), dismissed_at(null)` (FR-SYS-007); "read" =
 `read_at IS NOT NULL`. **`alert_type` enum:** `BUDGET_WARNING | BUDGET_EXCEEDED |
 RECURRING_MISSED | FX_RATE_STALE | UPCOMING_PAYMENTS | FX_API_DOWN | BACKUP_CREATED`.
+
+**Alert delivery — poll, no push (MVP).** There is **no WebSocket/SSE** — a persistent socket would
+pin a scale-to-zero Cloud Run instance (§1.1). Alerts are produced by the daily `/jobs/alerts` run
+(§5.6) and as mutation side-effects (e.g. a budget threshold crossing on event write), then
+**pulled** by the client. Read/ack API (household-scoped, RFC 7807 like every route):
+
+```
+GET   /api/alerts?status=unread|all   -> { items: [Alert], total, unread_count }
+POST  /api/alerts/{id}/read           -> sets read_at
+POST  /api/alerts/{id}/dismiss        -> sets dismissed_at
+POST  /api/alerts/read-all            -> bulk mark read
+```
+
+The frontend `AlertPanel` (UX §7) polls `GET /api/alerts` via TanStack Query with a **60 s
+`refetchInterval` + `refetchOnWindowFocus`** (§6.3); the unread badge reads `unread_count`.
+Staleness of up to one interval is acceptable — alerts are advisory, never transactional.
 
 **`audit_logs`** (Base, **no FKs by design**) — `id, household_id(UUID), actor_id(UUID),
 action(create|update|archive|restore|delete), entity_type, entity_id(UUID),
@@ -899,6 +1203,59 @@ entity_id, occurred_at`.
 entity_type(str), entity_id(UUID), is_favourite(bool, def false), sort_order(int, null)`.
 UNIQUE `(person_id, entity_type, entity_id)`. **Per-person** favourite + manual ordering for any
 EntityCard list — one member's arrangement never affects another's. Index `(person_id, entity_type)`.
+
+### 3.10 EntityDebt — computed, **no table**
+
+Debt is **never stored as an independent record** — there is **no `debt` table** and it does
+not inherit `BaseEntity`. It is a view derived on demand from the `financial_events` and
+`accounts` that qualify as debt contributors. Building a debt table is a design error.
+
+**Source 1 — CreditCard balance (computed):**
+```
+CreditCard.debt_balance =
+    Σ(outflow events on this card) − Σ(transfers to this card marked is_debt_repayment)
+```
+
+**Source 2 — Internal household debt (person-to-household):**
+```
+Person.household_debt =
+    Σ(events where payee_person_id = this_person AND is_shared_expense = true
+      AND source_account belongs to this person personally)
+    − Σ(transfers to this person's account flagged as household-debt repayment)
+```
+The `is_shared_expense` flag (§3.6) is the **sole driver** of internal household debt: when a
+person pays a whole-household expense from their personal account and marks it shared, the
+household owes them until a repayment Transfer clears it.
+
+**Total household debt (MVP) = Σ(CreditCard.debt_balance) + Σ(Person.household_debt).**
+*Source 3 — asset loan / mortgage remaining — is **POST-MVP** (no MVP `FR-D`); the
+`loan_amortisation` formula can still display a payoff schedule without feeding household debt.*
+
+**Debt-clearing via Transfer:** on save, the system checks the destination — a Transfer **to** a
+CreditCard, or to a member's account with outstanding household debt, auto-flags
+`is_debt_repayment=true`; the user may override to `false` (e.g. topping up a card for spending,
+not repayment). `debt_cleared_amount` is recorded on the Transfer and the affected parties' debt
+is recomputed.
+
+**API — read-only, computed on demand (FR-D, UX §16).** Debt has **no CRUD** (there is no table);
+it exposes only GET endpoints that run the derivation above over the household's events/accounts
+each call (no caching in MVP — the dataset is household-scale):
+```
+GET /api/debt/household        -> { total_base, by_source: { credit_cards, internal },
+                                     cards: [ {account_id, debt_balance} ],
+                                     persons: [ {person_id, household_debt} ] }
+GET /api/debt/person/{id}      -> { person_id, household_debt, contributing: [...], repayments: [...] }
+```
+Both are household-scoped via `get_household_id`; a Member requesting another member's breakdown is
+rejected per FR-P-006. These feed the Debt module and the dashboard debt widget; the aggregated
+chart series come from `/api/visualizations/debt-summary` (§4.12). Mutations happen only on the
+underlying Transfers/events, never on these routes.
+
+> **"Monthly cleared" is derived, not stored (resolved).** Whether a card is fully paid for a
+> period is `computed debt_balance == 0` for that period — **there is no `monthly_cleared`
+> column** (an earlier draft named one). Storing it would duplicate the computed balance and
+> risk drift, against the computed-over-stored tenet (§3.0a). The month-end scheduler's
+> `source=computed` snapshot (§3.5) already records the period balance; "cleared" reads off it.
 
 ### 3.11 Resolved schema decisions
 
@@ -1168,6 +1525,14 @@ Each entity's `delete_<e>` declares its referrer list; a non-zero count → `409
 (§4.7, FR-SYS-005). Categories additionally follow the archive-together branch rule (CLAUDE.md §6.6)
 rather than hard-delete when they have a subtree.
 
+**Duplicate detection** (Transaction, RecurringPayment, on save). A candidate is: same
+`household_id` · same `amount` (±0.01) · same `event_date` (±2 days) · same `category_id` · same
+`transaction_type` · same `payee_person_id`. On a hit the UI offers **Proceed** (save independent,
+`duplicate_of=null`), **Link** (`duplicate_of=<candidate>`), or **Cancel**. `duplicate_of` is
+never auto-resolved — it feeds a post-MVP AI-assisted merge. **Duplicate** as an *operation*
+(⋮ menu) clones the row with a new id and cleared date, monetary fields zeroed (§3.5 account
+rules), no confirmation.
+
 ### 4.11 Global search endpoint — `GET /api/search` (FR-SYS-010)
 
 The backend half of the CommandPalette (UX §8.5). **Read-only, no mutations.**
@@ -1193,6 +1558,108 @@ The backend half of the CommandPalette (UX §8.5). **Read-only, no mutations.**
 - **Ranking:** exact > prefix > substring/fuzzy; tie-break `updated_at` desc; then fixed type
   weight (transactions > accounts > categories > currencies > budgets > members); **archived
   items rank last** (and only appear when relevant). Identical to the UX §8.5 contract.
+
+### 4.12 Visualization architecture (cross-cutting, read-only)
+
+Visualizations are a **first-class architectural concern**, not a Dashboard feature. A
+visualization interaction (click a segment, change the period, select a person) applies a
+**filter** to the underlying entity queries and can navigate across modules — charts are
+interactive view-filters, not static displays.
+
+**`VisualizationFilter` — one app-level object** (Zustand `visualizationStore`, §6.3), not
+per-component state; changes propagate to every active visualization at once:
+
+```typescript
+interface VisualizationFilter {
+  time_range: { start: Date; end: Date;
+                preset: 'month'|'quarter'|'year'|'all_time'|'custom' };
+  person_ids: UUID[];          // [] = household aggregate
+  category_ids: UUID[];        // [] = all; set on segment click
+  account_ids: UUID[];         // [] = all
+  currency_mode: 'raw' | 'converted';
+  display_currency: ISO4217;   // from Person.display_currency
+  transaction_type: 'all' | 'inflow' | 'outflow';
+  is_shared_expense: boolean | null;   // null = no filter (debt drill-down sets true)
+  comparison_mode: 'persons' | 'categories' | null;   // mutually exclusive w/ single filtering
+  comparison_ids: UUID[];
+  comparison_group_by: 'category'|'month'|'quarter'|'year'|'payment_method' | null;
+}
+```
+
+**Universal drill-down (the budget pattern §3.7, generalized to every viz):** Level 1 aggregate →
+click segment → Level 2 filtered entity list (module view with the filter shown as a dismissible
+bar) → click row → Level 3 sub-breakdown (subcategory split or single-entity detail). Navigation
+direction is recorded so the browser back button restores the prior filter.
+
+**Backend contract — aggregation endpoints** (distinct from CRUD; pre-aggregated for charts;
+all accept `VisualizationFilter` query params; **read-only, no mutations** on these routes;
+responses carry **both** raw-currency breakdowns and converted totals so the client switches modes
+without a refetch):
+
+```
+GET /api/visualizations/spending-by-category
+GET /api/visualizations/income-vs-expenses
+GET /api/visualizations/net-worth-over-time
+GET /api/visualizations/budget-vs-actual
+GET /api/visualizations/debt-summary
+GET /api/visualizations/forex-loss-trend
+GET /api/visualizations/account-balance-history/{account_id}
+GET /api/visualizations/asset-valuation-history/{asset_id}
+GET /api/visualizations/portfolio-value-over-time
+```
+
+**Per-entity visualization contracts** (what each family must support; the UX §9 Viewer renders
+them):
+
+| Entity family | Supported visualizations | Drill-down target |
+|---|---|---|
+| Events — Transaction | spending by category (donut), income vs expenses (grouped bar), volume over time (line), forex loss over time (line) | filtered tx list → tx detail |
+| Events — Recurring | upcoming calendar, occurrence history (timeline), missed vs processed (status bar) | recurring detail → linked tx |
+| Events — Transfer | transfer flow (sankey / grouped bar by account pair) | transfer detail |
+| Accounts — Bank | balance over time (area), inflow vs outflow (stacked bar) | account tx history |
+| Accounts — Capital | portfolio value (line), allocation (donut), return vs cost basis (bar), capital history (stacked area) | investment tx history |
+| Accounts — Asset | valuation history (line) + depreciation overlay | asset detail → snapshots |
+| Accounts — Insurance | premium history (bar), coverage timeline | insurance detail → linked recurring |
+| Budgets | budget vs actual (progress/bar), variance over time (line), overspend heatmap, limit-vs-actual trend (line) | contributing tx → subcategory |
+| Currencies | spending by currency (stacked bar, raw), aggregate total (bar, converted), forex-loss trend (line) | currency-filtered tx |
+| Debt | balance over time (line), by source card-vs-internal (stacked bar), repayment progress | debt-contributing tx → repayments |
+| Persons (PersonDashboard) | net worth over time (line), personal vs household split (bar), income sources (donut) | personal filtered module views |
+| Comparison — Persons | side-by-side by category (grouped bar), trend over time (multi-line), shared breakdown (stacked bar) | filtered tx for the person |
+| Comparison — Categories | trend over time (multi-line), totals (grouped bar), relative share (stacked area %) | filtered tx for the category |
+
+All of the above is surfaced through **one reusable Viewer** (UX §9), not per-module chart
+screens; every contextual chart (`MiniSparkline`, Ledger Visualize, dashboard widget) is an entry
+point that opens that Viewer seeded with its `VisualizationFilter`.
+
+### 4.13 Naming conventions
+
+Divergence from these is a code-review failure.
+
+| Layer | Convention | Example |
+|---|---|---|
+| Python model | `PascalCase`, entity prefix | `BankAccount`, `RecurringPayment` |
+| Service module | `snake_case` + `_service` | `account_service.py` |
+| Route file | `snake_case` plural | `accounts.py`, `events.py` |
+| Pydantic schema | `PascalCase` + `Create`/`Update`/`Response` | `TransactionCreate` |
+| Database table | `snake_case` plural | `accounts`, `financial_events` |
+| Frontend component | `PascalCase` | `AccountCard`, `EntityCard<T>` |
+| Frontend hook | `camelCase`, `use` prefix | `useEntityManager` |
+| API endpoint | `kebab-case`, resource-oriented | `/api/events/recurring` |
+| CSS custom property | `--kebab-case` | `--color-entity-account` |
+
+**Field names cross the wire by case:** Python/DB columns and **API JSON keys** are `snake_case`
+(`amount_base`, `account_type`); **TypeScript interfaces** are `camelCase` (`amountBase`). The
+boundary conversion is Pydantic's responsibility, not hand-mapped per field.
+
+**Enum values are `snake_case`:** `account_type` (`bank|credit_card|capital|asset|insurance` —
+savings is `bank`), `event_type` (`transaction|recurring_payment|transfer`), `transaction_type`
+(`inflow|outflow|transfer`), `status` (`active|inactive|archived`), `household_role`
+(`owner|admin|member`), `category_type` (`income|expense|both`), `source`
+(`manual|csv_import|bank_feed` — recurring provenance is the `linked_recurring_id` FK, not a
+source value), `snapshot_source` (`manual|formula|reconciliation|appraisal|import|computed`),
+`InvitationStatus`/column `status` (`pending|accepted|declined|expired|revoked`),
+`DensityEnum`/column `density` (`comfortable|compact`), `fx_provider_status` (`ok|stale|down`),
+`detachment_reason` (`left|removed|household_deleted`, nullable — §3.4/§2.8a).
 
 ---
 
@@ -1405,6 +1872,8 @@ Phase-3 UX). All error bodies are RFC 7807 JSON (§4.6) — never a stack trace.
 | `GET /health` → 200 | (liveness only) |
 | 401 (no/expired/invalid session) | Login |
 | OAuth `?error=not_invited` | Not Invited |
+| OAuth `?error=removed` (detachment_reason=removed) | Removed from Household |
+| OAuth `?error=household_deleted` (detachment_reason=household_deleted) | Household Deleted |
 | OAuth `?error=oauth_error` | Login (with error notice) |
 | 403 (role too low / CSRF invalid) | Forbidden / Access Denied |
 | 404 (incl. cross-household) | Not Found |
@@ -1432,7 +1901,7 @@ Testing Library (frontend) · `playwright` (E2E) · `bandit` (Python security li
 ## 6. Frontend Architecture Skeleton
 
 Scope: the **architecture** — data flow, layers, state, routing, guards. The component
-*catalog* and design tokens are owned by the UX spec / EDP; this section specifies how those
+*catalog* and design tokens are owned by the UX spec; this section specifies how those
 components are wired, not how they look.
 
 ### 6.0 Layer model
@@ -1483,10 +1952,13 @@ Three stores, **client state only** (CLAUDE.md §8.1):
 |---|---|
 | `authStore` | current person, household id/name/currency, `csrfToken`, `defaultView`, `pendingInvitation`; `setAuth()` / `clearAuth()` |
 | `visualizationStore` | active date range, group-by, entity/currency filter state (drives FR-V) |
-| `alertStore` | in-app alert panel state |
+| `alertStore` | in-app alert **panel open/closed + toast queue** (UI only — see rule below) |
 
 **Rule:** entity CRUD data never lives in Zustand — that belongs to TanStack Query (§6.4).
 `authStore.setAuth()` consumes the exact `/auth/me` shape (§2.14.C); the two move in lockstep.
+Likewise `alertStore` holds **only** panel-open and the toast queue: the alert list and
+`unread_count` come from TanStack Query polling `GET /api/alerts` (60 s interval +
+refetch-on-focus, §3.9) — no alert data is mirrored into Zustand.
 
 ### 6.4 Server state — TanStack Query + the generic entity layer
 
@@ -1513,7 +1985,7 @@ Any new entity feature **extends this layer** — it does not hand-roll a CRUD p
 
 **Dashboard widget data loading (UX §17).** Each dashboard widget fetches **its own**
 read-only data via TanStack Query, keyed `['widget', widget_type, scope, filter]`, against the
-existing per-entity **visualization contracts** (`/api/visualizations/...`, EDP §13.5) — the same
+existing per-entity **visualization contracts** (`/api/visualizations/...`, §4.12) — the same
 read-only aggregation endpoints the Viewer uses. There is **no bespoke widget store and no new
 per-widget endpoint**: the query key's inputs are the widget's own `scope`
 (`{kind, id?}` from `dashboard_layout`), the `visualizationStore` filter (date range / group-by),
@@ -1562,7 +2034,7 @@ has one pattern — never `useState` (CLAUDE.md §8.3).
 
 Tokens live in `index.css` (`@theme`/`@utility`); no raw hex/px/opacity/z-index in components
 (P4). Every reusable component has a `/design-system` demo using the **real** exported component.
-The authoritative component + token specification is the **UX spec / EDP** — this architecture
+The authoritative component + token specification is the **UX spec** — this architecture
 only specifies *how* components are wired, not their visual contract.
 
 ---

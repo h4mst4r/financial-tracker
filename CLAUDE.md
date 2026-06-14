@@ -9,9 +9,8 @@ It supersedes any instinct to "follow common patterns" — follow THESE patterns
 
 | Document | Path | When to Read |
 |---|---|---|
-| **Architecture** | `_bmad-output/planning-artifacts/architecture.md` | Every backend story; any story touching API, DB, auth |
+| **Architecture** | `_bmad-output/planning-artifacts/architecture.md` | Every backend story; any story touching API, DB, auth. Holds the entity model **and** the entity-design philosophy/hierarchy (§3.0a) — formerly a separate EDP doc, now folded in. |
 | **UX Design Spec** | `_bmad-output/planning-artifacts/ux-design-specification.md` | Every frontend story |
-| **Entity Design Philosophy** | `_bmad-output/planning-artifacts/entity-design-philosophy.md` | Any story involving entity models, relationships, or UI |
 | **Epics & Stories** | `_bmad-output/planning-artifacts/epics.md` | Always — this is the authoritative task list |
 | **Sprint Status** | `_bmad-output/planning-artifacts/sprint-status.yaml` | Always — update it when a story completes |
 
@@ -72,7 +71,7 @@ Every story, every time, in this order:
 
 1. **Read the story** in `epics.md` — all ACs, files, dependencies, and referenced spec sections
 2. **Read the story implementation file** in `stories/` if it exists
-3. **Read the referenced spec sections** — ARCH §X, UX §Y, EDP §Z listed in the story
+3. **Read the referenced spec sections** — ARCH §X, UX §Y listed in the story (entity-model/philosophy refs now live in ARCH §3)
 4. **Confirm dependencies** — all `Depends on` stories must be `done` in `sprint-status.yaml`
 5. **Run existing tests** — must be green before writing a single line of new code
 6. **Implement** — only what the AC requires; no unrequested refactors, no extra abstractions
@@ -487,3 +486,5 @@ For any feature page implementing entity CRUD:
 - Per-person favourite + manual sort persist in `entity_preferences` (ARCH §3) — not on the entity row.
 
 Do NOT build bespoke CRUD pages — extend the generic layer.
+
+**Sanctioned exception — CategoryTree.** The CategoryTree is a *tree*, not a card grid, so it does **NOT** use `EntityCard` — it renders the flat flex-strip rows of §5.11. It still extends the rest of the generic layer (EntityPage, EntityModal, `useEntityManager`, `useMultiSelect` + BulkActionBar). This is the **only** entity surface exempt from `EntityCard`; everything else uses it. (UX §6.)
