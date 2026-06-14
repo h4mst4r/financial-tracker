@@ -39,3 +39,18 @@ register_sqlite_pragmas(engine)
 
 # expire_on_commit=False keeps ORM attributes readable after get_db commits (§4.3).
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+
+async def get_db():
+    """Per-request transaction boundary (ARCH §4.3).
+
+    One session per request: commits once on clean return, rolls back on any exception.
+    Services call `await db.flush()` but **never** `commit()` or `rollback()`.
+    """
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

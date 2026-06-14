@@ -7,8 +7,9 @@ static files + SPA fallback LAST, so unmatched client routes (/login, /accounts,
 
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
@@ -21,6 +22,50 @@ FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend_dist"
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Financial Tracker", debug=settings.debug)
+
+    # ── Global exception handlers (RFC 7807, ARCH §4.6) ──
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        """Pass dict detail through unchanged; wrap plain strings into §4.6 shape."""
+        if isinstance(exc.detail, dict):
+            return JSONResponse(status_code=exc.status_code, content=exc.detail)
+        # Defensive: wrap plain-string detail into 7807 shape
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "type": "http_error",
+                "title": exc.detail,
+                "status": exc.status_code,
+                "detail": exc.detail,
+                "instance": request.url.path,
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Wrap Pydantic 422 into RFC 7807 shape with field-error array."""
+        errors = []
+        for error in exc.errors():
+            errors.append(
+                {
+                    "field": ".".join(str(loc) for loc in error["loc"]),
+                    "message": error["msg"],
+                    "type": error["type"],
+                }
+            )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "type": "validation_error",
+                "title": "Validation failed",
+                "status": 422,
+                "detail": errors,
+                "instance": request.url.path,
+            },
+        )
 
     # ── Routers + liveness FIRST ──
     # Liveness only: never guarded by auth/CSRF/maintenance — it must always serve
