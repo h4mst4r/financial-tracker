@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ── Backend quality + security + latency budget (AC 2, 3, 6) ──
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m venv .venv
+      - run: source .venv/bin/activate; pip install -r requirements.txt
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: Bandit (security lint)
+        run: bandit -r backend -c pyproject.toml
+      - name: pip-audit (CVE scan)
+        run: pip-audit
+      - name: Pytest (+coverage)
+        run: pytest
+      - name: Backend latency budget (NFR §4.1, AC 3)
+        run: python scripts/check_health_latency.py
+
+  # ── Frontend quality + bundle budget (AC 1, 2, 3) ──
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Typecheck (strict TS, no any)
+        run: npm run typecheck
+      - name: Unit tests (vitest)
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Frontend bundle budget (NFR §4.1, AC 3)
+        run: node scripts/check-bundle-size.mjs
+
+  # ── Cross-browser E2E matrix: chromium/firefox/webkit (AC 2, 4) ──
+  # Playwright's webServer builds the SPA, stages it into frontend_dist, and serves
+  # it + /health from a single uvicorn origin (same-origin production path, AC 5).
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps
+      - name: Run E2E matrix
+        working-directory: frontend
+        run: npx playwright test
+
+  # ── Same-origin production image builds (AC 5) ──
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build multi-stage image
+        run: docker build -t financial-tracker:ci .
+
+  # ── OWASP ZAP — RELEASE gate only (ARCH §5.10) ──
+  # ZAP is a per-RELEASE gate (zero critical findings required to deploy), NOT part of
+  # the per-commit run above. Wire it into the release workflow when deploy lands; it
+  # must not block normal CI. Placeholder kept here so the gate is not forgotten.
+  #
+  # zap-release-gate:
+  #   if: github.event_name == 'release'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: OWASP ZAP full scan (fail on critical)
+  #       uses: zaproxy/action-full-scan@v0.12.0
+  #       with:
+  #         target: ${{ secrets.STAGING_URL }}

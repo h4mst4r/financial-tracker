@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Minimal token stub only. The full design-token catalog (@theme variables and
+   @utility classes) is authored in Story 1.5 — do not expand it here. */
+@theme {
+  --color-bg: #0b0b0f;
+  --color-text-primary: #e7e7ea;
+}

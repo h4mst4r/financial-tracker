@@ -1606,7 +1606,12 @@ GET /api/visualizations/forex-loss-trend
 GET /api/visualizations/account-balance-history/{account_id}
 GET /api/visualizations/asset-valuation-history/{asset_id}
 GET /api/visualizations/portfolio-value-over-time
+GET /api/visualizations/fx-rate-history/{currency_id}
 ```
+
+**Comparison** (persons / categories, FR-V-005/006) is **not** a separate route — it is the
+`comparison_mode` / `comparison_ids` / `comparison_group_by` fields on the `VisualizationFilter`
+above, passed to the relevant endpoint.
 
 **Per-entity visualization contracts** (what each family must support; the UX §9 Viewer renders
 them):
@@ -1820,9 +1825,14 @@ fetcher is a small interface with pluggable implementations:
 ```python
 class FxProvider(Protocol):
     name: str
-    def fetch_latest(self, base: str, targets: list[str]) -> dict[str, Decimal]: ...      # provider-native rates
-    def fetch_historical(self, date: date, base: str, target: str) -> Decimal: ...        # one rate_to_base
+    async def fetch_latest(self, base: str, targets: list[str]) -> dict[str, Decimal]: ...      # provider-native rates
+    async def fetch_historical(self, date: date, base: str, target: str) -> Decimal: ...        # one rate_to_base
 ```
+
+Both methods are **`async`** — they perform outbound HTTP via the async `httpx` client (§1.11) on
+the async `/jobs/*` request path, so the FX fetch never blocks the event loop. (Implementations do
+no CPU-bound work; if a provider's SDK were sync-only it would be wrapped in `asyncio.to_thread`,
+§4.9.)
 
 - **`fx_providers` table** (Base, household-scoped): `id, household_id(FK), name, provider_type
   (enum: openexchangerates | …), base_url, api_key_secret_ref (string — a Secret Manager

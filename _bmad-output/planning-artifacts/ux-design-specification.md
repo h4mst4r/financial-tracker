@@ -1,7 +1,7 @@
 ---
 title: Financial Tracker — UX Design Specification
 version: 4.0
-status: rebuild-in-progress
+status: final
 created: 2026-06-11
 authority: >
   The visual + interaction contract. Built BACKWARDS from signed-off visuals — every

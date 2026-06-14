@@ -62,3 +62,12 @@ _bmad/
 
 # Node
 node_modules/
+
+# Test & build artifacts
+.pytest_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+playwright-report/
+test-results/
+frontend_dist/

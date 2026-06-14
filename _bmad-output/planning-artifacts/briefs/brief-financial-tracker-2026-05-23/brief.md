@@ -300,7 +300,7 @@ will be automatically flagged
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Migration from Google Sheets | High | CSV import with category mapping; validate before cutover |
-| Recurring payments on serverless scale-to-zero | High | APScheduler for MVP; Cloud Scheduler for Phase 2 |
+| Recurring payments on serverless scale-to-zero | High | Cloud Scheduler (managed cron) → authenticated `/jobs/*` endpoints; jobs idempotent + catch-up-aware so a scale-to-zero gap self-heals (ARCH §1.7/§5.6) |
 | FX rate API reliability | Medium | Cache last known rate; circuit breaker; no retry storm |
 | Multi-user concurrency on SQLite | Medium | WAL mode; optimistic locking on critical paths |
 | Data loss | High | Daily GCS backups; archive-then-delete pattern |

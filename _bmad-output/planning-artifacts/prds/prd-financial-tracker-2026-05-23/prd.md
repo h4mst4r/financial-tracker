@@ -1,9 +1,9 @@
 ---
 title: Financial Tracker — Product Requirements Document
-version: 3.0
+version: 4.0
 status: living
 created: 2026-05-23
-updated: 2026-06-10
+updated: 2026-06-14
 authority: Feature requirements and acceptance criteria.
 ---
 
@@ -136,9 +136,47 @@ Their *household-scoped data* (their accounts, events, etc.) is deleted with the
 the identity row persists. Member sessions are invalidated.
 *Acceptance:* Household and all its child records removed from the database **except `persons`**,
 which are detached to `household_id = NULL`; all active sessions for household members are
-invalidated; owner is logged out and redirected to the login page; action is owner-only
-(admin/member receives 403). (On re-login: the ex-owner re-seeds a household only if still an
-active approved-owner; other members get `NotInvitedError` — architecture §2.8a Path A.)
+invalidated. On re-login each detached member is routed by their `detachment_reason` to the
+matching page — Household Deleted / Removed from Household / Not Invited (FR-SYS-001, ARCH §2.6/§5.8).
+
+**FR-HH-006 — Approved Owners Management**
+
+An "approved owner" is a person (identified by Google email) authorized to create a household
+if they have none. The system maintains an `approved_owners` table (email unique, case-insensitive;
+optional label; active/inactive flag; `added_by` person — nullable, cross-household by design).
+
+A person's `can_create_household` flag is a denormalized cache — synced at login — reflecting
+whether they appear in the active approved-owners list. On first deploy, the system idempotently
+seeds bootstrap approved owners from the `BOOTSTRAP_OWNER_EMAILS` environment variable
+(insert-only, never overwrites manual changes).
+
+*Acceptance:* Bootstrap seeding runs on first migration/start (idempotent); `can_create_household`
+updates at login; only approved owners see the "Create Household" option on the No-Household page.
+
+> **Future (reserved, not MVP):** owner-only CRUD endpoint to add/remove approved owners.
+
+**FR-HH-007 — Person Leave / Remove**
+
+A person can exit a household through three paths:
+
+- **Path A — Owner Deletes Household:** The household owner permanently deletes the household
+  (FR-HH-005). Irreversible. All household data deleted; persons detached (`household_id → NULL`)
+  with `detachment_reason = household_deleted`. Sessions invalidated.
+
+- **Path B — Self-Leave:** A non-owner member may voluntarily leave the household. Their
+  household-scoped data is **archived** (not deleted) so it can be restored if they re-join.
+  `detachment_reason = left`. Sessions invalidated.
+
+- **Path C — Admin/Owner Removes Member:** The household admin or owner may remove a member
+  (not themselves). Same as Path B — data archived, `detachment_reason = removed`, sessions
+  invalidated.
+
+Re-joining via a new invitation restores access (person re-linked to household; archived data
+becomes active again).
+
+*Acceptance:* `POST /api/household/leave` (self-leave, member-only); `POST /api/household/members/:id/remove`
+(admin/owner only, can't remove self — use leave instead); `detachment_reason` enum on `persons`
+table tracks exit path; sessions invalidated on all paths; re-joining via invitation restores access.
 
 ---
 
@@ -161,7 +199,7 @@ person record created with `member` role; person can access all household data.
 **FR-P-003 — Profile & Appearance Management**
 Any person may update their own personal preferences (UX §5.1 Profile tab): `display_name`,
 `colour` (avatar fallback), and the **Appearance / App** set — `theme` (named palette per
-FR-P-003a), `font`, **density** (comfortable/compact), **reduce_motion**, and
+FR-SYS-015), `font`, **density** (comfortable/compact), **reduce_motion**, and
 **notification_prefs** (per-alert-type opt-in: budget warnings/overruns, missed recurring,
 upcoming payments, FX stale, backups — feeds FR-SYS-007).
 *Acceptance:* Each change persists per person and applies only to that person's session;
@@ -419,8 +457,9 @@ three test cases each.
 
 **FR-E-013 — Occurrence History**
 The Recurring Payments module shows a history view of all expected occurrences for
-each recurring payment: their expected date, status (upcoming / processed / manual / skipped /
-missed / failed), and the linked transaction if processed.
+each recurring payment: their expected date, status (upcoming / processed / skipped /
+missed / failed — there is no separate `manual` status; a manually-triggered run lands on
+`processed`, FR-E-015 / ARCH §3.6), and the linked transaction if processed.
 *Acceptance:* Occurrences computed from `frequency_rule` between `start_date` and today.
 Each occurrence has a distinct status badge. Missed occurrences show in red border highlight.
 
@@ -537,7 +576,7 @@ Clicking a subcategory row filters to transactions in that subcategory.
 **FR-B-008 — Budget History**
 User may view a trend chart showing budget limit vs actual spend across all
 historical periods for a given category and owner scope.
-*Acceptance:* Chart sourced from `/api/visualizations/budget-history`. Shows
+*Acceptance:* Chart sourced from `/api/visualizations/budget-vs-actual`. Shows
 all budget period instances (monthly or yearly) in chronological order.
 
 **FR-B-009 — Rollover Unspent Balance**
@@ -563,9 +602,11 @@ Max depth = 1 (no grandchildren).
 enforces depth constraint — attempting to create a child of a subcategory is rejected.
 
 **FR-C-003 — Unparent Subcategory from Category**
-Admin or Owner may unparent a subcategory from any top-level category.
-*Acceptance:* Category created with `depth = 0` (top-level). Available in all
-entity dropdowns immediately.
+Admin or Owner may unparent (promote) a subcategory to top-level, or re-parent it under a
+different top-level category (drag in the CategoryTree; ARCH §3.7 Promote / Reassign).
+*Acceptance:* Promote sets `parent_id = null` and `depth = 0`; the (now top-level) category keeps
+all its events and appears in every category dropdown. Re-parent sets a new `parent_id` (depth
+stays 1). Neither loses event references.
 
 **FR-C-004 — Edit Category**
 Admin or Owner may edit name, color, icon, and category_type.
@@ -673,7 +714,7 @@ Any user may view the historical FX rate trend for any non-base currency, source
 as reference.
 *Acceptance:* Chart shows all `FxRateHistory` points for the currency in the selected range.
 Available on the currency's card (mini-chart) and in the Currencies module, expanding into the
-visualization viewer (FR-V). Sourced from `/api/visualizations/fx-rate-history`.
+visualization viewer (FR-V). Sourced from `/api/visualizations/fx-rate-history/{currency_id}`.
 
 ---
 
@@ -690,7 +731,9 @@ compound interest, loan amortisation, FX delta, budget variance, net worth.
 Admin or Owner may create a custom formula with a name, expression, target
 entity type, and variable definitions.
 *Acceptance:* Custom formula saved; available for assignment to accounts
-of the target entity type.
+of the target entity type. Expressions are run by a **sandboxed arithmetic evaluator** — an AST
+allow-list (arithmetic operators + a fixed function whitelist; bound variables only; **never
+`eval()`**, no attribute/builtin/dunder access; ARCH §3.8). Server evaluation is authoritative.
 
 **FR-F-003 — Assign Formula to Account**
 Admin or Owner may assign a formula to an account that supports it.
@@ -729,6 +772,21 @@ From an AssetAccount's detail view, Admin or Owner may run the assigned
 depreciation formula to generate a new `AccountSnapshot` (FR-A-008) using today's date.
 *Acceptance:* Snapshot created with `source = "formula"`, `formula_id` set,
 value = formula output. Appears immediately in the value-history chart.
+
+**FR-F-007 — Formula Editor & Validation**
+Custom formulas are created/edited in a dedicated **formula editor** (UX §11 — the EntityModal
+side-drawer variant): an **expression** field with insertable **variable chips**, a **variables
+table** (name · default · description), and a **Test row** (sample inputs → live computed result).
+Validation has **two severities**:
+- **Errors block Save** — syntax error; **unknown variable** (the offending token is highlighted
+  inline with a fuzzy *"did you mean …?"* suggestion); invalid variable name; duplicate variable name.
+- **Warnings don't block** — an unused variable; a missing default; a Test-row evaluation failure
+  on the sample inputs (e.g. divide-by-zero / NaN — the formula may still be valid for real data).
+A live *"N error · N warning"* count shows in the footer; **Save is disabled while any error remains**.
+*Acceptance:* Known variables render as chips; the Test row evaluates live through the sandboxed
+evaluator (FR-F-002 / ARCH §3.8). An unknown-variable token blocks Save and shows a fuzzy
+suggestion; warnings surface but still allow Save. Errors (red) and warnings (amber) are visually
+distinct (UX §0.9). System formulas are read-only — the editor opens in view mode for them (FR-F-001).
 
 ---
 
@@ -820,26 +878,27 @@ aggregated bar/line in the display currency.
 User may select 2–4 household members and compare their spending side-by-side.
 *Acceptance:* Charts show grouped bars or multi-line series, one per person.
 Grouped by category, month, quarter, year, or payment method (user-selectable).
-Sourced from `/api/visualizations/compare/persons`.
+Served by the spending/income endpoints with `comparison_mode = persons` + `comparison_ids` on the
+VisualizationFilter (FR-V-016 / ARCH §4.12) — comparison is a filter param, not a separate route.
 
 **FR-V-006 — Category Comparison Mode**
 User may select 2–8 categories and compare their spending trends over time.
 *Acceptance:* Multi-line or grouped bar chart, one series per category.
-Grouped by month, quarter, or year. Sourced from
-`/api/visualizations/compare/categories`.
+Grouped by month, quarter, or year. Served via `comparison_mode = categories` + `comparison_ids`
+on the VisualizationFilter (FR-V-016 / ARCH §4.12) — comparison is a filter param, not a separate route.
 
 **FR-V-007 — Budget History Chart**
 A trend chart showing budget limit vs actual spending across all historical
 periods for a selected category and owner scope.
 *Acceptance:* Available in the Budgets module and Dashboard. Shows monthly
 or yearly periods depending on `period_type`. Sourced from
-`/api/visualizations/budget-history`.
+`/api/visualizations/budget-vs-actual`.
 
 **FR-V-008 — Capital / Portfolio History Chart**
 A chart showing how a capital account's value, inflow, outflow, and earned
 interest have changed over time.
 *Acceptance:* Stacked area or multi-line chart. Supports raw and converted modes.
-Sourced from `/api/visualizations/capital-history`.
+Sourced from `/api/visualizations/portfolio-value-over-time` (per-account capital history).
 
 **FR-V-009 — PersonDashboard**
 In "Individual" mode, the Dashboard shows a personalised view:
@@ -896,6 +955,44 @@ series on and off; the chart rescales to the visible series.
 *Acceptance:* Colours are deterministic per series identity (same category = same colour across
 charts). Toggling a series off removes it and rescales; toggling on restores it.
 
+**FR-V-016 — Visualization Endpoints**
+
+The backend exposes **10 read-only visualization endpoints** (no mutations). All accept
+`VisualizationFilter` query params and return **both** raw-currency breakdowns and converted
+totals so the client switches modes without a refetch:
+
+```
+GET /api/visualizations/spending-by-category
+GET /api/visualizations/income-vs-expenses
+GET /api/visualizations/net-worth-over-time
+GET /api/visualizations/budget-vs-actual
+GET /api/visualizations/debt-summary
+GET /api/visualizations/forex-loss-trend
+GET /api/visualizations/account-balance-history/{account_id}
+GET /api/visualizations/asset-valuation-history/{asset_id}
+GET /api/visualizations/portfolio-value-over-time
+GET /api/visualizations/fx-rate-history/{currency_id}
+```
+
+**Comparison modes (FR-V-005/006) are NOT separate endpoints** — they are the
+`comparison_mode` / `comparison_ids` / `comparison_group_by` fields on the `VisualizationFilter`
+(ARCH §4.12), passed to the relevant endpoint above.
+
+**Per-entity visualization contracts** (what each family must support; the UX §9 Viewer renders
+them):
+
+| Entity Family | Supported Visualizations | Drill-down Target |
+|---|---|---|
+| Events — Transaction | spending by category (donut), income vs expenses (grouped bar), volume over time (line), forex loss over time (line) | filtered tx list → tx detail |
+| Events — Recurring | upcoming calendar, occurrence history (timeline), missed vs processed (status bar) | recurring detail → linked tx |
+| Events — Transfer | transfer flow (sankey / grouped bar by account pair) | transfer detail |
+| Accounts — Bank | balance over time (area), inflow vs outflow (stacked bar) | account tx history |
+| Accounts — Capital | portfolio value (line), allocation (donut), return vs cost basis (bar), capital history (stacked area) | investment tx history |
+
+*Acceptance:* All 10 endpoints are read-only (no POST/PATCH/DELETE). Accept `VisualizationFilter`
+query params (including the comparison fields). Return both raw-currency and converted totals.
+Support drill-down to entity detail.
+
 ---
 
 ### FR-DB — Dashboard
@@ -910,7 +1007,8 @@ currency at the current FX rate.
   policies contribute 0.
 - Archived accounts are excluded.
 *Acceptance:* Net worth = Σ positive values − Σ debts in the display currency. Changing
-display currency reconverts without altering stored values. Matches `/api/visualizations/net-worth`.
+display currency reconverts without altering stored values. Matches the latest point of
+`/api/visualizations/net-worth-over-time`.
 
 **FR-DB-002 — Net Worth Over Time**
 The Dashboard shows net worth grouped by month/year, computed from the materialised monthly
@@ -984,19 +1082,27 @@ File name: `financial-tracker-export-{YYYY-MM-DD}.csv`.
 
 ### FR-SYS — System Requirements
 **FR-SYS-001 — Public and Error Pages**
-A variety of pages including:
-initial Login page
-Access Denied page
-Forbidden Page
-Refused Connection Page (due to missing or down backend)
-Not Invited Page
-Logout Page
-Lost Connection Page
-Loading Page
-Generic Error Page
-And any other important pages
-Must appear at the right time to assist in development.
-*Acceptance:* These pages appear and not a default generic error page.
+
+The application renders specific error pages mapped to backend signals (13 states):
+
+| Backend Signal | Frontend Page |
+|---|---|
+| `GET /health` → 200 | (liveness only) |
+| 401 (no/expired/invalid session) | Login |
+| OAuth `?error=not_invited` | Not Invited |
+| OAuth `?error=removed` (`detachment_reason=removed`) | Removed from Household |
+| OAuth `?error=household_deleted` (`detachment_reason=household_deleted`) | Household Deleted |
+| OAuth `?error=oauth_error` | Login (with error notice) |
+| 403 (role too low / CSRF invalid) | Forbidden / Access Denied |
+| 404 (incl. cross-household) | Not Found |
+| 429 | Rate-limited notice |
+| fetch fails (connection refused) | Refused Connection / Backend Down |
+| session lost mid-use (401 after being in) | Lost Connection → re-login |
+| in-flight request pending | Loading |
+| uncaught 500 (RFC 7807, no trace) | Generic Error |
+| 503 (`MAINTENANCE_MODE` on) | Maintenance |
+
+*Acceptance:* Each page appears at the right time; no default generic error page is shown.
 
 **FR-SYS-002 — Localhost Dev Account**
 Local dev account bypassing Google OAuth only when environment is set as "dev" and local dev account is set as "true".
@@ -1088,6 +1194,123 @@ per-household branding UI. *Acceptance (MVP):* No brand strings/assets are hardc
 components — all read from the `branding` config (UX §1.1). Per-household white-label is out of
 scope for MVP.
 
+**FR-SYS-012 — Maintenance Mode**
+
+A `MAINTENANCE_MODE` environment flag enables site-wide maintenance. When `true`, a middleware
+short-circuits all `/api/*`, `/auth/*`, and SPA app routes with a **503** RFC 7807 response body,
+which the frontend renders as the Maintenance page (§5.8, UX §3).
+
+The `/health` endpoint and static/asset prefixes are **exempt** — liveness checks and the shell
+still serve.
+
+*Acceptance:* Setting `MAINTENANCE_MODE=true` immediately blocks all API/auth/app routes with 503;
+`/health` remains 200; static assets still serve; frontend shows the Maintenance page.
+
+**FR-SYS-013 — CI / Security Gates**
+
+Every deployment passes these gates:
+
+- **ruff** — Python lint and format check
+- **pytest** + **pytest-asyncio** + **pytest-cov** — backend unit/integration tests with coverage
+- **vitest** + **Testing Library** — frontend unit tests
+- **playwright** — E2E browser tests
+- **bandit** — Python security lint
+- **pip-audit** — CVE vulnerability scan for Python dependencies
+- **OWASP ZAP** — release gate — **zero critical findings required to deploy**
+
+*Acceptance:* CI pipeline fails if any gate produces errors or critical findings. Deployment
+blocked until all gates pass.
+
+**FR-SYS-014 — Generic Entity Pattern**
+
+All entity CRUD follows a generic pattern — no bespoke CRUD pages or endpoints.
+
+**Backend:** Each entity ships **one service module** and **one router** following a standard
+template:
+- Service: `create_<e>`, `update_<e>`, `archive_<e>`, `restore_<e>`, `delete_<e>`
+- Router: `GET /api/<es>` (list), `POST /api/<es>` (create), `GET /api/<es>/{id}` (read),
+  `PATCH /api/<es>/{id}` (update), `POST /api/<es>/{id}/archive`, `POST /api/<es>/{id}/restore`,
+  `DELETE /api/<es>/{id}` (hard-delete only if zero downstream refs; otherwise 409)
+- Every mutation: validate → flush → audit.log
+- No raw SQL (ORM only); every query filtered by `household_id`
+
+**Frontend:** Generic reusable layer:
+- `useEntityManager<T>` — hook providing `items`, `isLoading`, `create`, `update`, `archive`,
+  `bulkArchive` (built on TanStack Query)
+- `EntityPage<T>` — action bar, filter slot, main content slot
+- `EntityCard<T>` — colour-fill identity (§5.5), favourite star, context menu, archive state,
+  value-history sparkline
+- `EntityModal<T>` — two-column form layout, cancel/save actions
+
+**Ownership:** Every entity has a `created_by` field. "Own" = author of the record. A Member may
+edit/delete only rows they created; Admin/Owner may edit/delete any. The check is a single shared
+helper, not re-implemented per module.
+
+*Acceptance:* Every entity follows the generic pattern. No entity has bespoke CRUD endpoints or
+UI components (except CategoryTree, which is a tree — exempt from EntityCard but uses the rest
+of the generic layer).
+
+**FR-SYS-015 — Immersive Themes**
+
+The application supports expressive palettes (themes) that can be "immersive" — remapping not
+just UI chrome but also entity and semantic colours through a single hue family.
+
+**Per-palette `immersive` flag:**
+- `immersive=false` — palette reskins only UI chrome (backgrounds, surfaces, borders, text,
+  accents); entity and semantic colours keep their true hex
+- `immersive=true` — palette also remaps entity colours (category/account/currency/person) and
+  semantic colours (success/warning/error/info) through its `tint` + `tint_ramp`
+
+**Immersive `tint` + `tint_ramp` mechanism:**
+- An immersive palette declares a single **`tint`** (anchor hue) and a **`tint_ramp`** of N
+  ordered steps (light→dark)
+- **Entity colours → ramp slot by lightness (luminance-matched):** Each entity's own colour maps
+  to the ramp step whose lightness is closest: `idx = round((1 − L) · (N − 1))`, where L = OKLab
+  L* (perceptual lightness). Preserves relative lightness (light entity stays light, dark stays
+  dark) while collapsing hue to the theme
+- **Hash collision resolution:** When two entities land on the same slot, a stable `entity_id`
+  hash nudges one to an adjacent slot so they remain distinguishable (different shades in charts)
+- **Semantic colours → fixed ramp positions:** Because a monochrome tint can't carry red-vs-green,
+  status/flow meaning shifts to lightness + icon/shape (e.g., income = lightest step, expense =
+  darkest; status uses ramp positions plus existing iconography ▲▼ for in/out-flow, dot states)
+- **Interaction/feedback tokens are themed too:** Focus ring, selection halo, border, and
+  selection-fill colours are role-2/UI-accent theme tokens (not literals), so they remap onto
+  the tint/ramp (e.g., Game Boy → green rings, green selection halos). They derive from a
+  *different* ramp slot than the resting fill so selection/focus still reads as selected within
+  a monochrome theme
+
+**Per-person:** Theme and font are personal preferences (`Person.theme`, `Person.font`). A theme
+= a `data-theme` attribute on the root swapping the token set.
+
+*Acceptance:* Each palette defines structural tokens (bg, surface, border, text), accent tokens,
+status tokens, 8-colour viz series, and the `immersive` flag. Immersive palettes additionally
+define `tint` + `tint_ramp`. Switching themes swaps all tokens; immersive themes remap entity and
+semantic colours through the tint ramp.
+
+**FR-SYS-016 — Entity Colour-Fill Identity**
+
+Entity identity is conveyed through **colour fill**, never a thin left-edge accent bar (that
+pattern is retired).
+
+- **Entity cards** carry a colour **fill**. Default is **calm** (a soft tint of the entity's own
+  colour); any instance can be flipped to **vivid** (full saturated fill) — per-instance opt-in
+- **Small reference items** (category, payment method, currency, payee) render as **filled
+  coloured chips** — the thing that "pops"
+- **Contrast-aware text:** Text colour is chosen by the fill's relative luminance (WCAG) — white
+  on dark fills, near-black on light fills — with an enforced **contrast floor** so a user's
+  brand colour can never make text unreadable. Secondary/sub text = the same contrast colour at
+  reduced opacity
+- **Colour-chip shape:** Colour swatches / identity chips / chart legend markers are **rounded
+  squares** (radius `sm`); **circles are reserved for person avatars** — people round, things
+  squared
+- **Driven by CSS variable:** The fill uses `--entity-colour` CSS variable, read by children
+  (e.g., `bg-entity-fill-calm` / `bg-entity-fill-vivid` utilities). Never inline a raw hex
+
+*Acceptance:* No entity uses a left accent bar. All entities use colour-fill identity (calm
+default, vivid opt-in). Text on fills is contrast-aware. Colour chips are rounded squares;
+person avatars are circles. Under immersive themes, entity colours remap through the tint ramp
+automatically (because they read from the CSS variable, not a hardcoded hex).
+
 ---
 
 ## 4. Non-Functional Requirements
@@ -1119,7 +1342,9 @@ scope for MVP.
 - 99% uptime target (Cloud Run SLA)
 - Daily backup with 90-day retention
 - Circuit breakers on all external API calls (FX rate, OAuth)
-- APScheduler with persisted job store — jobs survive container restart
+- Scheduling via **Cloud Scheduler** (managed cron) → authenticated `/jobs/*` HTTP endpoints —
+  **not** an in-process timer (which cannot fire at `min-instances=0`). Jobs are **idempotent +
+  catch-up-aware**, so a scale-to-zero gap self-heals on the next run (ARCH §1.7 / §5.6)
 
 ### 4.4 Accessibility
 
@@ -1152,4 +1377,5 @@ Mobile: Chrome for Android, Safari for iOS.
 | 1.0 | 2026-05-23 | Ben + BMAD | Initial PRD — flat FR numbering, module-based organisation |
 | 2.0 | 2026-05-26 | Ben + Claude | Full rewrite — entity-family FR organisation, entity hierarchy preamble, Loans removed, Debt FRs rewritten as computed, FRs for EntityCurrencies / EntityFormulas / multi-owner accounts / comparison visualizations / budget history / capital history / DD-MM-YYYY display / hard delete / RFC 7807 error codes added. Epic mapping updated. |
 | 3.0 | 2026-06-10 | Ben | Modification to make it complete source of truth |
+| 4.0 | 2026-06-14 | Ben + Claude | Aligned to v4 architecture + UX before epic generation: added Formula Editor & Validation (FR-F-007) + sandboxed-evaluator note (FR-F-002); removed stale recurring `manual` status (FR-E-013); fixed dangling FR-P-003a → FR-SYS-015; completed truncated FR-HH-005 acceptance; corrected FR-C-003 acceptance (promote/re-parent); APScheduler → Cloud Scheduler (NFR 4.3); reconciled visualization endpoint names to the canonical ARCH §4.12 set (comparison is a filter param; budget-history → budget-vs-actual; capital-history → portfolio-value-over-time; net-worth → net-worth-over-time) and added the missing `fx-rate-history/{currency_id}` endpoint to both docs. |
 | 3.1 | 2026-06-10 | Ben + Claude | Rebuild alignment pass. Consolidated FR-A-008/014/015 into general `AccountSnapshot` value-history (+ required `opening_balance` on ledger-backed accounts, hybrid computed+anchor model). FR-A-017 now spawns a real linked `RecurringPayment`. FR-E-001 rewritten (sticky per-person context defaults + provenance `source`/`external_ref`; removed "default button"). Persisted `fx_rate_used`/`rate_date` on events; transfers carry `fx_delta`. Added FR-E-020 bulk event ops; renumbered duplicate FR-E-016/017 → 018/019. FR-F-003 `interest_formula_id`; reordered FR-F-005/006. Added FR-CU-009 FX rate history. Fleshed out FR-V (FR-V-011–015: universal viewer, mini-charts, event-group aggregation, chart types, series toggle); fixed FR-V-009 storage to `Person.default_view`. Added FR-DB section (net worth computation + over-time + pinning). Alert read/dismiss timestamps. Brief: Formula module entity fix + account value-history + visualization layer prose. |
