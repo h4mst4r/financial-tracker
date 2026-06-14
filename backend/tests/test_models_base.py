@@ -7,7 +7,7 @@ NOT attached, so `foreign_keys` stays OFF and the absent households/persons tabl
 
 import uuid
 
-from sqlalchemy import Column, Float, Numeric, String, Table
+from sqlalchemy import Float, Numeric, String
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.models import Base, BaseEntity, MonetaryValueMixin
@@ -21,11 +21,7 @@ class _MoneyProbe(BaseEntity, MonetaryValueMixin):
     __tablename__ = "_money_probe"
 
 
-# Stub parent tables so BaseEntity's FK targets resolve during create_all (the real
-# households/persons tables arrive in Story 1.2c). FK enforcement is off in the insert
-# test below, so no parent rows are needed.
-Table("households", Base.metadata, Column("id", String(36), primary_key=True))
-Table("persons", Base.metadata, Column("id", String(36), primary_key=True))
+# The real households/persons tables now exist (Story 1.2c). No stubs needed.
 
 
 BASE_ENTITY_COLUMNS = {
@@ -145,6 +141,7 @@ async def test_updated_at_onupdate(tmp_path):
         original_updated_at = row.updated_at
 
         import asyncio
+
         await asyncio.sleep(0.1)  # ensure time difference
 
         async with factory() as session:
