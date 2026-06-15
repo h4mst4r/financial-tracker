@@ -110,6 +110,29 @@
   --z-modal:    400;
   --z-toast:    500;
   --z-tooltip:  600;
+
+  /* ── Motion · easings (UX §0.7); --ease-in/-out/-in-out are Tailwind v4 defaults ── */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Motion · durations (UX §0.7) — raw props; @utility duration-* wrappers below (cf. --z-*) ── */
+  --duration-press:    80ms;   /* press-scale (every tappable)            */
+  --duration-quick:   130ms;   /* hover-lift                              */
+  --duration-base:    200ms;   /* modal scale+fade, expand/collapse       */
+  --duration-drawer:  250ms;   /* drawer slide-from-edge                  */
+  --duration-pop:     280ms;   /* viz rebuild — CRT saturation pop        */
+  --duration-draw:    300ms;   /* pin-pop / check-draw                    */
+  --duration-slide:   420ms;   /* category merge / dedup slide            */
+  --duration-emphatic:500ms;   /* error bounce, hard-delete drift         */
+  --duration-archive: 550ms;   /* archive desaturate                      */
+  --duration-rollup:  650ms;   /* number roll-up (JS count; token for parity) */
+  --duration-flip:    800ms;   /* account card flip ↔                     */
+  --duration-shimmer:1500ms;   /* skeleton shimmer loop                   */
+  --duration-float:  4000ms;   /* pie idle float                          */
+
+  /* ── Focus ring + touch target (UX §0.9/§0.11) ── */
+  --focus-ring-width:  2px;
+  --focus-ring-offset: 2px;
+  --touch-target:     44px;
 }
 
 /* Default for the runtime per-instance entity colour so a fill utility used without an
@@ -140,6 +163,35 @@
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--color-surface-active); border-radius: var(--radius-full); }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
+
+/* ── Reduced-motion engine — --motion-factor collapses token-driven durations to instant.
+   OS preference OR the per-person [data-reduce-motion] override (Epic-2 seam, story 2-9). (UX §0.7/§0.11, NFR-A11Y-006) ── */
+:root { --motion-factor: 1; }
+@media (prefers-reduced-motion: reduce) { :root { --motion-factor: 0; } html { scroll-behavior: auto; } }
+[data-reduce-motion="true"] { --motion-factor: 0; scroll-behavior: auto; }
+
+/* ── Duration utilities — inject --motion-factor (reduced-motion engine). cf. --z-* → @utility z-* ── */
+@utility duration-press    { --tw-duration: calc(var(--duration-press)    * var(--motion-factor)); transition-duration: calc(var(--duration-press)    * var(--motion-factor)); }
+@utility duration-quick    { --tw-duration: calc(var(--duration-quick)    * var(--motion-factor)); transition-duration: calc(var(--duration-quick)    * var(--motion-factor)); }
+@utility duration-base     { --tw-duration: calc(var(--duration-base)     * var(--motion-factor)); transition-duration: calc(var(--duration-base)     * var(--motion-factor)); }
+@utility duration-drawer   { --tw-duration: calc(var(--duration-drawer)   * var(--motion-factor)); transition-duration: calc(var(--duration-drawer)   * var(--motion-factor)); }
+@utility duration-pop      { --tw-duration: calc(var(--duration-pop)      * var(--motion-factor)); transition-duration: calc(var(--duration-pop)      * var(--motion-factor)); }
+@utility duration-draw     { --tw-duration: calc(var(--duration-draw)     * var(--motion-factor)); transition-duration: calc(var(--duration-draw)     * var(--motion-factor)); }
+@utility duration-slide    { --tw-duration: calc(var(--duration-slide)    * var(--motion-factor)); transition-duration: calc(var(--duration-slide)    * var(--motion-factor)); }
+@utility duration-emphatic { --tw-duration: calc(var(--duration-emphatic) * var(--motion-factor)); transition-duration: calc(var(--duration-emphatic) * var(--motion-factor)); }
+@utility duration-archive  { --tw-duration: calc(var(--duration-archive)  * var(--motion-factor)); transition-duration: calc(var(--duration-archive)  * var(--motion-factor)); }
+@utility duration-flip     { --tw-duration: calc(var(--duration-flip)     * var(--motion-factor)); transition-duration: calc(var(--duration-flip)     * var(--motion-factor)); }
+
+/* ── Themed focus ring — global floor; :where() = specificity 0 so component ring-* patterns layer on top.
+   Replaces the browser default on every focusable element; re-skins per palette via --color-border-focus. (UX §0.9/§0.11, NFR-A11Y-002) ── */
+:where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"]))::-moz-focus-inner { border: 0; }
+:where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-border-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ── 44px touch-target floor (UX §0.11, NFR-A11Y-005) ── */
+@utility min-touch { min-width: var(--touch-target); min-height: var(--touch-target); }
 
 /* ═══ Theme palettes — [data-theme] reassigns role-1–3 vars; utilities re-point automatically.
    Base · Dark is the @theme default (no block needed). 'base' resolves to base-light/-dark

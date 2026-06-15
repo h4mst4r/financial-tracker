@@ -21,10 +21,18 @@ function applyFont(font: FontId): void {
   else el.dataset.font = font
 }
 
-/** Applies the current theme/font to <html> and keeps them live. Call once, high in the tree. */
+function applyReduceMotion(reduceMotion: boolean): void {
+  const el = document.documentElement
+  // Absence = motion on (mirrors how base-dark/base clear their attributes).
+  if (reduceMotion) el.dataset.reduceMotion = 'true'
+  else delete el.dataset.reduceMotion
+}
+
+/** Applies the current theme/font/reduceMotion to <html> and keeps them live. Call once, high in the tree. */
 export function useAppearance(): void {
   const theme = useThemeStore((s) => s.theme)
   const font = useThemeStore((s) => s.font)
+  const reduceMotion = useThemeStore((s) => s.reduceMotion)
 
   useEffect(() => {
     applyTheme(resolveTheme(theme))
@@ -39,4 +47,8 @@ export function useAppearance(): void {
   useEffect(() => {
     applyFont(font)
   }, [font])
+
+  useEffect(() => {
+    applyReduceMotion(reduceMotion)
+  }, [reduceMotion])
 }

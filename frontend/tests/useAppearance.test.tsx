@@ -9,9 +9,10 @@ function Harness() {
 }
 
 beforeEach(() => {
-  act(() => useThemeStore.setState({ theme: 'base', font: 'base' }))
+  act(() => useThemeStore.setState({ theme: 'base', font: 'base', reduceMotion: false }))
   document.documentElement.removeAttribute('data-theme')
   document.documentElement.removeAttribute('data-font')
+  document.documentElement.removeAttribute('data-reduce-motion')
 })
 
 describe('useAppearance', () => {
@@ -35,5 +36,27 @@ describe('useAppearance', () => {
     expect(document.documentElement.dataset.font).toBe('mono')
     act(() => useThemeStore.getState().setFont('base'))
     expect(document.documentElement.dataset.font).toBeUndefined()
+  })
+
+  it('applies data-reduce-motion="true" when setReduceMotion(true)', () => {
+    render(<Harness />)
+    act(() => useThemeStore.getState().setReduceMotion(true))
+    expect(document.documentElement.dataset.reduceMotion).toBe('true')
+  })
+
+  it('clears data-reduce-motion when setReduceMotion(false)', () => {
+    render(<Harness />)
+    act(() => useThemeStore.getState().setReduceMotion(true))
+    expect(document.documentElement.dataset.reduceMotion).toBe('true')
+    act(() => useThemeStore.getState().setReduceMotion(false))
+    expect(document.documentElement.dataset.reduceMotion).toBeUndefined()
+  })
+
+  it('setAppearance sets theme, font, and reduceMotion together', () => {
+    render(<Harness />)
+    act(() => useThemeStore.getState().setAppearance('retro', 'mono', true))
+    expect(document.documentElement.dataset.theme).toBe('retro')
+    expect(document.documentElement.dataset.font).toBe('mono')
+    expect(document.documentElement.dataset.reduceMotion).toBe('true')
   })
 })
