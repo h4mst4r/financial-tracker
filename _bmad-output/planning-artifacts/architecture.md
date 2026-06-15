@@ -162,6 +162,24 @@ From the brief and PRD, non-negotiable:
 - **Alternatives rejected:** CSS-in-JS (runtime cost, weaker token discipline); component
   libraries like MUI/Chakra (impose their own design language, fighting the custom token
   system and the entity-design philosophy in §3.0a).
+- **⚠️ Two Tailwind-v4 authoring rules that fail SILENTLY (no build error) — binding, carry to any reuse of this stack:**
+  1. **Token-name vs class-name collision.** Tailwind v4 derives a utility colour name from
+     everything after `--color-`. A token whose name starts with a utility prefix (`ring-`,
+     `text-`, `bg-`, `border-`, `accent-`) therefore does NOT produce the obvious class — the
+     prefix is parsed twice. `--color-ring-glow-primary` is **not** reachable as `ring-glow-primary`
+     (that resolves to the non-existent `--color-glow-primary`); the broken class is dropped and the
+     element falls back to a near-white default. **Rule:** expose such tokens via an explicit
+     `@utility` of the intended class name (e.g. `@utility ring-glow-primary { --tw-ring-color: var(--color-ring-glow-primary) }`),
+     or use the doubled auto-class (`border-border-accent`). Prefer naming new tokens so their
+     colour-name does **not** begin with a utility prefix.
+  2. **Hand-written CSS must be layered.** Tailwind utilities live in `@layer utilities`;
+     **unlayered** CSS beats every utility regardless of specificity. A global rule meant to be a
+     *floor* (e.g. a `:focus-visible` outline) must sit in `@layer base`, or component utilities like
+     `focus:outline-none` can never override it. The `:where()` specificity-0 trick does NOT help —
+     layer order, not specificity, is what governs unlayered-vs-layered.
+  - Both fail with green tests and a plausible-looking render, so **a static guard is part of the
+    template** (`frontend/tests/design-tokens.test.ts`): it fails CI on a bare colliding token name or
+    a removed `@utility` alias. Keep it when reusing this architecture.
 
 ### 1.10 Client state → **Zustand (UI/session state) + TanStack Query (server state)**
 

@@ -9,10 +9,11 @@ function Harness() {
 }
 
 beforeEach(() => {
-  act(() => useThemeStore.setState({ theme: 'base', font: 'base', reduceMotion: false }))
+  act(() => useThemeStore.setState({ theme: 'base', font: 'base', reduceMotion: false, density: 'comfortable' }))
   document.documentElement.removeAttribute('data-theme')
   document.documentElement.removeAttribute('data-font')
   document.documentElement.removeAttribute('data-reduce-motion')
+  document.documentElement.removeAttribute('data-density')
 })
 
 describe('useAppearance', () => {
@@ -58,5 +59,28 @@ describe('useAppearance', () => {
     expect(document.documentElement.dataset.theme).toBe('retro')
     expect(document.documentElement.dataset.font).toBe('mono')
     expect(document.documentElement.dataset.reduceMotion).toBe('true')
+  })
+
+  it('applies data-density="compact" when setDensity(compact)', () => {
+    render(<Harness />)
+    act(() => useThemeStore.getState().setDensity('compact'))
+    expect(document.documentElement.dataset.density).toBe('compact')
+  })
+
+  it('clears data-density when setDensity(comfortable)', () => {
+    render(<Harness />)
+    act(() => useThemeStore.getState().setDensity('compact'))
+    expect(document.documentElement.dataset.density).toBe('compact')
+    act(() => useThemeStore.getState().setDensity('comfortable'))
+    expect(document.documentElement.dataset.density).toBeUndefined()
+  })
+
+  it('setAppearance sets theme, font, reduceMotion, and density together (4-arg seam)', () => {
+    render(<Harness />)
+    act(() => useThemeStore.getState().setAppearance('retro', 'mono', true, 'compact'))
+    expect(document.documentElement.dataset.theme).toBe('retro')
+    expect(document.documentElement.dataset.font).toBe('mono')
+    expect(document.documentElement.dataset.reduceMotion).toBe('true')
+    expect(document.documentElement.dataset.density).toBe('compact')
   })
 })

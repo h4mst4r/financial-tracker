@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useThemeStore } from '../stores/themeStore'
-import type { ThemeId, ResolvedThemeId, FontId } from './palettes'
+import type { ThemeId, ResolvedThemeId, FontId, DensityId } from './palettes'
 
 function resolveTheme(theme: ThemeId): ResolvedThemeId {
   if (theme !== 'base') return theme
@@ -28,11 +28,19 @@ function applyReduceMotion(reduceMotion: boolean): void {
   else delete el.dataset.reduceMotion
 }
 
-/** Applies the current theme/font/reduceMotion to <html> and keeps them live. Call once, high in the tree. */
+function applyDensity(density: DensityId): void {
+  const el = document.documentElement
+  // Absence = comfortable (mirrors theme/font/reduce-motion clear-attribute convention).
+  if (density === 'compact') el.dataset.density = 'compact'
+  else delete el.dataset.density
+}
+
+/** Applies the current theme/font/reduceMotion/density to <html> and keeps them live. Call once, high in the tree. */
 export function useAppearance(): void {
   const theme = useThemeStore((s) => s.theme)
   const font = useThemeStore((s) => s.font)
   const reduceMotion = useThemeStore((s) => s.reduceMotion)
+  const density = useThemeStore((s) => s.density)
 
   useEffect(() => {
     applyTheme(resolveTheme(theme))
@@ -51,4 +59,8 @@ export function useAppearance(): void {
   useEffect(() => {
     applyReduceMotion(reduceMotion)
   }, [reduceMotion])
+
+  useEffect(() => {
+    applyDensity(density)
+  }, [density])
 }

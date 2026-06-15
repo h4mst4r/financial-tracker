@@ -37,8 +37,8 @@ text-primary         — Active nav/control tabs, selected check marks (indigo)
 border-border         — Default input/panel border
 border-border-light   — Hover border
 border-border-strong  — Focused non-picker inputs
-border-accent         — Open picker/dropdown trigger border (cyan)
-border-error          — Error state border
+border-border-accent  — Open picker/dropdown trigger border (cyan)
+border-border-error   — Error state border
 border-border-focus   — Keyboard focus ring border (indigo)
 ```
 
@@ -49,6 +49,33 @@ ring-glow-accent    — Picker triggers when open (Dropdown, DatePicker, ColourP
 ring-glow-primary   — Text inputs on focus
 ring-glow-error     — Error state inputs
 ```
+
+These three are backed by **explicit `@utility` blocks** in `index.css` (they set `--tw-ring-color`),
+NOT auto-generated colour utilities — see §1.4a. Do not "simplify" them away.
+
+### 1.4a ⚠️ Tailwind v4 token-name vs class-name collision (read before adding any colour token)
+
+Tailwind v4 derives a utility *colour name* from everything after `--color-`. So a token whose name
+**starts with a utility prefix** (`ring-`, `text-`, `bg-`, `border-`, `accent-`) does NOT produce the
+class you'd expect — the prefix gets parsed twice:
+
+| Token | Naïve class (BROKEN — silently no-ops) | What actually works |
+|---|---|---|
+| `--color-ring-glow-primary` | `ring-glow-primary` → looks up `--color-glow-primary` (∄) | `@utility ring-glow-primary { --tw-ring-color: var(--color-ring-glow-primary) }` |
+| `--color-border-accent` | `border-accent` → `--color-accent` (∄) | `border-border-accent` (double up) |
+| `--color-border-error` | `border-error` → `--color-error` (wrong token, only *coincidentally* the same value) | `border-border-error` |
+| `--color-accent-primary` | `text-primary`/`bg-primary` → `--color-primary` (∄) | `@utility text-primary`/`bg-primary` (alias to accent), or `text-accent-primary` |
+| `--color-accent-secondary` | `text-accent` → `--color-accent` (∄) | `@utility text-accent`, or `text-accent-secondary` |
+
+A broken colour utility fails **silently** — the class is dropped and `ring-2`/text falls back to a
+near-white default. There is no build error. **Verify focus rings and selection colours actually
+render the themed colour** (inspect `--tw-ring-color` / computed `color`), don't trust that the class
+"looks right". The aliases (`bg-primary`, `text-primary`, `text-accent`, `ring-glow-*`) are the
+sanctioned spellings — they exist as `@utility` blocks specifically to dodge this collision.
+
+`frontend/tests/design-tokens.test.ts` enforces this: it fails CI if any component uses a bare
+colliding token name, or if a sanctioned `@utility` alias is removed. Add new colliding tokens to an
+`@utility` (or use the doubled class) and the guard stays green.
 
 ### 1.5 Fill / Active State Tokens
 
@@ -101,14 +128,15 @@ className={`
   ${disabled
     ? 'opacity-50 cursor-not-allowed'
     : open
-      ? 'border-accent ring-2 ring-glow-accent'
-      : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-accent'
+      ? 'border-border-accent ring-2 ring-glow-accent'
+      : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
   }
 `}
 ```
 
 **DO NOT** split into two separate ternaries — the `focus:ring-*` classes on the closed-but-focused state are lost.
 **DO NOT** put `border-border` in the base classes — it belongs only in the ternary's closed branch.
+**Class spelling (§1.4a):** use `border-border-accent` — the bare `border-accent` resolves to the non-existent `--color-accent` and silently no-ops. `ring-glow-accent` and `ring-accent` are the sanctioned `@utility` aliases.
 **ALWAYS** include `focus:outline-none` in the base classes — omitting it causes the browser's default focus outline to appear alongside the custom ring (see §2.7).
 
 ### 2.2 Picker Panel Tab Buttons (EXACT pattern)
@@ -208,7 +236,7 @@ focus:outline-none focus:ring-2 focus:ring-glow-primary focus:border-border-focu
 Search inputs **inside picker panels** use `ring-glow-accent` (cyan), consistent with the picker theme:
 
 ```
-focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-accent
+focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-border-accent
 ```
 
 ### 2.8 Tooltip Pattern (CSS-Primary — No JS Timers)
@@ -237,18 +265,18 @@ Only JS in Tooltip: an Escape key listener to force-dismiss. Tooltips auto-flip 
 Two-option mode toggles (e.g., Household/My Finances) use the segmented control pattern:
 
 ```tsx
-<div className="flex border border-state rounded-md overflow-hidden">
+<div className="flex border border-border rounded-md overflow-hidden">
   <button className={isFirst ? 'bg-control-active text-primary' : 'text-text-secondary'}>
     Option A
   </button>
-  <span className="w-px bg-border-state-subtle self-stretch" />
+  <span className="w-px bg-border self-stretch" />
   <button className={!isFirst ? 'bg-control-active text-primary' : 'text-text-secondary'}>
     Option B
   </button>
 </div>
 ```
 
-Tokens: `border-state` for the outer border, `border-state-subtle` for the internal divider. **Never** `border-primary/30`.
+Tokens: `border-border` for the outer border, `bg-border` for the internal divider span. **Never** `border-primary/30` or invented `border-state*` names.
 
 **Each segment button MUST set `rounded-none` explicitly.** Default/pre-styled buttons carry a border-radius; if you don't zero it, every segment renders with rounded corners and the control looks wrong. Only the outer container is rounded (`rounded-md`) — its `overflow-hidden` clips the end segments to the container radius; interior edges stay square. The active segment is a **flat, full-bleed** fill (`bg-control-active` + `text-primary`), not an inset pill.
 

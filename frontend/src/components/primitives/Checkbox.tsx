@@ -1,0 +1,40 @@
+import { Check } from 'lucide-react'
+import { Icon } from './Icon'
+
+interface CheckboxProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+  id?: string
+  label?: string
+}
+
+export function Checkbox({ checked, onChange, disabled, id, label }: CheckboxProps) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        className="sr-only peer"
+        checked={checked}
+        onChange={(e) => { if (!disabled) onChange(e.target.checked); }}
+        disabled={disabled}
+        id={id}
+      />
+      <span
+        className={`
+          w-5 h-5 rounded-md flex items-center justify-center
+          transition-colors duration-quick border
+          peer-focus-visible:ring-2 peer-focus-visible:ring-glow-primary
+          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          ${checked
+            ? 'bg-primary border-primary'
+            : 'border-border bg-surface-raised'
+          }
+        `}
+      >
+        {checked && <Icon icon={Check} size={14} className="text-on-primary" />}
+      </span>
+      {label && <span className="text-sm font-medium text-text-primary">{label}</span>}
+    </label>
+  )
+}

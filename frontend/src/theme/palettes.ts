@@ -11,6 +11,9 @@ export type ThemeId = 'base' | ResolvedThemeId
 /** `base` = Inter, `system` = OS sans stack, `mono` = JetBrains Mono as the UI font. */
 export type FontId = 'base' | 'system' | 'mono'
 
+/** Per-person density preference — comfortable is the default, compact tightens controls. */
+export type DensityId = 'comfortable' | 'compact'
+
 interface PaletteMeta {
   immersive: boolean
   /** Anchor hue — present only when immersive. */
