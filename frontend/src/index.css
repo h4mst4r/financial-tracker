@@ -46,6 +46,16 @@
   --color-entity-category: #8b5cf6;
   --color-entity-currency: #14b8a6;
 
+  /* ── Colour · role-3 viz series (UX §0.2; consumers arrive in Epic 9) ── */
+  --color-chart-1: #6366f1;
+  --color-chart-2: #06b6d4;
+  --color-chart-3: #22c55e;
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #ec4899;
+  --color-chart-6: #8b5cf6;
+  --color-chart-7: #14b8a6;
+  --color-chart-8: #f43f5e;
+
   /* ── Typography (UX §0.3) ── */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
@@ -130,3 +140,192 @@
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--color-surface-active); border-radius: var(--radius-full); }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
+
+/* ═══ Theme palettes — [data-theme] reassigns role-1–3 vars; utilities re-point automatically.
+   Base · Dark is the @theme default (no block needed). 'base' resolves to base-light/-dark
+   via prefers-color-scheme in useAppearance. (UX §0.2, AC1) ═══ */
+
+/* ── Base · Light (immersive: no) ── */
+[data-theme="base-light"] {
+  --color-bg:              #f7f7fb;
+  --color-bg-secondary:    #eeeef5;
+  --color-surface:         #ffffff;
+  --color-surface-raised:  #ffffff;
+  --color-surface-hover:   #f2f2f8;
+  --color-surface-active:  #e9e9f2;
+  --color-surface-overlay: #ffffff;
+  --color-border:          #e2e2ec;
+  --color-border-light:    #cfcfdd;
+  --color-border-strong:   #b4b4c8;
+  --color-text-primary:    #1a1a2e;
+  --color-text-secondary:  #565676;
+  --color-text-muted:      #8a8aa0;
+  --color-accent-primary:   #4f46e5;
+  --color-accent-secondary: #0891b2;
+  --color-border-accent:    #0891b2;
+  --color-border-focus:     #4f46e5;
+  --color-error:            #dc2626;
+  --color-border-error:     #dc2626;
+  --color-accent-subtle:  color-mix(in oklab, #4f46e5 12%, transparent);
+  --color-control-active: color-mix(in oklab, #4f46e5 16%, transparent);
+  --color-accent-active:  color-mix(in oklab, #0891b2 16%, transparent);
+  --color-primary-muted:  color-mix(in oklab, #4f46e5 14%, transparent);
+  --color-ring-glow-primary: color-mix(in oklab, #4f46e5 30%, transparent);
+  --color-ring-glow-accent:  color-mix(in oklab, #0891b2 30%, transparent);
+  --color-ring-glow-error:   color-mix(in oklab, #dc2626 30%, transparent);
+  --color-backdrop:          rgb(0 0 0 / 0.4);
+  --color-success:       #16a34a;
+  --color-warning:       #d97706;
+  --color-info:          #2563eb;
+  --color-success-muted: color-mix(in oklab, #16a34a 70%, var(--color-surface));
+  --color-warning-muted: color-mix(in oklab, #d97706 70%, var(--color-surface));
+  --color-info-muted:    color-mix(in oklab, #2563eb 70%, var(--color-surface));
+  --color-error-muted:   color-mix(in oklab, #dc2626 70%, var(--color-surface));
+  --color-chart-1: #4f46e5; --color-chart-2: #0891b2; --color-chart-3: #16a34a; --color-chart-4: #d97706;
+  --color-chart-5: #db2777; --color-chart-6: #7c3aed; --color-chart-7: #0d9488; --color-chart-8: #e11d48;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.12);
+  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.16);
+}
+
+/* ── Retro · 70s (immersive: no) ── */
+[data-theme="retro"] {
+  --color-bg:              #f4ecd8;
+  --color-bg-secondary:    #ece0c4;
+  --color-surface:         #fffaf0;
+  --color-surface-raised:  #fffaf0;
+  --color-surface-hover:   #f6eeda;
+  --color-surface-active:  #ece0c6;
+  --color-surface-overlay: #fffaf0;
+  --color-border:          #ddccae;
+  --color-border-light:    #cbb892;
+  --color-border-strong:   #b09b6f;
+  --color-text-primary:    #3a2a18;
+  --color-text-secondary:  #6e573c;
+  --color-text-muted:      #9c8a6b;
+  --color-accent-primary:   #d2691e;
+  --color-accent-secondary: #2a9d8f;
+  --color-border-accent:    #2a9d8f;
+  --color-border-focus:     #d2691e;
+  --color-error:            #c0392b;
+  --color-border-error:     #c0392b;
+  --color-accent-subtle:  color-mix(in oklab, #d2691e 14%, transparent);
+  --color-control-active: color-mix(in oklab, #d2691e 18%, transparent);
+  --color-accent-active:  color-mix(in oklab, #2a9d8f 18%, transparent);
+  --color-primary-muted:  color-mix(in oklab, #d2691e 16%, transparent);
+  --color-ring-glow-primary: color-mix(in oklab, #d2691e 30%, transparent);
+  --color-ring-glow-accent:  color-mix(in oklab, #2a9d8f 30%, transparent);
+  --color-ring-glow-error:   color-mix(in oklab, #c0392b 30%, transparent);
+  --color-backdrop:          rgb(58 42 24 / 0.45);
+  --color-success:       #5b8c3a;
+  --color-warning:       #cc8a2c;
+  --color-info:          #3d7b8c;
+  --color-success-muted: color-mix(in oklab, #5b8c3a 70%, var(--color-surface));
+  --color-warning-muted: color-mix(in oklab, #cc8a2c 70%, var(--color-surface));
+  --color-info-muted:    color-mix(in oklab, #3d7b8c 70%, var(--color-surface));
+  --color-error-muted:   color-mix(in oklab, #c0392b 70%, var(--color-surface));
+  --color-chart-1: #d2691e; --color-chart-2: #2a9d8f; --color-chart-3: #c0392b; --color-chart-4: #e9c46a;
+  --color-chart-5: #8a5a44; --color-chart-6: #6a994e; --color-chart-7: #bc6c25; --color-chart-8: #457b9d;
+  --shadow-sm: 0 1px 2px rgb(58 42 24 / 0.10);
+  --shadow-md: 0 2px 8px rgb(58 42 24 / 0.12);
+  --shadow-lg: 0 8px 24px rgb(58 42 24 / 0.18);
+  --shadow-xl: 0 16px 48px rgb(58 42 24 / 0.22);
+}
+
+/* ── Muted Brown (immersive: no) ── */
+[data-theme="brown"] {
+  --color-bg:              #1f1a16;
+  --color-bg-secondary:    #261f19;
+  --color-surface:         #2b241d;
+  --color-surface-raised:  #352c24;
+  --color-surface-hover:   #3d332a;
+  --color-surface-active:  #473a30;
+  --color-surface-overlay: #40342b;
+  --color-border:          #463a2f;
+  --color-border-light:    #5a4b3d;
+  --color-border-strong:   #6f5d4b;
+  --color-text-primary:    #e8ddd0;
+  --color-text-secondary:  #b8a690;
+  --color-text-muted:      #8a7a66;
+  --color-accent-primary:   #b08968;
+  --color-accent-secondary: #9c6644;
+  --color-border-accent:    #9c6644;
+  --color-border-focus:     #b08968;
+  --color-error:            #d9534f;
+  --color-border-error:     #d9534f;
+  --color-accent-subtle:  color-mix(in oklab, #b08968 16%, transparent);
+  --color-control-active: color-mix(in oklab, #b08968 22%, transparent);
+  --color-accent-active:  color-mix(in oklab, #9c6644 20%, transparent);
+  --color-primary-muted:  color-mix(in oklab, #b08968 18%, transparent);
+  --color-ring-glow-primary: color-mix(in oklab, #b08968 35%, transparent);
+  --color-ring-glow-accent:  color-mix(in oklab, #9c6644 35%, transparent);
+  --color-ring-glow-error:   color-mix(in oklab, #d9534f 35%, transparent);
+  --color-backdrop:          rgb(0 0 0 / 0.7);
+  --color-success:       #7fa05a;
+  --color-warning:       #d99a4e;
+  --color-info:          #6a9bb0;
+  --color-success-muted: color-mix(in oklab, #7fa05a 70%, var(--color-surface));
+  --color-warning-muted: color-mix(in oklab, #d99a4e 70%, var(--color-surface));
+  --color-info-muted:    color-mix(in oklab, #6a9bb0 70%, var(--color-surface));
+  --color-error-muted:   color-mix(in oklab, #d9534f 70%, var(--color-surface));
+  --color-chart-1: #b08968; --color-chart-2: #9c6644; --color-chart-3: #7fa05a; --color-chart-4: #d9a441;
+  --color-chart-5: #c97b5a; --color-chart-6: #6a9bb0; --color-chart-7: #a8855f; --color-chart-8: #cf6b4a;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.30);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.45);
+  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.55);
+}
+
+/* ── Game Boy · DMG (immersive: YES — entity/semantic/interaction collapse to the 4-green ramp.
+   The JS remap (theme/colour.ts) handles per-instance entity hex; these vars fix the chrome +
+   semantics to ramp slots. Monochrome can't carry red/green meaning — icons/shape do, §0.2. ── */
+[data-theme="gameboy"] {
+  --color-bg:              #0f380f;
+  --color-bg-secondary:    #143d14;
+  --color-surface:         #306230;
+  --color-surface-raised:  #386b38;
+  --color-surface-hover:   #3f733f;
+  --color-surface-active:  #487f48;
+  --color-surface-overlay: #386b38;
+  --color-border:          #1d491d;
+  --color-border-light:    #265626;
+  --color-border-strong:   #306230;
+  --color-text-primary:    #9bbc0f;
+  --color-text-secondary:  #8bac0f;
+  --color-text-muted:      #6f8f2a;
+  --color-accent-primary:   #8bac0f;   /* light ramp slot — focus/primary */
+  --color-accent-secondary: #306230;   /* dark ramp slot — selection/accent (two separated slots, §0.2) */
+  --color-border-accent:    #9bbc0f;   /* open-picker border — lightest, so it reads on green surface */
+  --color-border-focus:     #8bac0f;
+  --color-error:            #9bbc0f;   /* meaning via icon; lightest = attention */
+  --color-border-error:     #9bbc0f;
+  --color-accent-subtle:  color-mix(in oklab, #8bac0f 16%, transparent);
+  --color-control-active: color-mix(in oklab, #8bac0f 22%, transparent);
+  --color-accent-active:  color-mix(in oklab, #306230 24%, transparent);
+  --color-primary-muted:  color-mix(in oklab, #8bac0f 18%, transparent);
+  --color-ring-glow-primary: color-mix(in oklab, #8bac0f 35%, transparent);
+  --color-ring-glow-accent:  color-mix(in oklab, #9bbc0f 35%, transparent);
+  --color-ring-glow-error:   color-mix(in oklab, #9bbc0f 35%, transparent);
+  --color-backdrop:          rgb(15 56 15 / 0.7);
+  --color-success:       #9bbc0f;   /* lightest = income/success (§0.2) */
+  --color-warning:       #8bac0f;
+  --color-info:          #306230;
+  --color-success-muted: color-mix(in oklab, #9bbc0f 70%, var(--color-surface));
+  --color-warning-muted: color-mix(in oklab, #8bac0f 70%, var(--color-surface));
+  --color-info-muted:    color-mix(in oklab, #306230 70%, var(--color-surface));
+  --color-error-muted:   color-mix(in oklab, #9bbc0f 70%, var(--color-surface));
+  --color-entity-account:  #8bac0f;   /* fallbacks → ramp slots (per-instance remapped in JS) */
+  --color-entity-category: #306230;
+  --color-entity-currency: #9bbc0f;
+  --color-chart-1: #9bbc0f; --color-chart-2: #7a9a1a; --color-chart-3: #5e8226; --color-chart-4: #306230;
+  --color-chart-5: #214c21; --color-chart-6: #8bac0f; --color-chart-7: #486f24; --color-chart-8: #143d14;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.40);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.55);
+  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.60);
+}
+
+/* ── Font swap — only --font-sans changes; --font-mono (money) is invariant (AC3) ── */
+[data-font="system"] { --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+[data-font="mono"]    { --font-sans: var(--font-mono); }

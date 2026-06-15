@@ -6,6 +6,12 @@ import App from './App.tsx'
 import { ToastContainer } from './components/ToastContainer.tsx'
 import { setAuthStoreGetter } from './api/client.ts'
 import { useAuthStore } from './stores/authStore.ts'
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import '@fontsource/inter/700.css'
+import '@fontsource/jetbrains-mono/400.css'
+import '@fontsource/jetbrains-mono/500.css'
 import './index.css'
 
 // Wire the auth-store getter once at startup (avoids circular import)
