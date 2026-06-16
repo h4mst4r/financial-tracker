@@ -26,6 +26,9 @@ export type DesignSystemGroup = (typeof DESIGN_SYSTEM_GROUPS)[number]
 export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
   // Composites first — mirrors the design bible, where #shell/EntityPage precedes the #library primitives.
   { id: 'entity-page', label: 'EntityPage', group: 'Composites' },
+  { id: 'entity-card', label: 'EntityCard', group: 'Composites' },
+  { id: 'entity-modal', label: 'EntityModal', group: 'Composites' },
+  { id: 'bulk-actions', label: 'BulkActionBar', group: 'Composites' },
   { id: 'semantic-text', label: 'Semantic text & amounts', group: 'Foundation' },
   { id: 'icon', label: 'Icon', group: 'Foundation' },
   { id: 'button', label: 'Button', group: 'Primitives' },

@@ -55,6 +55,46 @@ describe('/design-system EntityPage composite demo (story 1.9a, AC4)', () => {
   })
 })
 
+describe('/design-system EntityCard & EntityModal composite demos (story 1.9b, AC5)', () => {
+  it('renders the real <EntityCard> instances inside #entity-card', () => {
+    const { container } = render(<DesignSystem />)
+    const section = container.querySelector('section#entity-card')
+    expect(section, 'missing <section id="entity-card">').not.toBeNull()
+    // The real EntityCard root marker (data-testid) — not a synthetic <div> stand-in.
+    expect(
+      section!.querySelector('[data-testid="entity-card"]'),
+      'EntityCard demo is not the real exported component',
+    ).not.toBeNull()
+  })
+
+  it('renders the real <EntityModal> trigger inside #entity-modal', () => {
+    const { container } = render(<DesignSystem />)
+    const section = container.querySelector('section#entity-modal')
+    expect(section, 'missing <section id="entity-modal">').not.toBeNull()
+    // EntityModal is portalled when open; the section holds its trigger button (closed by default).
+    expect(
+      section!.querySelector('button'),
+      'EntityModal demo is missing its trigger',
+    ).not.toBeNull()
+  })
+})
+
+describe('/design-system BulkActionBar composite demo (story 1.9c, AC5)', () => {
+  it('renders the real <BulkActionBar> inside #bulk-actions once a card is selected', () => {
+    const { container } = render(<DesignSystem />)
+    const section = container.querySelector('section#bulk-actions')
+    expect(section, 'missing <section id="bulk-actions">').not.toBeNull()
+    // Selection mode is on by default — tapping a card's open-overlay selects it and reveals the bar.
+    const card = section!.querySelector('[data-testid="entity-card-open"]') as HTMLElement | null
+    expect(card, 'BulkActionBar demo has no real EntityCard to select').not.toBeNull()
+    fireEvent.click(card!)
+    expect(
+      section!.querySelector('[data-testid="bulk-action-bar"]'),
+      'BulkActionBar did not appear after selecting a card (not the real component)',
+    ).not.toBeNull()
+  })
+})
+
 describe('/design-system section index/nav (story 1.8c, AC1)', () => {
   it('links every demoed section', () => {
     const { container } = render(<DesignSystem />)

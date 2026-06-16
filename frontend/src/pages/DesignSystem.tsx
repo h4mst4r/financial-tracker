@@ -21,7 +21,9 @@ import {
   EmptyState,
   ConfirmationDialog,
 } from '../components/primitives'
-import { EntityPage } from '../components/entity'
+import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
+import type { BulkAction } from '../components/entity'
+import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useAlertStore } from '../stores/alertStore'
 import { useThemeStore } from '../stores/themeStore'
 import type { DensityId } from '../theme/palettes'
@@ -39,6 +41,8 @@ import {
   Archive,
   SearchX,
   Wallet,
+  Star,
+  LineChart,
 } from 'lucide-react'
 
 const densityOptions = [
@@ -123,6 +127,28 @@ export function DesignSystem() {
     { value: 'error', label: 'Error' },
   ]
 
+  // EntityCard / EntityModal demo state (story 1.9b).
+  const [cardFav, setCardFav] = useState(true)
+  const [cardSelected, setCardSelected] = useState(true)
+  const [entityModalOpen, setEntityModalOpen] = useState(false)
+
+  // BulkActionBar / useMultiSelect demo (story 1.9c). Selection mode flips card onClick from
+  // open → toggle-select (mirrors §0.8 long-press-to-enter-multi-select); the bar appears at ≥1.
+  const bulkSelect = useMultiSelect()
+  const [selectionMode, setSelectionMode] = useState(true)
+  const bulkCards = [
+    { id: 'bk1', colour: '#6366f1', icon: '🏦', name: 'DBS Multiplier', hero: 'S$ 12,840', meta: 'bank · SGD' },
+    { id: 'bk2', colour: '#22c55e', icon: '📈', name: 'VWRA Holdings', hero: 'S$ 48,200', meta: 'capital · SGD' },
+    { id: 'bk3', colour: '#ef4444', icon: '💳', name: 'Amex Platinum', hero: 'Debt S$ 3,180', meta: 'credit · SGD' },
+  ]
+  const bulkActions: BulkAction[] = [
+    { id: 'edit', label: 'Edit fields', icon: Edit, onClick: () => {} },
+    { id: 'duplicate', label: 'Duplicate', icon: Copy, onClick: () => {} },
+    { id: 'visualize', label: 'Visualize', icon: LineChart, tone: 'accent', onClick: () => {} },
+    { id: 'delete', label: 'Delete', icon: Trash2, destructive: true, disabled: true, disabledReason: 'Only the owner can delete', onClick: () => {} },
+    { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => bulkSelect.clear() },
+  ]
+
   const pushToast = useAlertStore((s) => s.pushToast)
 
   // Density harness: bound to the global theme store (not local state) — useAppearance writes it to
@@ -137,6 +163,17 @@ export function DesignSystem() {
     { label: 'Duplicate', icon: Copy, onClick: () => {} },
     { label: 'Archive', icon: Archive, onClick: () => {} },
     { divider: true } as const,
+    { label: 'Delete', icon: Trash2, onClick: () => {}, destructive: true },
+  ]
+
+  // EntityCard ⋮ — the §8.1 standard set with the favourite/open tones.
+  const entityCardMenu = [
+    { label: 'Edit', icon: Edit, onClick: () => {} },
+    { label: 'Duplicate', icon: Copy, onClick: () => {} },
+    { label: 'Favourite', icon: Star, onClick: () => {}, tone: 'favourite' as const },
+    { label: 'Open', icon: LineChart, onClick: () => {}, tone: 'open' as const },
+    { divider: true } as const,
+    { label: 'Archive', icon: Archive, onClick: () => {} },
     { label: 'Delete', icon: Trash2, onClick: () => {}, destructive: true },
   ]
 
@@ -206,6 +243,130 @@ export function DesignSystem() {
                 </div>
               ))}
             </EntityPage>
+          </div>
+        </section>
+
+        {/* EntityCard — colour-fill identity (calm/vivid), favourite star, ⋮, archived/selected states,
+            sparkline slot. Variants come from what the consumer passes (no entity-type enum). Bible #entitycard. */}
+        <section id="entity-card" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">EntityCard</h2>
+          {/* bg-surface backdrop — entity cards live on the bg-surface content area (UX §1.1); it makes the
+              selected card's ring-offset read against the real backdrop, not the page bg. */}
+          <div className="grid-cols-entity grid gap-md rounded-lg border border-border bg-surface p-md">
+            <EntityCard
+              colour="#6366f1"
+              icon="🏦"
+              name="Calm (DBS)"
+              hero="S$ 12,840"
+              meta="bank · SGD"
+              favourite={cardFav}
+              onToggleFavourite={() => setCardFav((v) => !v)}
+              menuItems={entityCardMenu}
+              onClick={() => pushToast({ variant: 'info', message: 'Open card (demo)' })}
+            />
+            <EntityCard
+              colour="#6366f1"
+              vivid
+              icon="🏦"
+              name="Vivid (dark fill → light text)"
+              hero="S$ 12,840"
+              meta="bank · SGD"
+              menuItems={entityCardMenu}
+              onClick={() => {}}
+            />
+            <EntityCard
+              colour="#9bbc0f"
+              vivid
+              icon="🏠"
+              name="Vivid (light fill → dark text)"
+              hero="S$ 1.45M"
+              meta="asset · SGD"
+              onClick={() => {}}
+            />
+            <EntityCard
+              colour="#22c55e"
+              icon="📈"
+              name="Selected (tap to toggle)"
+              hero="S$ 48,200"
+              meta="capital · SGD"
+              selected={cardSelected}
+              onClick={() => setCardSelected((v) => !v)}
+            />
+            <EntityCard
+              colour="#ef4444"
+              icon="💳"
+              name="Credit card"
+              hero={<span className="text-error">Debt S$ 3,180</span>}
+              subtitle="due 28 Jun · limit 20k"
+              meta="credit · SGD"
+              menuItems={entityCardMenu}
+              onClick={() => {}}
+            />
+            <EntityCard colour="#6366f1" icon="🏦" name="Archived" hero="S$ 0" meta="bank · SGD" archived />
+          </div>
+        </section>
+
+        {/* EntityModal — the generic two-column create/edit shell over the Modal primitive, Cancel-left /
+            Save-right (§4.2). Fields are placeholders; the §8.2 pickers arrive in later epics. Bible #composites. */}
+        <section id="entity-modal" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">EntityModal</h2>
+          <Button onClick={() => setEntityModalOpen(true)}>Open EntityModal</Button>
+          <EntityModal
+            open={entityModalOpen}
+            onClose={() => setEntityModalOpen(false)}
+            title="Edit account"
+            onSave={() => setEntityModalOpen(false)}
+          >
+            <div className="flex flex-col gap-2xs">
+              <Label htmlFor="em-name">Name</Label>
+              <Input id="em-name" defaultValue="DBS Multiplier" />
+            </div>
+            <div className="flex flex-col gap-2xs">
+              <Label htmlFor="em-type">Type</Label>
+              <Input id="em-type" defaultValue="Bank" />
+            </div>
+            <div className="flex flex-col gap-2xs md:col-span-2">
+              <Label htmlFor="em-notes">Notes</Label>
+              <Input id="em-notes" placeholder="Optional notes" />
+            </div>
+          </EntityModal>
+        </section>
+
+        {/* BulkActionBar — generic multi-select bulk bar (§8.6). useMultiSelect drives the cards'
+            `selected` ring; the bar slides up at ≥1 selection. Visualize tinted accent, Archive/Delete
+            after a divider, Delete disabled with a reason (permission-greying). Bible #composites. */}
+        <section id="bulk-actions" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">BulkActionBar</h2>
+          <div className="flex items-center gap-sm mb-md">
+            <Toggle checked={selectionMode} onChange={setSelectionMode} aria-label="Selection mode" />
+            <span className="text-sm text-text-secondary">
+              {selectionMode ? 'Selection mode — tap cards to select' : 'Selection mode off'}
+            </span>
+          </div>
+          <div className="grid-cols-entity grid gap-md rounded-lg border border-border bg-surface p-md">
+            {bulkCards.map((c) => (
+              <EntityCard
+                key={c.id}
+                colour={c.colour}
+                icon={c.icon}
+                name={c.name}
+                hero={c.hero}
+                meta={c.meta}
+                selected={bulkSelect.isSelected(c.id)}
+                onClick={() =>
+                  selectionMode
+                    ? bulkSelect.toggle(c.id)
+                    : pushToast({ variant: 'info', message: `Open ${c.name} (demo)` })
+                }
+              />
+            ))}
+          </div>
+          <div className="sticky bottom-lg mt-md">
+            <BulkActionBar
+              count={bulkSelect.selectedCount}
+              onClear={bulkSelect.clear}
+              actions={bulkActions}
+            />
           </div>
         </section>
 
