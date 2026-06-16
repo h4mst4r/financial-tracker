@@ -22,6 +22,12 @@ import {
   ConfirmationDialog,
 } from '../components/primitives'
 import { useAlertStore } from '../stores/alertStore'
+import { useThemeStore } from '../stores/themeStore'
+import type { DensityId } from '../theme/palettes'
+import {
+  DESIGN_SYSTEM_GROUPS,
+  DESIGN_SYSTEM_SECTIONS,
+} from './designSystemSections'
 import {
   Home,
   Settings,
@@ -32,6 +38,11 @@ import {
   Archive,
   SearchX,
 } from 'lucide-react'
+
+const densityOptions = [
+  { value: 'comfortable', label: 'Comfortable' },
+  { value: 'compact', label: 'Compact' },
+]
 
 const dropdownOptions = [
   { value: 'a', label: 'Option A' },
@@ -56,6 +67,36 @@ function GroupHeading({ children }: { children: string }) {
   )
 }
 
+// Section index — mirrors the design bible's grouped left nav (#library). Rendered from the shared
+// DESIGN_SYSTEM_SECTIONS registry so it can never drift from the demo sections (P1 guard test).
+// Full-width above the content on small viewports (stacks, never overflows); a sticky sidebar at lg+.
+function SectionNav() {
+  return (
+    <nav
+      aria-label="Design system sections"
+      className="shrink-0 lg:w-52 lg:sticky lg:top-lg lg:self-start lg:max-h-screen lg:overflow-y-auto"
+    >
+      {DESIGN_SYSTEM_GROUPS.map((group) => (
+        <div key={group} className="mb-md">
+          <div className="text-2xs font-medium uppercase tracking-wide text-text-muted mb-xs">{group}</div>
+          <ul className="flex flex-wrap gap-x-md gap-y-2xs lg:flex-col lg:gap-0">
+            {DESIGN_SYSTEM_SECTIONS.filter((s) => s.group === group).map((s) => (
+              <li key={s.id}>
+                <a
+                  href={`#${s.id}`}
+                  className="block py-2xs text-sm text-text-secondary hover:text-text-primary transition-colors duration-quick"
+                >
+                  {s.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  )
+}
+
 export function DesignSystem() {
   const [buttonClicks, setButtonClicks] = useState(0)
   const [inputValue, setInputValue] = useState('')
@@ -69,6 +110,13 @@ export function DesignSystem() {
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const pushToast = useAlertStore((s) => s.pushToast)
+
+  // Density harness: bound to the global theme store (not local state) — useAppearance writes it to
+  // <html data-density>, which drives the --density-* CSS vars, so every section re-renders live.
+  // This is the dev harness built from SegmentedControl; the Phase-3 DensityToggle composite (UX §7,
+  // Settings) is a separate later story and intentionally NOT built here.
+  const density = useThemeStore((s) => s.density)
+  const setDensity = useThemeStore((s) => s.setDensity)
 
   const contextMenuItems = [
     { label: 'Edit', icon: Edit, onClick: () => {} },
@@ -87,8 +135,20 @@ export function DesignSystem() {
 
   return (
     <main className="min-h-screen bg-bg text-text-primary p-lg">
-      <div className="max-w-3xl">
-        <h1 className="text-2xl font-medium mb-lg">Design System</h1>
+      <div className="mx-auto flex max-w-5xl flex-col gap-lg lg:flex-row">
+        <SectionNav />
+        <div className="min-w-0 flex-1 lg:max-w-3xl">
+        <div className="flex flex-wrap items-center justify-between gap-md mb-lg">
+          <h1 className="text-2xl font-medium">Design System</h1>
+          <div className="flex items-center gap-sm">
+            <span className="text-sm text-text-secondary">Density</span>
+            <SegmentedControl
+              value={density}
+              options={densityOptions}
+              onChange={(v) => setDensity(v as DensityId)}
+            />
+          </div>
+        </div>
 
         {/* ─────────────────────────── Foundation (bible §0) ─────────────────────────── */}
         <GroupHeading>Foundation</GroupHeading>
@@ -379,6 +439,7 @@ export function DesignSystem() {
             action={<Button variant="primary">Clear Filters</Button>}
           />
         </section>
+        </div>
       </div>
     </main>
   )
