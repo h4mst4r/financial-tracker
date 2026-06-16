@@ -14,7 +14,7 @@ export function Checkbox({ checked, onChange, disabled, id, label }: CheckboxPro
     <label className="flex items-center gap-2 cursor-pointer">
       <input
         type="checkbox"
-        className="sr-only peer"
+        className="sr-only peer focus-visible:outline-none"
         checked={checked}
         onChange={(e) => { if (!disabled) onChange(e.target.checked); }}
         disabled={disabled}

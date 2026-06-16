@@ -77,6 +77,14 @@ sanctioned spellings — they exist as `@utility` blocks specifically to dodge t
 colliding token name, or if a sanctioned `@utility` alias is removed. Add new colliding tokens to an
 `@utility` (or use the doubled class) and the guard stays green.
 
+**Sizing-scale sibling — `max-w-*` collides with `--spacing-*`.** Same trap, different scale: Tailwind v4
+resolves `max-w-<key>` against the `--spacing-*` scale when a matching token exists, so `max-w-sm`→**12px**
+and `max-w-lg`→**24px** (the spacing token shadows the container scale) — collapsing the element to a
+sliver / one-word-per-line, silently. This bit EmptyState 4×. **Never use `max-w-sm/md/lg/xl/2xl` in TSX**;
+use a dedicated `@utility` (`max-w-empty-state`, `max-w-modal`, `max-w-input`, `max-w-tooltip`). The same
+`design-tokens.test.ts` has a second guard that fails CI on any `max-w-<spacing-key>` in a component.
+(`max-w-3xl` works only because no `--spacing-3xl` exists.)
+
 ### 1.5 Fill / Active State Tokens
 
 ```

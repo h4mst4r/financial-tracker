@@ -23,6 +23,14 @@ function readCss(): string {
   return readFileSync(CSS_PATH, 'utf8')
 }
 
+/** Strip JS/TS/JSX comments so a token named in a warning comment isn't read as a class.
+   Leaves `://` (URLs) intact. */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ') // block comments + JSX {/* … */}
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1') // line comments, but not the `//` in `https://`
+}
+
 function tsxFiles(dir: string): string[] {
   const out: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -83,7 +91,7 @@ describe('design tokens — Tailwind v4 token/class collision guard', () => {
     const utilities = utilityNames(css)
     const violations: Record<string, string[]> = {}
     for (const file of tsxFiles(SRC_DIR)) {
-      const hits = findTraps(readFileSync(file, 'utf8'), dangerous, utilities)
+      const hits = findTraps(stripComments(readFileSync(file, 'utf8')), dangerous, utilities)
       if (hits.length) violations[file.replace(SRC_DIR, 'src')] = hits
     }
     expect(violations).toEqual({})
@@ -92,6 +100,55 @@ describe('design tokens — Tailwind v4 token/class collision guard', () => {
   it('sanctioned @utility colour aliases exist (removing one silently breaks theming)', () => {
     const utilities = utilityNames(readCss())
     for (const alias of ['bg-primary', 'text-primary', 'text-accent', 'text-on-primary', 'ring-glow-primary', 'ring-glow-accent', 'ring-glow-error', 'ring-accent']) {
+      expect(utilities, `missing @utility ${alias}`).toContain(alias)
+    }
+  })
+})
+
+// Sibling collision on the SIZING scale (frontend.md §1.4a). In Tailwind v4 `max-w-<key>`
+// resolves against our --spacing-* scale, NOT the container scale, when a matching --spacing-<key>
+// token exists — so `max-w-sm`→12px, `max-w-lg`→24px, collapsing the element to a sliver /
+// one-word-per-line with no build error. There is no alias that repairs the bare spelling; the only
+// fix is a dedicated @utility (max-w-empty-state, max-w-modal, …). This guard forbids the colliding
+// bare spellings in components. (Recurred 4× in EmptyState before the root cause was found.)
+
+/** Spacing-token names (the part after `--spacing-`) declared in the CSS. */
+function spacingNames(css: string): Set<string> {
+  return new Set([...css.matchAll(/--spacing-([a-z0-9-]+)\s*:/g)].map((m) => m[1]))
+}
+
+/** `max-w-<key>` bare-class occurrences for keys that collide with a --spacing token. */
+function findMaxWTraps(source: string, keys: string[]): string[] {
+  const hits: string[] = []
+  for (const key of keys) {
+    const re = new RegExp(`(^|[\\s"'\`:])max-w-${key.replace(/[-]/g, '\\-')}([\\s"'\`]|$)`, 'm')
+    if (re.test(source)) hits.push(`max-w-${key}`)
+  }
+  return hits
+}
+
+describe('design tokens — max-w / spacing-scale collision guard', () => {
+  it('detector itself catches a known trap (self-test)', () => {
+    expect(findMaxWTraps('className="mx-auto max-w-sm flex"', ['sm', 'lg']).sort()).toEqual(['max-w-sm'])
+    // the dedicated @utility spelling (different name) does NOT trip the detector:
+    expect(findMaxWTraps('className="mx-auto max-w-empty-state"', ['sm', 'lg'])).toEqual([])
+    // a token named only inside a comment is stripped before scanning:
+    expect(findMaxWTraps(stripComments('// must use max-w-empty-state, NOT max-w-sm'), ['sm', 'lg'])).toEqual([])
+  })
+
+  it('no component uses max-w-<spacing-key> (silently collapses to the spacing px value)', () => {
+    const keys = [...spacingNames(readCss())]
+    const violations: Record<string, string[]> = {}
+    for (const file of tsxFiles(SRC_DIR)) {
+      const hits = findMaxWTraps(stripComments(readFileSync(file, 'utf8')), keys)
+      if (hits.length) violations[file.replace(SRC_DIR, 'src')] = hits
+    }
+    expect(violations).toEqual({})
+  })
+
+  it('sanctioned dedicated max-width @utilities exist', () => {
+    const utilities = utilityNames(readCss())
+    for (const alias of ['max-w-empty-state', 'max-w-modal', 'max-w-input', 'max-w-tooltip']) {
       expect(utilities, `missing @utility ${alias}`).toContain(alias)
     }
   })

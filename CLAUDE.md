@@ -12,6 +12,7 @@ story needs (§4). Follow THESE patterns over any instinct to "follow common pat
 |---|---|---|
 | **Architecture** | `_bmad-output/planning-artifacts/architecture.md` | Every backend story; any API/DB/auth story. Holds the entity model + entity-design philosophy (§3.0a, formerly EDP). |
 | **UX Design Spec** | `_bmad-output/planning-artifacts/ux-design-specification.md` | Every frontend story |
+| **Design Bible (rendered)** | `_bmad-output/planning-artifacts/design-bible/index.html` | **Every frontend story** — open in a browser and diff your build against the rendered prototype for that component/screen (each annotated with its UX §, theme-switchable). The rendered prototype is the visual source of truth; when your build diverges, the prototype wins (or update the spec first). |
 | **Epics & Stories** | `_bmad-output/planning-artifacts/epics.md` | Always — authoritative task list |
 | **Sprint Status** | `_bmad-output/implementation-artifacts/sprint-status.yaml` | Always — update when a story completes |
 
@@ -31,6 +32,8 @@ Story files live in `_bmad-output/implementation-artifacts/stories/`. Read the s
 **P3 — Token sweep before changing a component's styling mechanism.** Detail in [reference/frontend.md](.claude/reference/frontend.md) §1.8.
 
 **P4 — No magic values.** No raw hex/opacity/z-index/px/breakpoint in TSX — use named tokens in `index.css`, add the token if missing. Full list in [reference/frontend.md](.claude/reference/frontend.md) §1.7.
+
+**P5 — Spec defines values; the Bible renders them; the app matches the Bible.** The **UX spec is the source of truth for exact values** (tokens/hex/px/ms/z-index/breakpoints) and rules. The **Bible is the spec rendered to designer-approved pixels** — the visual reference you build against (you can't eyeball whether the app "looks right"). Build each component to its bible prototype; on an **exact-value** question the **spec arbitrates** (fix the bible + app to the spec), on a **look** question the approved bible does. `/design-system` mirrors the bible's section order (the live inventory of what's built). CI drift guards: `design-bible-parity.test.ts` (bible↔`index.css` agree) + `design-tokens.test.ts` (class/`max-w-*` collisions).
 
 ---
 

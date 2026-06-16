@@ -25,7 +25,7 @@ export function Toggle({ checked, onChange, disabled, id, 'aria-label': ariaLabe
       <span
         className={`
           absolute top-0.5 left-0.5 w-5 h-5 rounded-full
-          bg-surface-raised shadow-sm
+          bg-on-primary shadow-sm
           transition-transform duration-base
           ${checked ? 'translate-x-4' : 'translate-x-0'}
         `}

@@ -41,6 +41,17 @@
   --color-info-muted:    color-mix(in oklab, #3b82f6 70%, var(--color-surface));
   --color-error-muted:   color-mix(in oklab, #ef4444 70%, var(--color-surface));
 
+  /* Subtle low-alpha semantic FILLS for chips/badges/toasts (UX §0.1 — distinct from *-muted, which is
+     a 70% series tone). Reference var(--color-*) so they re-skin per palette automatically (no per-theme
+     redefinition needed). Pair with solid text-{success|…} for an accessible contrast. */
+  --color-success-fill: color-mix(in oklab, var(--color-success) 18%, transparent);
+  --color-warning-fill: color-mix(in oklab, var(--color-warning) 18%, transparent);
+  --color-info-fill:    color-mix(in oklab, var(--color-info) 18%, transparent);
+  --color-error-fill:   color-mix(in oklab, var(--color-error) 18%, transparent);
+
+  /* Favourite (gold star, §2.3). Fixed gold by default; immersive Game Boy remaps it (below). */
+  --color-favourite: #fbbf24;
+
   /* ── Colour · role-4 entity-type defaults (UX §0.1; per-instance overrides via --entity-colour) ── */
   --color-entity-account:  #6366f1;
   --color-entity-category: #8b5cf6;
@@ -163,6 +174,16 @@
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--color-surface-active); border-radius: var(--radius-full); }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
+/* Light themes (base-light, retro): surface-active is too pale to see as a thumb — use a darker structural
+   tone (mirrors the bible). Include the element itself (data-theme sits on <html>, which drives the viewport scrollbar). */
+[data-theme="base-light"]::-webkit-scrollbar-thumb,
+[data-theme="base-light"] *::-webkit-scrollbar-thumb,
+[data-theme="retro"]::-webkit-scrollbar-thumb,
+[data-theme="retro"] *::-webkit-scrollbar-thumb { background: var(--color-border-strong); }
+[data-theme="base-light"],
+[data-theme="base-light"] *,
+[data-theme="retro"],
+[data-theme="retro"] * { scrollbar-color: var(--color-border-strong) transparent; }
 
 /* ── Reduced-motion engine — --motion-factor collapses token-driven durations to instant.
    OS preference OR the per-person [data-reduce-motion] override (Epic-2 seam, story 2-9). (UX §0.7/§0.11, NFR-A11Y-006) ── */
@@ -196,6 +217,7 @@
 @utility bg-primary     { background-color: var(--color-accent-primary); }
 @utility bg-error-solid { background-color: var(--color-error); }
 @utility text-on-primary { color: var(--color-on-primary); }
+@utility bg-on-primary  { background-color: var(--color-on-primary); }  /* toggle knob — contrasts both track states */
 @utility text-primary    { color: var(--color-accent-primary); }
 @utility text-accent     { color: var(--color-accent-secondary); }
 
@@ -240,6 +262,30 @@
 
 /* ── Design system input demo width (P4: no inline px) ── */
 @utility max-w-input { max-width: 320px; }
+
+/* ── Tooltip max-width (P4: no inline px) ── */
+@utility max-w-tooltip { max-width: 16rem; }
+
+/* ── ContextMenu / dropdown min-width (P4: no arbitrary [160px]) ── */
+@utility min-w-menu { min-width: 160px; }
+
+/* ── EmptyState / Modal max-widths. CRITICAL: `max-w-sm`/`max-w-lg` are UNUSABLE here — Tailwind v4
+   resolves the bare key against our @theme --spacing-* scale, so `max-w-sm`→12px and `max-w-lg`→24px
+   (the spacing token shadows the container scale, collapsing the element to one-word-per-line / a sliver).
+   Same dodge as max-w-input/max-w-tooltip above. Values track the design bible (.pubpage 380, .modal 440). ── */
+@utility max-w-empty-state { max-width: 380px; }
+@utility max-w-modal       { max-width: 440px; }
+
+/* ── Skeleton shimmer animation (motion-aware via --motion-factor).
+   animate-shimmer multiplies --duration-shimmer by --motion-factor so reduce-motion
+   collapses the loop to 0s (static, not blank). shimmer-gradient peaks at surface-active
+   over a surface-raised base — surface-hover is too faint to see. (frontend.md §2.10) ── */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@utility animate-shimmer { animation: shimmer calc(var(--duration-shimmer) * var(--motion-factor)) linear infinite; }
+@utility shimmer-gradient { background-image: linear-gradient(90deg, var(--color-surface-raised) 0%, var(--color-surface-active) 50%, var(--color-surface-raised) 100%); background-size: 200% 100%; }
 
 /* ═══ Theme palettes — [data-theme] reassigns role-1–3 vars; utilities re-point automatically.
    Base · Dark is the @theme default (no block needed). 'base' resolves to base-light/-dark
@@ -422,6 +468,7 @@
   --color-entity-account:  #8bac0f;   /* fallbacks → ramp slots (per-instance remapped in JS) */
   --color-entity-category: #306230;
   --color-entity-currency: #9bbc0f;
+  --color-favourite:       #9bbc0f;   /* immersive remap of the gold star → ramp slot */
   --color-chart-1: #9bbc0f; --color-chart-2: #7a9a1a; --color-chart-3: #5e8226; --color-chart-4: #306230;
   --color-chart-5: #214c21; --color-chart-6: #8bac0f; --color-chart-7: #486f24; --color-chart-8: #143d14;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.40);

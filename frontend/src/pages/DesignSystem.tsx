@@ -8,8 +8,30 @@ import {
   Dropdown,
   SegmentedControl,
   Icon,
+  Badge,
+  Avatar,
+  Card,
+  Divider,
+  Spinner,
+  Skeleton,
+  ProgressBar,
+  Tooltip,
+  ContextMenu,
+  Modal,
+  EmptyState,
+  ConfirmationDialog,
 } from '../components/primitives'
-import { Home, Settings } from 'lucide-react'
+import { useAlertStore } from '../stores/alertStore'
+import {
+  Home,
+  Settings,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Copy,
+  Archive,
+  SearchX,
+} from 'lucide-react'
 
 const dropdownOptions = [
   { value: 'a', label: 'Option A' },
@@ -22,6 +44,18 @@ const segmentedOptions = [
   { value: 'mine', label: 'Mine' },
 ]
 
+// Section order + grouping mirror the rendered design bible (design-bible/index.html) so the two
+// pages stay structurally diff-able: Foundation → Primitives → Form controls → Pickers →
+// Feedback & overlay → States. As more of the app is built, new component sections must be added
+// in their bible position (not appended) — the end goal is a 1:1 structural duplicate of the bible.
+function GroupHeading({ children }: { children: string }) {
+  return (
+    <h2 className="text-2xs font-medium uppercase tracking-wide text-text-muted mt-lg mb-md border-b border-border pb-xs">
+      {children}
+    </h2>
+  )
+}
+
 export function DesignSystem() {
   const [buttonClicks, setButtonClicks] = useState(0)
   const [inputValue, setInputValue] = useState('')
@@ -30,10 +64,60 @@ export function DesignSystem() {
   const [dropdownValue, setDropdownValue] = useState('a')
   const [segmentedValue, setSegmentedValue] = useState('all')
 
+  // Overlay state
+  const [modalOpen, setModalOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const pushToast = useAlertStore((s) => s.pushToast)
+
+  const contextMenuItems = [
+    { label: 'Edit', icon: Edit, onClick: () => {} },
+    { label: 'Duplicate', icon: Copy, onClick: () => {} },
+    { label: 'Archive', icon: Archive, onClick: () => {} },
+    { divider: true } as const,
+    { label: 'Delete', icon: Trash2, onClick: () => {}, destructive: true },
+  ]
+
+  const contextMenuItemsWithDisabled = [
+    { label: 'Edit', icon: Edit, onClick: () => {} },
+    { label: 'Duplicate', icon: Copy, onClick: () => {}, disabled: true, disabledReason: 'Already at max count' },
+    { divider: true } as const,
+    { label: 'Delete', icon: Trash2, onClick: () => {}, destructive: true },
+  ]
+
   return (
     <main className="min-h-screen bg-bg text-text-primary p-lg">
       <div className="max-w-3xl">
         <h1 className="text-2xl font-medium mb-lg">Design System</h1>
+
+        {/* ─────────────────────────── Foundation (bible §0) ─────────────────────────── */}
+        <GroupHeading>Foundation</GroupHeading>
+
+        {/* Semantic text & amounts (bible §0.1) */}
+        <section id="semantic-text" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Semantic text &amp; amounts</h2>
+          <div className="flex flex-wrap items-center gap-md text-base">
+            <span className="monetary-value text-success">+S$ 1,250.00</span>
+            <span className="monetary-value text-error">−S$ 84.20</span>
+            <span className="text-success">completed</span>
+            <span className="text-warning">pending</span>
+            <span className="text-info">reconciled</span>
+            <span className="text-error-muted">cancelled</span>
+          </div>
+        </section>
+
+        {/* Icon (wrapper) */}
+        <section id="icon" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Icon</h2>
+          <div className="flex items-center gap-density">
+            <Icon icon={Home} size={16} />
+            <Icon icon={Settings} size={20} />
+            <Icon icon={Home} size={16} aria-label="Home" />
+          </div>
+        </section>
+
+        {/* ─────────────────────── Component Library — primitives (bible §7) ─────────────────────── */}
+        <GroupHeading>Primitives</GroupHeading>
 
         {/* Button */}
         <section id="button" className="mb-xl">
@@ -47,6 +131,126 @@ export function DesignSystem() {
             <Button onClick={() => setButtonClicks((p) => p + 1)}>
               Clicks: {buttonClicks}
             </Button>
+          </div>
+        </section>
+
+        {/* Badge */}
+        <section id="badge" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Badge</h2>
+          <div className="flex flex-wrap gap-density">
+            <Badge variant="neutral">Neutral</Badge>
+            <Badge variant="success">Success</Badge>
+            <Badge variant="warning">Warning</Badge>
+            <Badge variant="info">Info</Badge>
+            <Badge variant="error">Error</Badge>
+          </div>
+        </section>
+
+        {/* Avatar */}
+        <section id="avatar" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Avatar</h2>
+          <div className="flex items-center gap-density">
+            <Avatar name="Alice Chen" colour="#6366f1" />
+            <Avatar name="Bob Smith" colour="#22c55e" size={40} />
+            <Avatar src="https://ui-avatars.com/api/?name=Alice+Chen&background=6366f1&color=fff" name="Alice Chen" />
+            <Avatar name="No Image" colour="#ef4444" />
+          </div>
+        </section>
+
+        {/* SegmentedControl */}
+        <section id="segmented-control" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">SegmentedControl</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <SegmentedControl value={segmentedValue} options={segmentedOptions} onChange={setSegmentedValue} />
+            <SegmentedControl value="all" options={segmentedOptions} onChange={() => {}} disabled />
+          </div>
+        </section>
+
+        {/* Toggle */}
+        <section id="toggle" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Toggle</h2>
+          <div className="flex flex-col gap-density items-start">
+            <div className="flex items-center gap-sm">
+              <Toggle checked={toggleChecked} onChange={setToggleChecked} aria-label="Toggle example" />
+              <span className="text-sm text-text-secondary">{toggleChecked ? 'On' : 'Off'}</span>
+            </div>
+            <Toggle checked={false} onChange={() => {}} disabled />
+          </div>
+        </section>
+
+        {/* ProgressBar */}
+        <section id="progress-bar" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">ProgressBar</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <ProgressBar value={25} />
+            <ProgressBar value={60} />
+            <ProgressBar value={100} />
+          </div>
+        </section>
+
+        {/* Skeleton */}
+        <section id="skeleton" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Skeleton</h2>
+          <div className="flex flex-col gap-density">
+            <Skeleton variant="line" className="h-4 w-48" />
+            <Skeleton variant="rect" className="h-16 w-48" />
+            <Skeleton variant="circle" className="h-10 w-10" />
+            {/* Framed stat shape */}
+            <Skeleton className="h-20 w-48">
+              <div className="h-full w-full flex items-end gap-1 px-2 pb-2">
+                <div className="shimmer-gradient animate-shimmer rounded-sm w-4 h-8" />
+                <div className="shimmer-gradient animate-shimmer rounded-sm w-4 h-12" />
+                <div className="shimmer-gradient animate-shimmer rounded-sm w-4 h-6" />
+                <div className="shimmer-gradient animate-shimmer rounded-sm w-4 h-10" />
+              </div>
+            </Skeleton>
+          </div>
+        </section>
+
+        {/* Spinner */}
+        <section id="spinner" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Spinner</h2>
+          <div className="flex items-center gap-density">
+            <Spinner />
+            <Spinner size={24} />
+            <Spinner size={32} />
+          </div>
+        </section>
+
+        {/* Divider */}
+        <section id="divider" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Divider</h2>
+          <div className="flex flex-col gap-density">
+            <span className="text-sm text-text-secondary">Horizontal:</span>
+            <Divider />
+            <span className="text-sm text-text-secondary">Vertical:</span>
+            <div className="flex items-center gap-sm">
+              <span>Left</span>
+              <Divider orientation="vertical" />
+              <span>Right</span>
+            </div>
+          </div>
+        </section>
+
+        {/* ─────────────────────────── Form controls (bible §7) ─────────────────────────── */}
+        <GroupHeading>Form controls</GroupHeading>
+
+        {/* Checkbox */}
+        <section id="checkbox" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Checkbox</h2>
+          <div className="flex flex-col gap-density">
+            <Checkbox checked={checkboxChecked} onChange={setCheckboxChecked} label={`Checked: ${checkboxChecked}`} />
+            <Checkbox checked={false} onChange={() => {}} disabled label="Disabled (unchecked)" />
+            <Checkbox checked={true} onChange={() => {}} disabled label="Disabled (checked)" />
+          </div>
+        </section>
+
+        {/* Label */}
+        <section id="label" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Label</h2>
+          <div className="flex flex-col gap-density">
+            <Label>Plain label</Label>
+            <Label required>Required label</Label>
           </div>
         </section>
 
@@ -69,36 +273,34 @@ export function DesignSystem() {
           </div>
         </section>
 
-        {/* Label */}
-        <section id="label" className="mb-xl">
-          <h2 className="text-lg font-medium mb-sm">Label</h2>
-          <div className="flex flex-col gap-density">
-            <Label>Plain label</Label>
-            <Label required>Required label</Label>
+        {/* Tooltip */}
+        <section id="tooltip" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Tooltip</h2>
+          <div className="flex items-center gap-density">
+            <Tooltip content="This is a tooltip">
+              <Button variant="ghost">Hover me</Button>
+            </Tooltip>
+            <Tooltip content="Focus me with Tab">
+              <Button variant="ghost">Tab target</Button>
+            </Tooltip>
           </div>
         </section>
 
-        {/* Checkbox */}
-        <section id="checkbox" className="mb-xl">
-          <h2 className="text-lg font-medium mb-sm">Checkbox</h2>
+        {/* Card */}
+        <section id="card" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Card</h2>
           <div className="flex flex-col gap-density">
-            <Checkbox checked={checkboxChecked} onChange={setCheckboxChecked} label={`Checked: ${checkboxChecked}`} />
-            <Checkbox checked={false} onChange={() => {}} disabled label="Disabled (unchecked)" />
-            <Checkbox checked={true} onChange={() => {}} disabled label="Disabled (checked)" />
+            <Card>
+              <p className="text-sm text-text-secondary">Static card with default padding.</p>
+            </Card>
+            <Card interactive onClick={() => alert('Card clicked')}>
+              <p className="text-sm text-text-secondary">Interactive card — hover to see lift effect.</p>
+            </Card>
           </div>
         </section>
 
-        {/* Toggle */}
-        <section id="toggle" className="mb-xl">
-          <h2 className="text-lg font-medium mb-sm">Toggle</h2>
-          <div className="flex flex-col gap-density items-start">
-            <div className="flex items-center gap-sm">
-              <Toggle checked={toggleChecked} onChange={setToggleChecked} aria-label="Toggle example" />
-              <span className="text-sm text-text-secondary">{toggleChecked ? 'On' : 'Off'}</span>
-            </div>
-            <Toggle checked={false} onChange={() => {}} disabled />
-          </div>
-        </section>
+        {/* ─────────────────────────── Pickers (bible §7) ─────────────────────────── */}
+        <GroupHeading>Pickers</GroupHeading>
 
         {/* Dropdown */}
         <section id="dropdown" className="mb-xl">
@@ -109,23 +311,73 @@ export function DesignSystem() {
           </div>
         </section>
 
-        {/* SegmentedControl */}
-        <section id="segmented-control" className="mb-xl">
-          <h2 className="text-lg font-medium mb-sm">SegmentedControl</h2>
-          <div className="flex flex-col gap-density max-w-input">
-            <SegmentedControl value={segmentedValue} options={segmentedOptions} onChange={setSegmentedValue} />
-            <SegmentedControl value="all" options={segmentedOptions} onChange={() => {}} disabled />
+        {/* ─────────────────────── Feedback & overlay (bible §7 / §8) ─────────────────────── */}
+        <GroupHeading>Feedback &amp; overlay</GroupHeading>
+
+        {/* Toast */}
+        <section id="toast" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Toast</h2>
+          <div className="flex flex-wrap gap-density">
+            <Button variant="secondary" onClick={() => pushToast({ variant: 'info', message: 'Information message' })}>Info</Button>
+            <Button variant="secondary" onClick={() => pushToast({ variant: 'success', message: 'Operation successful' })}>Success</Button>
+            <Button variant="secondary" onClick={() => pushToast({ variant: 'warning', message: 'Something needs attention' })}>Warning</Button>
+            <Button variant="secondary" onClick={() => pushToast({ variant: 'error', message: 'An error occurred' })}>Error</Button>
+          </div>
+          <p className="text-xs text-text-muted mt-sm">Auto-dismisses after 4s; ✕ dismisses early.</p>
+        </section>
+
+        {/* ConfirmationDialog */}
+        <section id="confirmation-dialog" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">ConfirmationDialog</h2>
+          <div className="flex flex-wrap gap-density">
+            <Button variant="danger" onClick={() => setConfirmOpen(true)}>Delete Item</Button>
+          </div>
+          <ConfirmationDialog
+            open={confirmOpen}
+            onClose={() => setConfirmOpen(false)}
+            onConfirm={() => alert('Confirmed deletion')}
+            title="Delete Item"
+            message="Are you sure you want to delete this item? This action cannot be undone."
+            confirmLabel="Delete"
+          />
+        </section>
+
+        {/* Modal */}
+        <section id="modal" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Modal</h2>
+          <div className="flex flex-wrap gap-density">
+            <Button variant="primary" onClick={() => setModalOpen(true)}>Open Modal</Button>
+          </div>
+          <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Example Modal">
+            <p className="text-sm text-text-secondary">
+              This is a modal dialog with focus trapping, Esc to close, and backdrop click to close.
+            </p>
+          </Modal>
+        </section>
+
+        {/* ContextMenu */}
+        <section id="context-menu" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">ContextMenu</h2>
+          <div className="flex items-center gap-density">
+            <ContextMenu trigger={<Button variant="ghost"><Icon icon={MoreVertical} size={16} /></Button>} items={contextMenuItems} />
+            <span className="text-sm text-text-secondary">Basic menu</span>
+            <ContextMenu trigger={<Button variant="ghost"><Icon icon={MoreVertical} size={16} /></Button>} items={contextMenuItemsWithDisabled} />
+            <span className="text-sm text-text-secondary">With disabled item</span>
           </div>
         </section>
 
-        {/* Icon */}
-        <section id="icon" className="mb-xl">
-          <h2 className="text-lg font-medium mb-sm">Icon</h2>
-          <div className="flex items-center gap-density">
-            <Icon icon={Home} size={16} />
-            <Icon icon={Settings} size={20} />
-            <Icon icon={Home} size={16} aria-label="Home" />
-          </div>
+        {/* ─────────────────────────── States (bible §18) ─────────────────────────── */}
+        <GroupHeading>States</GroupHeading>
+
+        {/* EmptyState */}
+        <section id="empty-state" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">EmptyState</h2>
+          <EmptyState
+            icon={SearchX}
+            title="No results found"
+            description="Try adjusting your search or filter to find what you're looking for."
+            action={<Button variant="primary">Clear Filters</Button>}
+          />
         </section>
       </div>
     </main>

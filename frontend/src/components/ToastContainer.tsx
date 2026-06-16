@@ -1,10 +1,26 @@
-import { useAlertStore } from '../stores/alertStore'
+import { useEffect } from 'react'
+import { useAlertStore, type Toast as ToastModel } from '../stores/alertStore'
+import { Toast } from './primitives/Toast'
+
+/** Auto-dismiss window — toasts are transient; persistent notices use the AlertPanel/AlertBanner.
+ *  Lives here (the container), NOT in alertStore — the store stays a pure state shape (AC3). */
+const TOAST_DURATION_MS = 4000
+
+/** One queued toast + its own auto-dismiss timer (cleaned up on unmount/dismiss). */
+function ToastItem({ toast }: { toast: ToastModel }) {
+  const dismissToast = useAlertStore((s) => s.dismissToast)
+  useEffect(() => {
+    const timer = setTimeout(() => dismissToast(toast.id), TOAST_DURATION_MS)
+    return () => clearTimeout(timer)
+  }, [toast.id, dismissToast])
+  return (
+    <Toast variant={toast.variant} message={toast.message} onDismiss={() => dismissToast(toast.id)} />
+  )
+}
 
 /**
- * Minimal toast container — renders the toast queue.
- * Queue is empty until Epic 2+ pushes toasts, so this renders nothing visible now.
+ * Toast container — renders the toast queue using the styled Toast primitive.
  * Mounted outside AppShell so z-index isn't trapped by a child stacking context.
- * The styled Toast primitive is built later (UX §7).
  */
 export function ToastContainer() {
   const toasts = useAlertStore((s) => s.toasts)
@@ -12,11 +28,9 @@ export function ToastContainer() {
   if (toasts.length === 0) return <></>
 
   return (
-    <div className="fixed bottom-md right-md z-toast flex flex-col gap-xs">
+    <div className="fixed top-md right-md z-toast flex flex-col gap-xs">
       {toasts.map((t) => (
-        <div key={t.id} className="rounded-md bg-surface-raised px-md py-xs text-sm text-text-primary shadow-lg">
-          {t.message}
-        </div>
+        <ToastItem key={t.id} toast={t} />
       ))}
     </div>
   )

@@ -110,12 +110,17 @@ Can see members and invitations list and carry out the administrative functions.
 Admin or Owner may invite a new member by entering their Google email address in the Invitation modal at the invitations list.
 The invitation is in-app only — no email is sent. The invitee must log in with the
 exact Google account matching the invited email; the system then links them to the household and shows the Pending Invitation modal and the person can accept or decline.
-Admin or Owner may invite a member that already belongs to an existing household. If an owner is invited, the Household Conflict modal will show, informing the owner has
-to delete the existing household to join, and two options will display - either to go to Settings or to decline the invitation.
-For admin and member users, the Household Conflict modal will show, informing the users that they will leave their existing household if they accept, and two options will display
-- go to Settings or to decline the invtation.
+Admin or Owner may invite a member that already belongs to an existing household. The Household Conflict modal then shows **two actions only — Go to Settings / Decline — and NO Accept button** (you cannot accept in place; you must first leave/delete your current household, after which the pending invitation re-appears and is accepted there).
+If an owner is invited, the modal informs them they must **delete** their existing household to join (owners can't simply leave).
+For admin and member users, the modal informs them they must **leave** their existing household first (data archived, restored if they return).
+In both variants the copy must never imply an "Accept" action that the modal does not offer; **Decline** rejects the invitation outright.
+**Decline is always terminal (both the Pending Invitation and Household Conflict modals).**
+Choosing **Decline** sets the invitation to `declined` immediately and permanently and is **always
+available** — an invitee can never be forced to keep an offer open (this prevents an owner from
+trolling another owner with an un-dismissable invite). Only **Go to Settings** leaves the
+invitation `pending` (the user opted to resolve the conflict, not reject it).
 *Acceptance:* Invitation record created with 7-day expiry. On matching login, the Pending Invitation modal will show, allowing the person to choose to accept or decline
-the invitation. If the invitation is accepted, the person joins the household as `member` and the invitation is marked as `accepted`.
+the invitation. If accepted, the person joins as `member` and the invitation → `accepted`. **If declined (from either modal), the invitation → `declined` and the modal closes — it does NOT remain pending.**
 The full authentication flow for new and existing owner and member users must be tested to ensure it works.
 
 **FR-HH-004 — Invitation Management**

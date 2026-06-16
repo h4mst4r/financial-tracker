@@ -20,6 +20,12 @@ authority: >
 > 10. Currencies · 11. Formula · 12. Transactions · 13. Recurring · 14. Budgets · 15. Transfers
 > 16. Debt · 17. Dashboard · 18. States & flows
 >
+> **Rendered companion — the visual source of truth:** every section here is rendered, live and
+> theme-switchable, in the **Design Bible** at `design-bible/index.html` (open in a browser; each
+> prototype is annotated with its UX §). This spec is the *words*; the bible is the *pixels*.
+> **For any frontend work, build against the bible and diff your result against it** — when a build
+> diverges from the rendered prototype, the prototype wins (or the spec + bible are updated together
+> first). Keep the two in sync: changing a component here means re-rendering its bible section.
 
 ---
 
@@ -68,8 +74,20 @@ squared. One consistent shape language.
 | Inflow / outflow | semantic: inflow=green, outflow=red |
 
 **Discipline rule (avoid rainbow rows):** not every attribute is a filled chip at once. In
-each context one attribute *leads* with colour; the rest use dots, text-colour, or position.
-(Tuned per screen — e.g. on the Transactions row, category leads.)
+each context one attribute *leads* with colour (a filled chip); the rest use **text-colour or
+position**. (Tuned per screen — e.g. on the Transactions row, category leads; in the Currencies
+table the code identifies by **text colour**, not a marker.)
+
+**Colour dots are NOT an identity device.** A standalone coloured dot is reserved for **status /
+presence indicators** (traffic-light convention — online / offline / away / error) and **chart-legend
+keys** (rounded-square markers, per the chip-shape rule above). Entity identity always leads with a
+**fill** or **text-colour**, never a dot.
+
+**Context-action colours (non-mutating "special" actions).** Two action colours are foundation tokens
+(not per-component literals), so menus / bulk bars read consistently (§8.1): **Favourite = gold**
+(`--color-favourite`; immersive palettes remap it via the tint ramp) · **Open / Visualize =
+`accent-secondary`**. They sit between **neutral** actions (Edit / Duplicate = text colour) and
+**destructive** (Delete = `error`), so the non-mutating "specials" are visually distinct.
 
 Schema backing (architecture.md §3): `Account.colour`, `Category.color`, `Currency.colour`,
 `Person.colour`.
@@ -193,7 +211,7 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 | Press-scale | press any tappable | scale 0.97 · 80ms | kept (subtle) |
 | Flip ↔ | tap account card | rotateY to detail + expand; **toggles open AND close** · 800ms ease-in-out | cross-fade |
 | Error bounce | failed validate/action | horizontal shake · 500ms spring | red flash, no move |
-| Merge slide | category merge/dedup | sub-item **scales down into a line/arrow toward the target, from its own direction; NO fade** · 420ms ease-out | cross-fade |
+| Merge slide | category merge/dedup | sub-item **collapses into a line that points at the target (horizontal or vertical by the merge direction), slides toward it, then fades — the scale → move → fade phases run sequentially (organic), not at once** · 420ms ease-out | cross-fade |
 | Delete | hard delete | **scale down + drift to bottom-right + fade; NO rotate** · 500ms ease-in | fade only |
 | Archive | archive | **desaturate only** (no collapse) · 550ms | instant grey |
 | Number roll-up | balances load/change | count to value, tabular · 650ms ease-out | set instantly |
@@ -232,6 +250,13 @@ palette (never hardcoded indigo/cyan):
 | Disabled | opacity 0.5 |
 | Hover | see interaction principle below |
 
+**Ring coherence (resolved in the design bible).** Input focus and card/row selection use the
+**same ring recipe** (a soft `box-shadow` ring of equal weight) so they read as one system; they
+differ only by **role-colour** — input focus = **`accent-primary`**, selection/picker-open =
+**`accent-secondary`** — and selection additionally carries a **surface-gap offset** (an offset
+ring) plus the corner check, so it survives on vivid card fills. They are *meant* to look related
+but not identical; don't render one as a hard outline and the other as a blurry glow.
+
 **Interaction-emphasis principle** (the resolved rule):
 - **Solid / accent fills** (primary button, active toggle): hover = **darker / more saturated**;
   active = darker + press.
@@ -264,6 +289,7 @@ the viewer (§later).
 - **Scrollbars:** every in-app scroll region uses a **thin themed scrollbar** (never the OS
   default): `width: 8px`, thumb = `surface-active` (hover → `border-strong`), **transparent
   track**, `radius-full`; Firefox fallback via `scrollbar-width: thin` + `scrollbar-color`.
+  **Light themes use a darker structural thumb (`border-strong`)** — `surface-active` is too pale to see.
   Overlay / picker panels inherit the same treatment.
 
 ### 0.11 Accessibility (WCAG 2.1 AA)
@@ -482,19 +508,28 @@ routes via existing surfaces (no novel screens):
 
 ### 4.4 Household Conflict modal (FR-HH-003)
 
-Shown when an invitee already belongs to a household. Two variants, same two actions
-(**Decline** / **Go to Settings**):
-- **Member/admin:** "Accepting will remove you from {current} and move you to {target}."
-- **Owner:** "You must delete your current household before joining another" (owners can't
-  simply leave).
+Shown when an invitee already belongs to a household. **There is NO Accept button** — its only two
+actions are **Decline** / **Go to Settings** (you can't accept in place because you must first
+leave/delete your current household; the copy must never imply an "Accept" action that isn't there).
+- **Member/admin:** "You're already in {current}. To join {target} you must leave your current
+  household first — Go to Settings (your data is archived, restored if you return). Or decline."
+- **Owner:** "You own {current}. To join another you must delete your current household first —
+  owners can't simply leave. Or decline."
 
-**Post-modal flow (both variants keep "Go to Settings").** The invitation persists server-side as
-`pending`, so there is no "find your way back" step. **Member/admin:** Settings → Danger Zone →
-**Leave Household** (ConfirmationDialog). **Owner:** Settings → Danger Zone → **Delete Household**
-(type-the-name confirm; logs out, FR-HH-005) → re-login. Either way, once the person no longer
-belongs to a household their next session is a **NULL-household session** and the
-**`PendingInvitationDialog` auto-appears** (architecture §2.6 / §6.7) — Accept joins the target
-household; Decline → the **Not Invited** page (§3).
+**Decline always declines — non-negotiable.** In *both* variants, **Decline** sets the invitation
+to `declined` **immediately and permanently** and closes the modal. An invitee can **never** be
+forced to keep an offer open (no "stays pending until you act"); this prevents an owner from
+trolling another owner with an un-dismissable invite. Decline is always available and always
+terminal.
+
+**"Go to Settings" is the only path that leaves the invitation `pending`** — because the user
+chose to *act on* the conflict rather than reject it, so they can return after resolving it.
+**Member/admin:** Settings → Danger Zone → **Leave Household** (ConfirmationDialog). **Owner:**
+Settings → Danger Zone → **Delete Household** (type-the-name confirm; logs out, FR-HH-005) →
+re-login. Once the person no longer belongs to a household their next session is a
+**NULL-household session** and the **`PendingInvitationDialog` auto-appears** (architecture §2.6 /
+§6.7) — Accept joins the target household; **Decline there is likewise terminal** → the **Not
+Invited** page (§3).
 
 ---
 
@@ -546,6 +581,12 @@ Single column of personal preferences:
 
 ### 5.3 Data tab
 
+Organised into **two sections**: **Import / Export** and **Backup** (not inline with each other).
+The import **Preview &amp; map** step renders through the **Table** primitive (§7), like every other
+tabular list in the app — not a bespoke layout.
+
+**Import / Export**
+
 - **CSV Import** — a 2-step wizard (FR-IE-001..005):
   1. **Upload** — drag/drop or pick a `.csv` (≤10 MB; `text/csv`, UTF-8); accepts the documented
      import column layout (FR-IE-005): **Name · Transaction Date · Currency Type · Amount ·
@@ -575,6 +616,8 @@ Single column of personal preferences:
      imported events carry `source = csv_import` (ARCH §3.6).
 - **CSV Export** — the current ledger with the active VisualizationFilter applied; filename
   `financial-tracker-export-{YYYY-MM-DD}.csv` (FR-IE-006).
+**Backup** *(separate section)*
+
 - **Backup** — last-backup **timestamp** + a **status chip**: **Success** (green), **In progress**
   (amber, spinner), or **Failed** (red, with a retry affordance). Manual **Back up now** is
   **admin/owner only** (FR-SYS-008).
@@ -619,6 +662,10 @@ tinted with the semantic income colour) alongside a secondary **New category**. 
 Every UI element resolves to a library component; **every component appears on `/design-system`**
 (P1 enforcement). New Phase-3 components are mostly *compositions* of existing primitives.
 
+> **The app follows the bible** (see CLAUDE.md P5): the bible is the designer-approved visual truth, and
+> every component is built to match its bible prototype. `/design-system` mirrors the bible's section order
+> as the live inventory of what's built. CI guards token parity (`design-bible-parity.test.ts`).
+
 - **Primitives:** Button · Input · Label · Checkbox · Toggle · Dropdown · SegmentedControl ·
   DatePicker · ColourPicker · EmojiIconPicker · Badge · Avatar · Card · Divider · Spinner ·
   Skeleton · ProgressBar · Tooltip · **ContextMenu** · **Modal** · Drawer · Toast · Accordion ·
@@ -649,6 +696,11 @@ Open · — · Archive/Restore · Delete**.
   entities); destructive actions sit **below a divider**.
 - **Entity-specific extras** slot in (category: "Add subcategory", "Merge"; account: "Add value
   snapshot").
+- **Item colour treatment (resolved in the design bible):** Edit / Duplicate are **neutral**
+  (`text` colour); **Favourite/Unfavourite** uses the **star colour** and **Open / Visualize** uses
+  **`accent-secondary`** — the two non-mutating "special" actions are tinted so they read apart from
+  plain edits; **destructive** items below the divider stay neutral (Archive) or **`error`**
+  (Delete, greyed with a reason when disabled). No other items are coloured (avoid a rainbow menu).
 
 ### 8.2 EntityModal (create / edit)
 
@@ -759,7 +811,8 @@ Transactions ledger **and** the CategoryTree (§12.4, §6), extensible to any en
 - **Actions are per-surface** (the editable set differs, FR-E-020):
   - **Events (ledger):** **Edit shared fields** (category · payment_method · transaction_status ·
     payee · is_shared_expense) · **Duplicate** · **Archive/Restore** · **Delete-if-empty** ·
-    **Visualize** (→ Viewer, §9.1).
+    **Visualize** (→ Viewer, §9.1) — **Visualize is tinted `accent-secondary`** (same treatment as
+    the ContextMenu "Open / Visualize", §8.1).
   - **Categories (tree):** **Edit type** (Expense/Income) · **Archive/Restore** (archiving a parent
     archives its branch, FR-C-005) · **Merge** (fold selected into one).
 - **Permission-adaptive:** actions a **Member** can't take on others' items are greyed with a reason
@@ -929,7 +982,9 @@ dropdown** on mobile.
 An inline row pinned at the top for fast entry of the **always-edited** fields: date (today) ·
 name · payer · **payment method** · category · currency · amount (→ base auto-filled). Enter
 commits; the **full modal** is still used for detail / foreign-currency / FX-formula entry
-(brief "quick entry").
+(brief "quick entry"). The quick-add row's **leading cell carries a `＋` add affordance** (and a
+trailing "Add" action); this `＋` marks the **quick-add row only** — every normal ledger row shows
+the **selection checkbox** in that column, not a `＋`.
 
 > **"Payment method" is the "Paid with" account picker — not a free enum.** The control is an
 > **account dropdown** plus a **Cash** option (same control as the modal's "Paid with", §12.7).

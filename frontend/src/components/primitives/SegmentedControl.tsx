@@ -24,8 +24,9 @@ export function SegmentedControl({ value, options, onChange, disabled }: Segment
               disabled={disabled}
               tabIndex={disabled ? -1 : undefined}
               className={`
-                flex-1 h-control py-control px-sm rounded-none text-sm font-medium
+                relative flex-1 h-control py-control px-sm rounded-none text-sm font-medium
                 transition-colors duration-quick
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-glow-primary
                 ${isActive ? 'bg-control-active text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'}
                 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
               `}

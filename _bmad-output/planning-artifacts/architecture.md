@@ -1932,6 +1932,11 @@ Scope: the **architecture** — data flow, layers, state, routing, guards. The c
 *catalog* and design tokens are owned by the UX spec; this section specifies how those
 components are wired, not how they look.
 
+> **How they look is the Design Bible.** The rendered, theme-switchable
+> `_bmad-output/planning-artifacts/design-bible/index.html` is the visual source of truth for every
+> component/screen built here — build against it and diff for parity (UX-spec banner + epics
+> frontend DoD). When a build diverges from the rendered prototype, the prototype wins.
+
 ### 6.0 Layer model
 
 ```
