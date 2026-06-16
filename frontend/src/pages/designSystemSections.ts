@@ -12,6 +12,7 @@ export interface DesignSystemSection {
 
 /** Group order mirrors the design bible's grouped left nav (#library). Sections render in this order. */
 export const DESIGN_SYSTEM_GROUPS = [
+  'Composites',
   'Foundation',
   'Primitives',
   'Form controls',
@@ -23,6 +24,8 @@ export type DesignSystemGroup = (typeof DESIGN_SYSTEM_GROUPS)[number]
 
 /** Ordered to match the DOM order of the <section> blocks in DesignSystem.tsx (do not reorder — P5/AC4). */
 export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
+  // Composites first — mirrors the design bible, where #shell/EntityPage precedes the #library primitives.
+  { id: 'entity-page', label: 'EntityPage', group: 'Composites' },
   { id: 'semantic-text', label: 'Semantic text & amounts', group: 'Foundation' },
   { id: 'icon', label: 'Icon', group: 'Foundation' },
   { id: 'button', label: 'Button', group: 'Primitives' },

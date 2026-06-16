@@ -269,6 +269,14 @@
 /* ── ContextMenu / dropdown min-width (P4: no arbitrary [160px]) ── */
 @utility min-w-menu { min-width: 160px; }
 
+/* ── EntityPage card grid (UX §1.3) — auto-fit/minmax so it drops to fewer columns rather than
+   forcing scroll-x on touch (Bible #responsive). P4: no inline grid-template arbitrary value. ── */
+@utility grid-cols-entity { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+/* ── EntityCard footprint (loading skeleton tiles + ghost "+ New" tile) — P4: no inline px/rem ── */
+@utility h-entity-card     { height: 9rem; }
+@utility min-h-entity-card { min-height: 9rem; }
+
 /* ── EmptyState / Modal max-widths. CRITICAL: `max-w-sm`/`max-w-lg` are UNUSABLE here — Tailwind v4
    resolves the bare key against our @theme --spacing-* scale, so `max-w-sm`→12px and `max-w-lg`→24px
    (the spacing token shadows the container scale, collapsing the element to one-word-per-line / a sliver).

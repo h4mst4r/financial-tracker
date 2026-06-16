@@ -21,6 +21,7 @@ import {
   EmptyState,
   ConfirmationDialog,
 } from '../components/primitives'
+import { EntityPage } from '../components/entity'
 import { useAlertStore } from '../stores/alertStore'
 import { useThemeStore } from '../stores/themeStore'
 import type { DensityId } from '../theme/palettes'
@@ -37,6 +38,7 @@ import {
   Copy,
   Archive,
   SearchX,
+  Wallet,
 } from 'lucide-react'
 
 const densityOptions = [
@@ -109,6 +111,18 @@ export function DesignSystem() {
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  // EntityPage demo harness (composite scaffold; content tiles are placeholders — EntityCard is 1.9b).
+  const [epView, setEpView] = useState<'grid' | 'list'>('grid')
+  const [epSearch, setEpSearch] = useState('')
+  const [epArchived, setEpArchived] = useState(false)
+  const [epState, setEpState] = useState('populated')
+  const epStateOptions = [
+    { value: 'populated', label: 'Populated' },
+    { value: 'empty', label: 'Empty' },
+    { value: 'loading', label: 'Loading' },
+    { value: 'error', label: 'Error' },
+  ]
+
   const pushToast = useAlertStore((s) => s.pushToast)
 
   // Density harness: bound to the global theme store (not local state) — useAppearance writes it to
@@ -149,6 +163,51 @@ export function DesignSystem() {
             />
           </div>
         </div>
+
+        {/* ─────────────────────────── Composites (bible #shell) ─────────────────────────── */}
+        <GroupHeading>Composites</GroupHeading>
+
+        {/* EntityPage — the standardized scaffold (toolbar + filter slot + content slot + states).
+            Content tiles are placeholders; EntityCard fills the slot in story 1.9b. */}
+        <section id="entity-page" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">EntityPage</h2>
+          <div className="flex items-center gap-sm mb-md">
+            <span className="text-sm text-text-secondary">State</span>
+            <SegmentedControl value={epState} options={epStateOptions} onChange={setEpState} />
+          </div>
+          <div className="rounded-lg border border-border bg-surface p-md">
+            <EntityPage
+              title="Accounts"
+              info="5 accounts · S$ 22,370 net"
+              newLabel="account"
+              onNew={() => pushToast({ variant: 'info', message: 'New account (demo)' })}
+              search={epSearch}
+              onSearchChange={setEpSearch}
+              view={epView}
+              onViewChange={setEpView}
+              showArchived={epArchived}
+              onShowArchivedChange={setEpArchived}
+              onSort={() => {}}
+              isLoading={epState === 'loading'}
+              isError={epState === 'error'}
+              onRetry={() => setEpState('populated')}
+              isEmpty={epState === 'empty'}
+              emptyIcon={Wallet}
+              emptyTitle="No accounts yet"
+              emptyDescription="Add your first account to start tracking balances."
+            >
+              {['DBS Multiplier', 'VWRA Holdings', 'Amex Platinum', 'Condo'].map((name) => (
+                <div
+                  key={name}
+                  className="flex min-h-entity-card flex-col justify-between rounded-lg border border-border bg-surface-raised p-md"
+                >
+                  <span className="text-sm font-medium text-text-primary">{name}</span>
+                  <span className="monetary-value text-base text-text-secondary">S$ 12,840</span>
+                </div>
+              ))}
+            </EntityPage>
+          </div>
+        </section>
 
         {/* ─────────────────────────── Foundation (bible §0) ─────────────────────────── */}
         <GroupHeading>Foundation</GroupHeading>

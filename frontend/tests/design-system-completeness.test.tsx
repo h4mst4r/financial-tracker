@@ -42,6 +42,19 @@ describe('/design-system P1 completeness gate (story 1.8c, AC3)', () => {
   })
 })
 
+describe('/design-system EntityPage composite demo (story 1.9a, AC4)', () => {
+  it('renders the real <EntityPage> inside #entity-page (its toolbar + New button)', () => {
+    const { container } = render(<DesignSystem />)
+    const section = container.querySelector('section#entity-page')
+    expect(section, 'missing <section id="entity-page">').not.toBeNull()
+    // The real EntityPage toolbar marker (data-testid) — not a synthetic <div> stand-in.
+    expect(
+      section!.querySelector('[data-testid="entity-page-new"]'),
+      'EntityPage demo is not the real exported component',
+    ).not.toBeNull()
+  })
+})
+
 describe('/design-system section index/nav (story 1.8c, AC1)', () => {
   it('links every demoed section', () => {
     const { container } = render(<DesignSystem />)

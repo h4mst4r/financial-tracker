@@ -1,0 +1,197 @@
+import { type ReactNode, useId } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import { Search, ArrowUpDown, Plus, TriangleAlert } from 'lucide-react'
+import { Button } from '../primitives/Button'
+import { Input } from '../primitives/Input'
+import { SegmentedControl } from '../primitives/SegmentedControl'
+import { Toggle } from '../primitives/Toggle'
+import { Skeleton } from '../primitives/Skeleton'
+import { EmptyState } from '../primitives/EmptyState'
+import { Icon } from '../primitives/Icon'
+
+// The standardized scaffold every entity module renders through (UX §1.2/§1.3, ARCH §6.4):
+// toolbar (title + info + controls + filter slot + New) over a content area that renders the four
+// data states (loading / error / empty / populated). A controlled component — it owns NO data; the
+// page wires useEntityManager → these props. EntityCard fills the content slot in story 1.9b.
+
+export type EntityView = 'grid' | 'list'
+
+export interface EntityPageProps {
+  title: string
+  info?: ReactNode
+  newLabel: string
+  onNew: () => void
+
+  search: string
+  onSearchChange: (value: string) => void
+  view: EntityView
+  onViewChange: (view: EntityView) => void
+  showArchived: boolean
+  onShowArchivedChange: (value: boolean) => void
+  onSort?: () => void
+  /** Entity-specific filter controls (e.g. Accounts → bank/credit-card type). */
+  filters?: ReactNode
+
+  isLoading: boolean
+  isError: boolean
+  onRetry: () => void
+  isEmpty: boolean
+  emptyIcon?: LucideIcon
+  emptyTitle: string
+  emptyDescription?: ReactNode
+
+  children: ReactNode
+}
+
+const viewOptions = [
+  { value: 'grid', label: 'Grid' },
+  { value: 'list', label: 'List' },
+]
+
+export function EntityPage(props: EntityPageProps) {
+  const {
+    title,
+    info,
+    newLabel,
+    onNew,
+    search,
+    onSearchChange,
+    view,
+    onViewChange,
+    showArchived,
+    onShowArchivedChange,
+    onSort,
+    filters,
+  } = props
+  const archivedToggleId = useId()
+
+  return (
+    <div className="flex flex-col gap-md">
+      {/* Toolbar — UX §1.2 order: left title+info · right cluster of controls + filters + New. */}
+      <div className="flex flex-wrap items-center justify-between gap-sm">
+        <div>
+          <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
+          {info && <div className="text-sm text-text-secondary">{info}</div>}
+        </div>
+        <div className="flex flex-wrap items-center gap-sm">
+          <div className="relative">
+            <span className="absolute left-sm top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">
+              <Icon icon={Search} size={16} />
+            </span>
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={`Search ${title.toLowerCase()}`}
+              aria-label={`Search ${title.toLowerCase()}`}
+              className="pl-xl max-w-input"
+            />
+          </div>
+          <Button variant="ghost" onClick={onSort} aria-label="Sort">
+            <span className="inline-flex items-center gap-xs">
+              <Icon icon={ArrowUpDown} size={16} /> Sort
+            </span>
+          </Button>
+          <SegmentedControl
+            value={view}
+            options={viewOptions}
+            onChange={(v) => onViewChange(v as EntityView)}
+          />
+          <label
+            htmlFor={archivedToggleId}
+            className="inline-flex items-center gap-xs text-sm text-text-secondary"
+          >
+            <Toggle
+              id={archivedToggleId}
+              checked={showArchived}
+              onChange={onShowArchivedChange}
+            />
+            Archived
+          </label>
+          {filters}
+          <Button onClick={onNew} data-testid="entity-page-new">
+            + New {newLabel}
+          </Button>
+        </div>
+      </div>
+
+      {/* Content area — four data states (UX §18 / Bible #states). */}
+      <EntityPageContent {...props} />
+    </div>
+  )
+}
+
+function EntityPageContent({
+  newLabel,
+  onNew,
+  view,
+  isLoading,
+  isError,
+  onRetry,
+  isEmpty,
+  emptyIcon,
+  emptyTitle,
+  emptyDescription,
+  children,
+}: EntityPageProps) {
+  if (isLoading) {
+    return (
+      <div data-testid="entity-page-loading" className="grid-cols-entity grid gap-md">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} variant="rect" className="h-entity-card" />
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-empty-state flex flex-col items-center justify-center gap-sm py-xl text-center">
+        <span className="bg-error-fill text-error flex items-center justify-center rounded-full p-md">
+          <Icon icon={TriangleAlert} size={28} />
+        </span>
+        <h3 className="text-lg font-medium text-text-secondary">Something went wrong</h3>
+        <p className="text-sm text-text-muted">We couldn't load this. Please try again.</p>
+        <Button variant="secondary" onClick={onRetry} className="mt-sm">
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  if (isEmpty) {
+    return (
+      <EmptyState
+        icon={emptyIcon}
+        title={emptyTitle}
+        description={emptyDescription}
+        action={<Button onClick={onNew}>+ New {newLabel}</Button>}
+      />
+    )
+  }
+
+  if (view === 'list') {
+    return <div className="flex flex-col gap-density">{children}</div>
+  }
+
+  return (
+    <div className="grid-cols-entity grid gap-md">
+      {children}
+      {/* Second equal entry point — the grid ends in a ghost "+ New" tile (UX §1.3). */}
+      <button
+        type="button"
+        data-testid="entity-page-ghost-tile"
+        onClick={onNew}
+        className="
+          flex min-h-entity-card flex-col items-center justify-center gap-xs rounded-lg
+          border border-dashed border-border text-text-muted
+          transition-colors duration-quick
+          hover:border-border-light hover:bg-surface-hover hover:text-text-secondary
+        "
+      >
+        <Icon icon={Plus} size={20} />
+        <span className="text-sm font-medium">New {newLabel}</span>
+      </button>
+    </div>
+  )
+}
