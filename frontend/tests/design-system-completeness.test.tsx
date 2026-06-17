@@ -108,6 +108,18 @@ describe('/design-system MiniSparkline atom demo (story 1.10, AC5)', () => {
   })
 })
 
+describe('/design-system FavouriteStar atom demo (story 1.11, AC3)', () => {
+  it('renders the real <FavouriteStar> inside #favourite-star', () => {
+    const { container } = render(<DesignSystem />)
+    const section = container.querySelector('section#favourite-star')
+    expect(section, 'missing <section id="favourite-star">').not.toBeNull()
+    // The real atom is a <button aria-pressed> wrapping a lucide star — not a synthetic stand-in.
+    const toggle = section!.querySelector('button[aria-pressed]')
+    expect(toggle, 'FavouriteStar demo is not the real exported component').not.toBeNull()
+    expect(toggle!.querySelector('svg'), 'FavouriteStar is missing its star glyph').not.toBeNull()
+  })
+})
+
 describe('/design-system section index/nav (story 1.8c, AC1)', () => {
   it('links every demoed section', () => {
     const { container } = render(<DesignSystem />)

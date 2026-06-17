@@ -16,6 +16,7 @@ import {
   Skeleton,
   ProgressBar,
   MiniSparkline,
+  FavouriteStar,
   Tooltip,
   ContextMenu,
   Modal,
@@ -131,6 +132,8 @@ export function DesignSystem() {
   // EntityCard / EntityModal demo state (story 1.9b).
   const [cardFav, setCardFav] = useState(true)
   const [cardSelected, setCardSelected] = useState(true)
+  const [favOff, setFavOff] = useState(false)
+  const [favOn, setFavOn] = useState(true)
   const [entityModalOpen, setEntityModalOpen] = useState(false)
 
   // BulkActionBar / useMultiSelect demo (story 1.9c). Selection mode flips card onClick from
@@ -502,6 +505,27 @@ export function DesignSystem() {
                 showDelta
                 onExpand={() => pushToast({ variant: 'info', message: 'Expand → Viewer (Epic 9)' })}
               />
+            </div>
+          </div>
+        </section>
+
+        {/* FavouriteStar — outline gold (off) / solid gold (on); same colour, fill differs (§2.3). The
+            distinction toggles on click; hover gives the scale-pop. Colour remaps under immersive themes
+            (reads --color-favourite). Bible #entitycard .star/.star.on. */}
+        <section id="favourite-star" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">FavouriteStar</h2>
+          <div className="flex items-center gap-lg rounded-lg border border-border bg-surface p-md">
+            <div className="flex flex-col items-center gap-2xs">
+              <FavouriteStar favourite={favOff} onToggle={() => setFavOff((v) => !v)} />
+              <span className="text-xs text-text-secondary">off (outline)</span>
+            </div>
+            <div className="flex flex-col items-center gap-2xs">
+              <FavouriteStar favourite={favOn} onToggle={() => setFavOn((v) => !v)} />
+              <span className="text-xs text-text-secondary">on (solid)</span>
+            </div>
+            <div className="flex flex-col items-center gap-2xs">
+              <FavouriteStar favourite size={28} onToggle={() => {}} aria-label="Pin to top" />
+              <span className="text-xs text-text-secondary">size · label override</span>
             </div>
           </div>
         </section>
