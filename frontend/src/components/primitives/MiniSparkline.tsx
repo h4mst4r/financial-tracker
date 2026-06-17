@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { Maximize2, TrendingUp, TrendingDown } from 'lucide-react'
 import { Icon } from './Icon'
 import { Skeleton } from './Skeleton'
+import { VB_W, VB_H, PAD, MAX_POINTS, round2, sparkPoints, type Pt } from './sparkline'
 
 // MiniSparkline (UX §9.2, FR-V-012) — the axis-less, label-less card mini-chart that fills EntityCard's
 // `sparkline` slot. Line (area + line + end-dot) for continuous series, bars for discrete; optional ▲▼
@@ -9,11 +10,6 @@ import { Skeleton } from './Skeleton'
 // var(--entity-colour) via the spark-* utilities — no literal hex — so it matches the card fill and remaps
 // under immersive themes (the consumer sets the variable; the atom only reads it). The click→full-Viewer
 // wiring is the Epic-9 seam: this ships only the `onExpand` affordance.
-
-const VB_W = 120
-const VB_H = 40
-const PAD = 4 // vertical breathing room so the stroke / end-dot aren't clipped at the viewBox edge
-const MAX_POINTS = 12
 
 export interface MiniSparklineProps {
   /** The value series; the atom plots the last 12 points (fewer if fewer exist — never downsampled). */
@@ -30,31 +26,6 @@ export interface MiniSparklineProps {
   onExpand?: () => void
   className?: string
   'aria-label'?: string
-}
-
-interface Pt {
-  x: number
-  y: number
-}
-
-const round2 = (n: number): number => Math.round(n * 100) / 100
-
-/**
- * Map a value window to viewBox coords (y inverted: higher value = higher on screen). A flat series
- * (max === min) sits at mid-height — no divide-by-zero. Pure + exported for unit tests.
- */
-export function sparkPoints(values: number[], w = VB_W, h = VB_H, pad = PAD): Pt[] {
-  const n = values.length
-  if (n === 0) return []
-  const max = Math.max(...values)
-  const min = Math.min(...values)
-  const span = max - min
-  const innerH = h - pad * 2
-  return values.map((v, i) => {
-    const x = n > 1 ? (i * w) / (n - 1) : w / 2
-    const t = span === 0 ? 0.5 : (v - min) / span
-    return { x: round2(x), y: round2(h - pad - t * innerH) }
-  })
 }
 
 function LineSpark({ pts }: { pts: Pt[] }) {

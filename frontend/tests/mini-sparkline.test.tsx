@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
-import { MiniSparkline, sparkPoints } from '../src/components/primitives/MiniSparkline'
+import { MiniSparkline } from '../src/components/primitives/MiniSparkline'
+import { sparkPoints } from '../src/components/primitives/sparkline'
 
 // Pull every fill/stroke attribute off the rendered SVG to prove no literal hex leaks in (AC4).
 function svgPaintAttrs(container: HTMLElement): string[] {
