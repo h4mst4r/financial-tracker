@@ -20,8 +20,11 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
+  // Roving-focus targets: one ref per option so ArrowUp/Down can move DOM focus (WAI-ARIA listbox).
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const selectedOption = options.find((o) => o.value === value)
+  const selectedIndex = options.findIndex((o) => o.value === value)
 
   // Close on outside click
   const handleOutsideClick = useCallback((e: MouseEvent) => {
@@ -46,10 +49,19 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
     }
   }, [open, handleOutsideClick, handleKeyDown])
 
+  // Move DOM focus to the active option (roving tabIndex) whenever it changes while open.
+  useEffect(() => {
+    if (open && activeIndex >= 0) {
+      optionRefs.current[activeIndex]?.focus()
+    }
+  }, [open, activeIndex])
+
   const handleTriggerClick = () => {
     if (!disabled) {
       setOpen((p) => !p)
-      setActiveIndex(-1)
+      // Open onto the selected option (or the first) so the roving focus has a home; with no options
+      // there is nothing to focus, so leave the active index unset (-1).
+      setActiveIndex(options.length === 0 ? -1 : selectedIndex >= 0 ? selectedIndex : 0)
     }
   }
 
@@ -65,7 +77,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setActiveIndex((i) => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter' && activeIndex >= 0) {
+    } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < options.length) {
       e.preventDefault()
       handleOptionClick(options[activeIndex].value)
     } else if (e.key === 'Escape') {
@@ -79,6 +91,8 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
         id={id}
         type="button"
         onClick={handleTriggerClick}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className={`
           w-full h-control py-control px-sm rounded-md text-sm
           bg-surface-raised border text-text-primary
@@ -101,13 +115,18 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
 
       {open && (
         <div
+          role="listbox"
           className="absolute z-dropdown mt-1 w-full bg-surface-raised border border-border rounded-md shadow-lg"
           onKeyDown={handlePanelKeyDown}
         >
           {options.map((opt, i) => (
             <button
               key={opt.value}
+              ref={(el) => { optionRefs.current[i] = el }}
               type="button"
+              role="option"
+              aria-selected={opt.value === value}
+              tabIndex={i === activeIndex ? 0 : -1}
               className={`
                 w-full flex items-center justify-between px-sm py-2 text-sm
                 ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}

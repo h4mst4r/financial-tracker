@@ -140,12 +140,12 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
         <div
           ref={menuRef}
           role="menu"
-          className="fixed z-dropdown bg-surface-overlay border border-border rounded-md shadow-lg min-w-menu py-1"
+          className="fixed z-dropdown bg-surface-overlay border border-border rounded-md shadow-lg min-w-menu py-2xs"
           style={{ left: position.x, top: position.y }}
         >
           {items.map((entry, idx) => {
             if ('divider' in entry) {
-              return <Divider key={`div-${idx}`} className="my-1" />
+              return <Divider key={`div-${idx}`} className="my-2xs" />
             }
             const item = entry as ContextMenuItem
             return (
@@ -162,7 +162,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
                 }}
                 title={item.disabled ? item.disabledReason : undefined}
                 className={`
-                  w-full text-left px-sm py-2 text-sm flex items-center gap-2 hover:bg-surface-active
+                  w-full text-left px-sm py-xs text-sm flex items-center gap-xs hover:bg-surface-active
                   ${item.disabled
                     ? 'text-text-muted cursor-not-allowed'
                     : item.destructive

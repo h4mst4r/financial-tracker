@@ -204,17 +204,29 @@
   --control-height:    40px;
   --control-padding-y:  8px;
   --density-row-gap:    8px;
+  /* Toggle dims (comfortable = bible .toggle: track 40x24, thumb 20, on-travel 16). */
+  --toggle-track-w:    40px;
+  --toggle-track-h:    24px;
+  --toggle-thumb:      20px;
+  --toggle-thumb-travel: 16px;
 }
 [data-density="compact"] {
   --control-height:    32px;
   --control-padding-y:  4px;
   --density-row-gap:    6px;
+  /* Compact: derived proportionally from the 40 to 32 control-height step (no bible exemplar). */
+  --toggle-track-w:    32px;
+  --toggle-track-h:    20px;
+  --toggle-thumb:      16px;
+  --toggle-thumb-travel: 12px;
 }
 
 /* ── Density utilities — read the density tokens above (comfortable/compact swap is automatic) ── */
-@utility h-control   { height: var(--control-height); }
-@utility py-control  { padding-block: var(--control-padding-y); }
-@utility gap-density { gap: var(--density-row-gap); }
+@utility h-control    { height: var(--control-height); }
+@utility py-control   { padding-block: var(--control-padding-y); }
+@utility gap-density  { gap: var(--density-row-gap); }
+@utility toggle-track { width: var(--toggle-track-w); height: var(--toggle-track-h); }
+@utility toggle-thumb { width: var(--toggle-thumb); height: var(--toggle-thumb); }
 
 /* ── Solid fill utilities for Button primary/danger variants (P4: no magic hex in TSX).
    Pointing at --color-accent-primary/--color-error so they re-skin per palette for free (P3).

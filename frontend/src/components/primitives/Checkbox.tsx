@@ -32,7 +32,11 @@ export function Checkbox({ checked, onChange, disabled, id, label }: CheckboxPro
           }
         `}
       >
-        {checked && <Icon icon={Check} size={14} className="text-on-primary" />}
+        <Icon
+          icon={Check}
+          size={14}
+          className={`text-on-primary transition-[opacity,transform] duration-draw ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}
+        />
       </span>
       {label && <span className="text-sm font-medium text-text-primary">{label}</span>}
     </label>

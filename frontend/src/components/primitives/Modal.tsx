@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
+import { Icon } from './Icon'
 
 interface ModalProps {
   open: boolean
@@ -42,9 +44,14 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       if (e.key === 'Tab') {
         const el = panelRef.current
         if (!el) return
-        const focusable = el.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
+        // Exclude disabled/hidden controls so Tab never lands on a dead element. Filter at the
+        // selector level (:not([disabled]):not([hidden])) + drop aria-hidden — NOT via offsetParent,
+        // which jsdom always reports null, breaking the trap in tests.
+        const focusable = Array.from(
+          el.querySelectorAll<HTMLElement>(
+            'button:not([disabled]):not([hidden]), [href]:not([hidden]), input:not([disabled]):not([hidden]), select:not([disabled]):not([hidden]), textarea:not([disabled]):not([hidden]), [tabindex]:not([tabindex="-1"]):not([hidden])'
+          )
+        ).filter((n) => n.getAttribute('aria-hidden') !== 'true')
         const first = focusable[0]
         const last = focusable[focusable.length - 1]
         if (e.shiftKey) {
@@ -110,9 +117,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
               aria-label="Close"
               className="text-text-secondary hover:text-text-primary transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-              </svg>
+              <Icon icon={X} size={18} />
             </button>
           </div>
         )}

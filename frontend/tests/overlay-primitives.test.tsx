@@ -312,6 +312,29 @@ describe('Modal', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await waitFor(() => expect(opener).toHaveFocus())
   })
+
+  it('focus-trap excludes disabled controls (AC2)', () => {
+    render(wrap(
+      <Modal open={true} onClose={vi.fn()} title="Test">
+        <button>Enabled A</button>
+        <button>Enabled B</button>
+        <button disabled>Disabled Last</button>
+      </Modal>
+    ))
+    // Focus the first focusable (the header Close button) and Shift+Tab — the trap should wrap to the
+    // last ENABLED control (Enabled B), skipping the trailing disabled button. Without the exclusion
+    // the disabled button would be `last` and `.focus()` on it is a no-op, leaving focus on Close.
+    const close = screen.getByRole('button', { name: 'Close' })
+    close.focus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(screen.getByRole('button', { name: 'Enabled B' })).toHaveFocus()
+  })
+
+  it('close button renders the lucide X icon (AC2)', () => {
+    render(wrap(<Modal open={true} onClose={vi.fn()} title="Test">Content</Modal>))
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(close.querySelector('svg.lucide-x')).not.toBeNull()
+  })
 })
 
 /* ── ConfirmationDialog ── */

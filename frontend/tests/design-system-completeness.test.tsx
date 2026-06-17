@@ -7,6 +7,47 @@ import { useThemeStore } from '../src/stores/themeStore'
 
 const exportedPrimitives = Object.keys(Primitives)
 
+// A DOM marker intrinsic to the REAL exported component rendered in each section — a native element,
+// ARIA role, or component-owned class that a synthetic <div> stand-in would NOT produce. This closes
+// the 1.8c gap where the guard only checked that a <section id> existed (story 1.12 AC5).
+const SECTION_MARKER: Record<string, string> = {
+  // Composites (also covered by dedicated it() blocks below; markers are their real-component testids)
+  'entity-page': '[data-testid="entity-page-new"]',
+  'entity-card': '[data-testid="entity-card"]',
+  'entity-modal': 'button',
+  'bulk-actions': '[data-testid="entity-card"]',
+  // Foundation
+  'semantic-text': '.monetary-value',
+  icon: 'svg',
+  // Primitives
+  button: 'button',
+  badge: 'span',
+  avatar: '[role="img"]',
+  'segmented-control': 'button',
+  toggle: 'button[role="switch"]',
+  'progress-bar': '[role="progressbar"]',
+  'mini-sparkline': 'svg.spark',
+  'favourite-star': 'button[aria-pressed]',
+  skeleton: '.animate-shimmer',
+  spinner: '[role="status"]',
+  divider: '[role="separator"]',
+  // Form controls
+  checkbox: 'input[type="checkbox"]',
+  label: 'label',
+  input: 'input',
+  tooltip: '[role="tooltip"]',
+  card: '[role="button"]',
+  // Pickers
+  dropdown: 'button[aria-haspopup="listbox"]',
+  // Feedback & overlay (the demos render real trigger Buttons; the overlays portal on interaction)
+  toast: 'button',
+  'confirmation-dialog': 'button',
+  modal: 'button',
+  'context-menu': 'button',
+  // States
+  'empty-state': '.max-w-empty-state',
+}
+
 // DOM unmount is handled by the global afterEach(cleanup) in tests/setup.ts; here we only need to
 // reset the global density between tests so the harness test starts from a known state.
 beforeEach(() => {
@@ -31,12 +72,17 @@ describe('/design-system P1 completeness gate (story 1.8c, AC3)', () => {
     }
   })
 
-  it('renders a <section> element for every registry entry — no synthetic stand-ins', () => {
+  it('renders the REAL exported component inside every registry section — no synthetic stand-ins', () => {
     const { container } = render(<DesignSystem />)
     for (const section of DESIGN_SYSTEM_SECTIONS) {
+      const el = container.querySelector(`section#${section.id}`)
+      expect(el, `missing <section id="${section.id}"> for '${section.label}'`).not.toBeNull()
+
+      const marker = SECTION_MARKER[section.id]
+      expect(marker, `no real-component marker defined for section '${section.id}'`).toBeDefined()
       expect(
-        container.querySelector(`section#${section.id}`),
-        `missing <section id="${section.id}"> for '${section.label}'`,
+        el!.querySelector(marker),
+        `section '${section.id}' ('${section.label}') has no real component matching '${marker}' — synthetic stand-in?`,
       ).not.toBeNull()
     }
   })

@@ -123,6 +123,12 @@ describe('Checkbox', () => {
     fireEvent.click(input)
     expect(fn).not.toHaveBeenCalled()
   })
+
+  it('check carries the duration-draw draw animation (AC4)', () => {
+    const { container } = render(wrap(<Checkbox checked={true} onChange={() => {}} id="cb-draw" />))
+    const svg = container.querySelector('svg')
+    expect(svg?.getAttribute('class') ?? '').toContain('duration-draw')
+  })
 })
 
 /* ── Toggle ── */
@@ -148,6 +154,13 @@ describe('Toggle', () => {
     const sw = screen.getByRole('switch', { name: 't3' })
     fireEvent.click(sw)
     expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('track and thumb use density tokens (AC4)', () => {
+    render(wrap(<Toggle checked={false} onChange={() => {}} aria-label="t-density" />))
+    const sw = screen.getByRole('switch', { name: 't-density' })
+    expect(sw.className).toContain('toggle-track')
+    expect(sw.querySelector('span')?.className ?? '').toContain('toggle-thumb')
   })
 })
 
@@ -183,6 +196,26 @@ describe('Dropdown', () => {
     expect(screen.getByText('A')).toBeInTheDocument()
     fireEvent.keyDown(document.documentElement, { key: 'Escape' })
     expect(screen.queryByText('A')).not.toBeInTheDocument()
+  })
+
+  it('exposes a listbox with option roles, aria-selected and roving tabIndex (AC1)', () => {
+    render(wrap(<Dropdown value="b" options={opts} onChange={() => {}} placeholder="Pick" />))
+    const trigger = screen.getByRole('button', { name: /B/i })
+    expect(trigger.getAttribute('aria-haspopup')).toBe('listbox')
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+    const options = screen.getAllByRole('option')
+    expect(options).toHaveLength(2)
+    const selected = options.find((o) => o.getAttribute('aria-selected') === 'true')!
+    expect(selected.textContent).toContain('B')
+    // Roving tabIndex: exactly one option (the active/selected) is tabbable.
+    expect(options.filter((o) => o.getAttribute('tabindex') === '0')).toHaveLength(1)
+    expect(selected.getAttribute('tabindex')).toBe('0')
+    expect(options.filter((o) => o.getAttribute('tabindex') === '-1')).toHaveLength(1)
   })
 })
 

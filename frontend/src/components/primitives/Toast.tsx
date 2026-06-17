@@ -29,7 +29,7 @@ export function Toast({ variant, message, onDismiss }: ToastProps) {
         flex items-center gap-sm
       "
     >
-      <span className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-sm ${chip}`}>
+      <span className={`shrink-0 inline-flex items-center justify-center w-lg h-lg rounded-sm ${chip}`}>
         <IconComponent size={14} />
       </span>
       <span className="flex-1">{message}</span>
