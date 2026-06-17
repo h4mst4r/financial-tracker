@@ -531,6 +531,29 @@ re-login. Once the person no longer belongs to a household their next session is
 §6.7) — Accept joins the target household; **Decline there is likewise terminal** → the **Not
 Invited** page (§3).
 
+### 4.5 New Household modal (FR-HH-001 — first-login owner setup)
+
+Shown **once**, automatically, when `/auth/me` returns `isFirstLogin: true` (owner + household
+`created_at` within the last 2 min, architecture §2.14.C) — i.e. immediately after an approved owner's
+first login, over the app shell. It lets the owner replace the **defaults** the server seeded (the
+callback runs server-side and cannot prompt, so `_create_and_seed_household` seeds `SGD` /
+`Asia/Singapore`, architecture §2.6).
+
+- Icon (`home-plus`, accent) · title "Set up your household" · body "We've created your household with
+  sensible defaults — adjust them now or change later in Settings."
+- Fields (mirrors the §5.2 Management config, **minus** the recompute warning — a brand-new household has
+  no transactions): **household name** · **timezone** · **date format** · **base currency** (the
+  currency picker; the seeded `SGD` is pre-selected).
+- Actions (§4.2 convention): **Skip** (left, ghost — keeps the seeded defaults) / **Save** (right,
+  primary).
+- **Save** persists via `PATCH /api/household` (architecture §2.8 owner-scoped). Changing the base
+  currency here is a **clean swap with no recompute** (demote the seeded base `Currency`, promote the
+  chosen one to `is_base`, update `Household.base_currency`) — permitted **only** while the household has
+  zero financial events; this is distinct from the established-household FR-CU-005 path (Settings →
+  Management → base currency + recompute warning), which is delivered in Epic 3.
+- **Dismissible:** Skip / close keeps the SGD defaults (the household already functions). The modal does
+  not reappear (it is `isFirstLogin`-gated, which is false on the next login).
+
 ---
 
 ## 5. Settings

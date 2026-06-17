@@ -5,6 +5,8 @@ static files + SPA fallback LAST, so unmatched client routes (/login, /accounts,
 /join/:token) resolve to the built index.html. No CORS — single origin.
 """
 
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -15,19 +17,37 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from backend.config import get_settings
+from backend.database import async_session_factory
 from backend.errors import problem
-from backend.middleware import CSRFMiddleware, SecurityHeadersMiddleware
+from backend.middleware import CSRFMiddleware, DevBypassMiddleware, SecurityHeadersMiddleware
 from backend.rate_limit import limiter
 from backend.routers import auth as auth_router
+from backend.services.auth import seed_bootstrap_owners
+
+logger = logging.getLogger(__name__)
 
 # Built frontend bundle copied here by the Docker build (Stage 1 → frontend_dist).
 # Absent in local dev, where Vite serves the frontend directly.
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend_dist"
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: idempotently seed `BOOTSTRAP_OWNER_EMAILS` into `approved_owners` (ARCH §2.7)."""
+    async with async_session_factory() as db:
+        await seed_bootstrap_owners(db)
+        await db.commit()
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Financial Tracker", debug=settings.debug)
+
+    # Production guard (ARCH §2.5/§5.1): alarm — never a hard stop — if bypass is on outside dev.
+    if settings.auth_bypass_enabled and settings.env != "development":
+        logger.critical("auth_bypass_enabled_in_non_dev_environment", extra={"env": settings.env})
+
+    app = FastAPI(title="Financial Tracker", debug=settings.debug, lifespan=lifespan)
 
     # ── Rate limiter (ARCH §2.10) ──
     app.state.limiter = limiter
@@ -47,10 +67,10 @@ def create_app() -> FastAPI:
 
     # ── Middleware stack (ARCH §2.1) — Starlette runs LIFO, so the LAST add_middleware
     # is the OUTERMOST. Add in reverse to get runtime order:
-    #   SecurityHeaders → (DevBypass, Story 2.3) → CSRF → SlowAPI → handler.
+    #   SecurityHeaders → DevBypass → CSRF → SlowAPI → handler.
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(CSRFMiddleware)
-    # DevBypassMiddleware slots HERE in Story 2.3 (between CSRF and SecurityHeaders).
+    app.add_middleware(DevBypassMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
 
     # ── Global exception handlers (RFC 7807, ARCH §4.6) ──

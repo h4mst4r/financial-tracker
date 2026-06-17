@@ -11,8 +11,10 @@ them — no live Google call in the suite.
 import asyncio
 import hashlib
 import hmac
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
@@ -24,16 +26,25 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_settings
-from backend.models.identity import Person, Session
+from backend.models.currency import Currency
+from backend.models.identity import ApprovedOwner, Household, HouseholdInvitation, Person, Session
+from backend.services.category import seed_default_categories
+
+logger = logging.getLogger(__name__)
 
 # ── Constants (ARCH §2.3/§2.5/§2.14) ──
 SESSION_COOKIE_NAME = "session_id"
 SESSION_HEADER_NAME = "X-Session-Token"
+DEV_SESSION_ID_HEADER = "X-Session-Id"  # response header the SPA reads in dev (§2.5)
 OAUTH_STATE_COOKIE = "oauth_state"
 SESSION_TTL = timedelta(minutes=30)
 OAUTH_STATE_TTL = timedelta(minutes=10)
 DEV_SESSION_TTL = timedelta(hours=24)
 DEV_USER_AGENT = "dev-bypass"
+
+# Dev-bypass synthetic identity (ARCH §2.5) — `google_sub` is spec-fixed; the email is locked here.
+DEV_GOOGLE_SUB = "dev-bypass-user-001"
+DEV_BYPASS_EMAIL = "dev@localhost"
 
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"  # nosec B105 (URL, not a secret)
@@ -88,9 +99,14 @@ def set_session_cookie(response: Response, session_id: str) -> None:
 class NotInvitedError(Exception):
     """Valid Google identity with no right to a household (ARCH §2.6 step 4).
 
-    Full seeding (approved-owners, pending-invite, bootstrap) lands in Story 2.3, which
-    replaces the minimal `seed_household_if_needed` below with the §2.6 decision tree.
+    Carries the person's `detachment_reason` so the callback can pick the right redirect
+    code: `household_deleted`/`removed` → their page, else `not_invited` (§2.6 step 4, §5.8).
     """
+
+    def __init__(self, email: str, *, detachment_reason: str | None = None) -> None:
+        super().__init__(email)
+        self.email = email
+        self.detachment_reason = detachment_reason
 
 
 class OAuthError(Exception):
@@ -211,15 +227,101 @@ async def get_or_create_person(db: AsyncSession, claims: dict) -> Person:
 
 
 async def seed_household_if_needed(db: AsyncSession, person: Person) -> None:
-    """MINIMAL (Story 2.1): §2.6 step 1 + step 4 only.
+    """The §2.6 seed decision tree (priority order is load-bearing).
 
-    Step 1 — already in a household → return. Otherwise raise NotInvitedError. The
-    approved-owners seed, pending-invitation priority, bootstrap, currency/category
-    seeding, and detachment-reason redirect mapping are **Story 2.3**.
+    1. Already in a household → return.
+    2. Active pending invitation for this email → return leaving `household_id=NULL`
+       (the frontend shows the PendingInvitationDialog). **Priority over approval.**
+    3. Email ∈ active `approved_owners` → create + seed a household, `role=owner`.
+    4. Else → raise `NotInvitedError` (the Person row is still persisted; no session).
     """
     if person.household_id:
         return
-    raise NotInvitedError(person.email)
+
+    now = datetime.now(UTC)
+    pending = await db.execute(
+        select(HouseholdInvitation).where(
+            func.lower(HouseholdInvitation.invited_email) == func.lower(person.email),
+            HouseholdInvitation.status == "pending",
+        )
+    )
+    for invitation in pending.scalars():
+        if _as_utc(invitation.expires_at) > now:
+            return  # NULL household — pending-invitation path takes priority (§2.6 step 2)
+
+    approved = await db.execute(
+        select(ApprovedOwner).where(
+            func.lower(ApprovedOwner.email) == func.lower(person.email),
+            ApprovedOwner.is_active.is_(True),
+        )
+    )
+    if approved.scalars().first() is not None:
+        await _create_and_seed_household(db, person)
+        return
+
+    raise NotInvitedError(person.email, detachment_reason=person.detachment_reason)
+
+
+async def _create_and_seed_household(db: AsyncSession, person: Person) -> Household:
+    """Create the owner's household + seed base SGD currency + 13 default categories (§2.6).
+
+    `SGD` / `Asia/Singapore` are defaults the first-login New Household modal (Story 2.4c)
+    overrides; the server-side callback cannot prompt. Clears detachment so the person is in
+    a household again. `Household.created_by` has no DB FK, but the person's UUID is already
+    pre-generated, so it is set directly; the household is flushed so `household.id` exists.
+    """
+    display_or_email = person.display_name or person.email
+    household = Household(
+        name=f"{display_or_email}'s Household",
+        base_currency="SGD",
+        timezone="Asia/Singapore",
+        created_by=person.id,
+    )
+    db.add(household)
+    await db.flush()
+
+    person.household_id = household.id
+    person.role = "owner"
+    person.can_create_household = True
+    person.detachment_reason = None
+    person.detached_at = None
+
+    db.add(
+        Currency(
+            household_id=household.id,
+            code="SGD",
+            name="Singapore Dollar",
+            symbol="S$",
+            is_base=True,
+            is_display_active=True,
+            rate_to_base=Decimal("1.0"),
+            fee_pct=Decimal("0"),
+        )
+    )
+    await seed_default_categories(db, household.id, person.id)
+    await db.flush()
+    return household
+
+
+async def seed_bootstrap_owners(db: AsyncSession) -> None:
+    """Insert any `BOOTSTRAP_OWNER_EMAILS` not already approved (idempotent, insert-only, §2.7).
+
+    Never updates or removes existing rows — removing an email from the env does NOT revoke an
+    already-seeded owner (deactivate via `is_active=false` instead). Called from the app lifespan.
+    """
+    raw = get_settings().bootstrap_owner_emails
+    emails = [e.strip() for e in raw.split(",") if e.strip()]
+    if not emails:
+        return
+
+    existing = await db.execute(select(func.lower(ApprovedOwner.email)))
+    present = {email for email in existing.scalars()}
+    for email in emails:
+        if email.lower() in present:
+            continue
+        db.add(ApprovedOwner(email=email, is_active=True, added_by=None))
+        present.add(email.lower())
+    await db.flush()
 
 
 # ── Sessions (ARCH §2.3 / §2.14.B) ──
@@ -252,6 +354,45 @@ async def create_session(
     db.add(session)
     await db.flush()
     return session
+
+
+async def ensure_dev_session(db: AsyncSession, *, ip: str | None = None) -> Session:
+    """Upsert the dev person + household + a live dev session (ARCH §2.5).
+
+    Auto-approves the synthetic email (so the normal `get_or_create_person` +
+    `seed_household_if_needed` path seeds a real household instead of raising), then reuses an
+    unexpired dev session if one exists or mints a fresh one. Flushes only; the caller commits.
+    """
+    approved = await db.execute(
+        select(ApprovedOwner).where(func.lower(ApprovedOwner.email) == DEV_BYPASS_EMAIL)
+    )
+    if approved.scalar_one_or_none() is None:
+        db.add(
+            ApprovedOwner(email=DEV_BYPASS_EMAIL, is_active=True, label="Dev bypass", added_by=None)
+        )
+        await db.flush()
+
+    person = await get_or_create_person(
+        db,
+        {
+            "sub": DEV_GOOGLE_SUB,
+            "email": DEV_BYPASS_EMAIL,
+            "email_verified": True,
+            "name": "Dev User",
+            "picture": None,
+        },
+    )
+    await seed_household_if_needed(db, person)
+
+    found = await db.execute(
+        select(Session)
+        .where(Session.person_id == person.id, Session.user_agent == DEV_USER_AGENT)
+        .order_by(Session.created_at.desc())
+    )
+    session = found.scalars().first()
+    if session is not None and _as_utc(session.expires_at) > datetime.now(UTC):
+        return session
+    return await create_session(db, person, ip=ip, user_agent=None, dev=True)
 
 
 async def validate_session(

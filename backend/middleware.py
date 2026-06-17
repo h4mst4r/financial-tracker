@@ -1,9 +1,9 @@
 """ASGI middleware stack — security headers + CSRF (ARCH §2.1/§2.4/§2.9).
 
-Registered in `create_app()` in the runtime order `SecurityHeaders → (DevBypass, 2.3) →
-CSRF → SlowAPI`. `SecurityHeadersMiddleware` is pure ASGI (it only appends response
-headers); `CSRFMiddleware` is a `BaseHTTPMiddleware` because it needs its own DB session,
-`request.state`, and to mutate the response cookie.
+Registered in `create_app()` in the runtime order `SecurityHeaders → DevBypass → CSRF →
+SlowAPI`. `SecurityHeadersMiddleware` is pure ASGI (it only appends response headers);
+`CSRFMiddleware` and `DevBypassMiddleware` are `BaseHTTPMiddleware` because they need their
+own DB session, `request` scope, and to mutate the response cookie.
 
 The CSRF middleware is the single per-request `validate_session()` caller (§2.4): it
 slides the window, stashes `(person, session)` on `request.state.auth` for
@@ -24,8 +24,10 @@ from backend.config import get_settings
 from backend.database import async_session_factory
 from backend.errors import problem
 from backend.services.auth import (
+    DEV_SESSION_ID_HEADER,
     SESSION_COOKIE_NAME,
     SESSION_HEADER_NAME,
+    ensure_dev_session,
     is_csrf_exempt,
     set_session_cookie,
     validate_session,
@@ -33,6 +35,9 @@ from backend.services.auth import (
 
 CSRF_HEADER_NAME = "X-CSRF-Token"
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# Dev-bypass (ARCH §2.5) — Vite strips Set-Cookie in local dev, so the SPA reads X-Session-Id.
+LOCALHOST_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 # ── Security headers (ARCH §2.9) — exact values; CSP is one canonical constant ──
 CSP = (
@@ -132,4 +137,48 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         if result is not None:
             set_session_cookie(response, valid_session_id)
+        return response
+
+
+class DevBypassMiddleware(BaseHTTPMiddleware):
+    """Localhost-only, flag-gated dev auto-auth (ARCH §2.5).
+
+    Inert unless ALL hold: `AUTH_BYPASS_ENABLED`, a localhost client, a non-exempt path (the full
+    §2.11 skip-list — `/health`, static, `/docs`, `/jobs/`, and the public auth paths all bypass it,
+    so a liveness ping or a Swagger visit never seeds a dev household), and no session already
+    present. On activation it upserts the dev person/household/session
+    (its own committed DB session, like CSRF), injects the id as an `X-Session-Token` REQUEST
+    header so the inner CSRF + `get_current_person` resolve it this same request, and re-sends
+    `Set-Cookie` + `X-Session-Id` on the response. The "rejected once the flag is off" half is
+    already handled by `validate_session` (the §2.14.B step-6 fail-safe) — not re-checked here.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        settings = get_settings()
+        client_host = request.client.host if request.client else None
+        already_authed = bool(
+            request.cookies.get(SESSION_COOKIE_NAME) or request.headers.get(SESSION_HEADER_NAME)
+        )
+        if (
+            not settings.auth_bypass_enabled
+            or client_host not in LOCALHOST_HOSTS
+            or is_csrf_exempt(request.url.path)  # full §2.11 skip-list, not just the auth paths
+            or already_authed
+        ):
+            return await call_next(request)
+
+        async with async_session_factory() as db:
+            session = await ensure_dev_session(db, ip=client_host)
+            session_id = session.id
+            await db.commit()
+
+        # Inject the session on the REQUEST (lowercased ASGI header bytes) so the inner CSRF
+        # middleware + get_current_person resolve it via the X-Session-Token fallback (§2.3).
+        request.scope["headers"].append(
+            (SESSION_HEADER_NAME.lower().encode("latin-1"), session_id.encode("latin-1"))
+        )
+
+        response = await call_next(request)
+        set_session_cookie(response, session_id)
+        response.headers[DEV_SESSION_ID_HEADER] = session_id
         return response

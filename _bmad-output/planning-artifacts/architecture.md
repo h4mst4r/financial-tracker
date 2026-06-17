@@ -395,6 +395,14 @@ person is in a household again), seeds the base `SGD` `Currency`, and seeds defa
 categories via `category_service.seed_default_categories`. The invitation-accept path likewise
 clears `detachment_reason`/`detached_at` when it sets `household_id`.
 
+> **`SGD` / `Asia/Singapore` are *defaults*, not a hardcoded final value.** The callback runs
+> server-side and cannot prompt, so it seeds these defaults; the owner then sets the real
+> timezone / date-format / **base currency** in the first-login **New Household modal** (FR-HH-001,
+> `isFirstLogin`-gated). Because a freshly-seeded household has zero transactions, applying a
+> different base currency there is a clean base-`Currency` row replace + `Household.base_currency`
+> update with **no** `amount_base` recompute (the recompute path, FR-CU-005, is only for *changing*
+> base currency on an established household).
+
 ### 2.7 Approved Owners
 
 **Decision:** household-creation rights are governed by an explicit allowlist table, not
@@ -1108,11 +1116,29 @@ CHECK `depth <= 1` (max 2 levels). Index: `(household_id, parent_id)`.
 - **Reassign:** a subcategory → a different top-level parent by updating `parent_id` (`depth`
   stays 1).
 - **Spending rollup:** a parent's totals include all child-category spending.
-- **Seed:** **13 starter categories** seeded idempotently at household creation — **Expense (10):**
-  Food & Dining, Groceries, Transport, Housing, Utilities, Healthcare, Shopping, Entertainment,
-  Insurance, Education · **Income (2):** Salary, Investment Income · **Both (1):** Miscellaneous.
-  All household-specific; **no system categories exist**; all owner-editable. This is the
-  authoritative seed list (UX §6, epics Story 3.1).
+- **Seed:** **13 starter categories** seeded idempotently at household creation (first built in
+  Story 2.3's `category_service.seed_default_categories`; reused by the FR-C-007 recovery button in
+  Story 3.3). All household-specific; **no system categories exist**; all owner-editable; all
+  top-level (`parent_id=null`, `depth=0`). This is the **authoritative seed table** (names, types,
+  colours, icons) — `Category.color` is NOT NULL, so a colour is mandatory; `icon` is the emoji:
+
+  | # | name | category_type | color | icon |
+  |---|---|---|---|---|
+  | 1 | Food & Dining | expense | `#f59e0b` | 🍔 |
+  | 2 | Groceries | expense | `#22c55e` | 🛒 |
+  | 3 | Transport | expense | `#3b82f6` | 🚇 |
+  | 4 | Housing | expense | `#8b5cf6` | 🏠 |
+  | 5 | Utilities | expense | `#06b6d4` | 💡 |
+  | 6 | Healthcare | expense | `#ef4444` | 🏥 |
+  | 7 | Shopping | expense | `#ec4899` | 🛍 |
+  | 8 | Entertainment | expense | `#6366f1` | 🎬 |
+  | 9 | Insurance | expense | `#14b8a6` | 🛡 |
+  | 10 | Education | expense | `#a855f7` | 🎓 |
+  | 11 | Salary | income | `#16a34a` | 💰 |
+  | 12 | Investment Income | income | `#0ea5e9` | 📈 |
+  | 13 | Miscellaneous | both | `#64748b` | 📦 |
+
+  (UX §6, epics Stories 2.3 / 3.1 / 3.3.)
 
 ### 3.8 Currencies, Formulas
 
@@ -1140,12 +1166,15 @@ api_key_secret_ref(str — a Secret Manager resource name, NEVER the key), prior
 is_enabled(bool, def true), last_status(enum ok|stale|down, null), last_checked_at(null)`.
 Ordered by `priority` = the fetch fallback chain (§5.7). **The API key value is never stored
 here nor returned by any endpoint** — only the secret reference; GET masks it. **Default provider
-seeded at household creation** (`_create_and_seed_household`, §2.6, alongside the base currency and
-default categories): a single `openexchangerates` row, `priority=0`, `is_enabled=true`,
-`api_key_secret_ref` pointing at the `EXCHANGERATE_API_KEY` secret. If that env/secret is unset,
-the row is still created `is_enabled=false` (no usable chain → FX uses last-known/seed rates and
-raises `FX_API_DOWN` per §5.7) rather than being skipped — so the Integrations UI (UX §5.2) always
-has a row to configure. Seeding is idempotent (keyed on `(household_id, provider_type)`).
+seeding is owned by Story 3.6 (FX Provider Configuration), NOT by `_create_and_seed_household`
+(§2.6).** The household-creation seed in Story 2.3 deliberately seeds only the base currency + default
+categories (the `base_url` literal and the openexchangerates-vs-exchangerate-api provider identity are
+unresolved at that point, and FX config is 3.6's subject). 3.6 ensures a single `openexchangerates`
+row, `priority=0`, `api_key_secret_ref` pointing at the `EXCHANGERATE_API_KEY` secret; `is_enabled=true`
+when that env/secret is set, else `is_enabled=false` (no usable chain → FX uses last-known/seed rates
+and raises `FX_API_DOWN` per §5.7) rather than being skipped — so the Integrations UI (UX §5.2) always
+has a row to configure. Seeding is idempotent (keyed on `(household_id, provider_type)`), so 3.6 can
+seed-on-first-need and backfill any 2.3-created household with no migration.
 
 **`formulas`** (BaseEntity) — `name, formula_key(str, machine key e.g.
 `depreciation_straight_line`), expression(text), applies_to(str), variables(JSON — variable

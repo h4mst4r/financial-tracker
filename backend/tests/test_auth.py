@@ -343,7 +343,8 @@ async def test_callback_failures_redirect_oauth_error(monkeypatch):
         resp = client.get(f"/auth/callback?code=abc&state={state}", follow_redirects=False)
         assert resp.status_code == 302 and "error=oauth_error" in resp.headers["location"]
 
-        # (c) NotInvitedError (person without a household)
+        # (c) NotInvitedError (never-invited identity, no detachment_reason) → ?error=not_invited
+        # (as of Story 2.3 the callback maps NotInvitedError by detachment_reason, §2.6 step 4).
         monkeypatch.setattr(
             auth,
             "_verify_id_token",
@@ -351,7 +352,7 @@ async def test_callback_failures_redirect_oauth_error(monkeypatch):
         )
         client.cookies.set(auth.OAUTH_STATE_COOKIE, state)
         resp = client.get(f"/auth/callback?code=abc&state={state}", follow_redirects=False)
-        assert resp.status_code == 302 and "error=oauth_error" in resp.headers["location"]
+        assert resp.status_code == 302 and "error=not_invited" in resp.headers["location"]
     finally:
         await engine.dispose()
 

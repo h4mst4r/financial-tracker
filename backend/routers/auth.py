@@ -1,26 +1,30 @@
-"""Auth transport — OAuth login + callback (ARCH §2.2).
+"""Auth transport — OAuth login + callback + dev-login (ARCH §2.2/§2.5).
 
 Thin transport only: build/verify the `oauth_state` cookie and the `session_id` cookie,
-delegate all logic to `services/auth.py`. Both endpoints are rate-limited 20/min per IP
-(§2.10) and the callback **never** returns a 500 — every failure 302s to
-`?error=oauth_error` (§2.2). `/auth/dev-login`, `/auth/me`, `/auth/logout`, and the CSRF/
-security middleware land in Stories 2.2/2.3/2.4a.
+delegate all logic to `services/auth.py`. The OAuth endpoints are rate-limited 20/min per IP
+(§2.10) and the callback **never** returns a 500 — a never-invited identity 302s to the
+detachment-aware `?error=` code (§2.6 step 4), any other failure to `?error=oauth_error`.
+`/auth/me` and `/auth/logout` land in Story 2.4a.
 """
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_settings
 from backend.database import get_db
+from backend.errors import problem
 from backend.rate_limit import AUTH_RATE_LIMIT, limiter
 from backend.services import auth as auth_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Detachment reason (§3.4) → the public `?error=` code (§2.6 step 4, §5.8). Default: not_invited.
+_DETACHMENT_ERROR_CODES = {"household_deleted": "household_deleted", "removed": "removed"}
 
 
 def _secure_cookies() -> bool:
@@ -55,7 +59,9 @@ async def callback(
 ) -> RedirectResponse:
     """Verify state → exchange → validate → person → seed → session (§2.2 step 2).
 
-    Any failure 302s to `{FRONTEND_URL}/login?error=oauth_error` — never a 500.
+    Never a 500: a `NotInvitedError` 302s to `?error=` chosen from `detachment_reason`
+    (`not_invited`/`removed`/`household_deleted`, §2.6 step 4); any other failure →
+    `?error=oauth_error`.
     """
     settings = get_settings()
     cookie_state = request.cookies.get(auth_service.OAUTH_STATE_COOKIE)
@@ -75,6 +81,15 @@ async def callback(
             ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
+    except auth_service.NotInvitedError as exc:
+        # Valid identity, no household rights (§2.6 step 4) — pick the page from detachment_reason.
+        code_param = _DETACHMENT_ERROR_CODES.get(exc.detachment_reason, "not_invited")
+        logger.warning("oauth_callback_not_invited", extra={"reason": exc.detachment_reason})
+        failure = RedirectResponse(
+            f"{settings.frontend_url}/login?error={code_param}", status_code=302
+        )
+        failure.delete_cookie(auth_service.OAUTH_STATE_COOKIE, path="/auth/callback")
+        return failure
     except Exception as exc:
         # Never a 500 to the user (§2.2) — but log the cause (no PII) so failures aren't silent.
         logger.warning("oauth_callback_failed", extra={"error_type": type(exc).__name__})
@@ -95,4 +110,35 @@ async def callback(
         path="/",
     )
     response.delete_cookie(auth_service.OAUTH_STATE_COOKIE, path="/auth/callback")
+    return response
+
+
+@router.post("/dev-login")
+async def dev_login(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """Mint/return the dev session (ARCH §2.5). 404 when `AUTH_BYPASS_ENABLED` is off.
+
+    Returns a minimal ack; the SPA fetches the full `/auth/me` payload afterward (§2.2). The
+    `/auth/me`-shaped body and any refactor to share it land in Story 2.4a.
+    """
+    if not get_settings().auth_bypass_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail=problem(
+                type_="not_found",
+                title="Not found",
+                status=404,
+                detail="Not found",
+                instance=request.url.path,
+            ),
+        )
+
+    session = await auth_service.ensure_dev_session(
+        db, ip=request.client.host if request.client else None
+    )
+    response = JSONResponse({"status": "ok", "personId": session.person_id})
+    auth_service.set_session_cookie(response, session.id)
+    response.headers[auth_service.DEV_SESSION_ID_HEADER] = session.id
     return response
