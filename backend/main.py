@@ -12,9 +12,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from backend.config import get_settings
 from backend.errors import problem
+from backend.middleware import CSRFMiddleware, SecurityHeadersMiddleware
 from backend.rate_limit import limiter
 from backend.routers import auth as auth_router
 
@@ -27,7 +29,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Financial Tracker", debug=settings.debug)
 
-    # ── Rate limiter (ARCH §2.10) — full middleware stack lands in Story 2.2 ──
+    # ── Rate limiter (ARCH §2.10) ──
     app.state.limiter = limiter
 
     @app.exception_handler(RateLimitExceeded)
@@ -42,6 +44,14 @@ def create_app() -> FastAPI:
                 instance=request.url.path,
             ),
         )
+
+    # ── Middleware stack (ARCH §2.1) — Starlette runs LIFO, so the LAST add_middleware
+    # is the OUTERMOST. Add in reverse to get runtime order:
+    #   SecurityHeaders → (DevBypass, Story 2.3) → CSRF → SlowAPI → handler.
+    app.add_middleware(SlowAPIMiddleware)
+    app.add_middleware(CSRFMiddleware)
+    # DevBypassMiddleware slots HERE in Story 2.3 (between CSRF and SecurityHeaders).
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # ── Global exception handlers (RFC 7807, ARCH §4.6) ──
 

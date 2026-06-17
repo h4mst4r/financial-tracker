@@ -1,8 +1,10 @@
 """Dependency injection helpers (ARCH §4.4).
 
 `get_or_404` — household-scoped entity lookup.
-`get_current_person` — auth dependency (Story 2.1): validates the session, stashes the
-`(person, session)` tuple on `request.state.auth`, and re-sends the sliding cookie.
+`get_current_person` — auth dependency. As of Story 2.2 the single per-request
+`validate_session` + sliding-cookie re-send live in the CSRF middleware; this dependency
+is primarily a `request.state.auth` reader, falling back to validate-and-set-cookie for
+CSRF-exempt routes the middleware skipped.
 `get_household_id` / `require_role` still land in later Epic-2 stories (2.4a / role work).
 """
 
@@ -20,7 +22,7 @@ from backend.models.identity import Person
 from backend.services.auth import (
     SESSION_COOKIE_NAME,
     SESSION_HEADER_NAME,
-    SESSION_TTL,
+    set_session_cookie,
     validate_session,
 )
 
@@ -60,10 +62,11 @@ async def get_current_person(
     """Resolve the authenticated person (ARCH §2.1/§2.3/§2.4).
 
     Reads `request.state.auth` if the CSRF middleware already validated the session
-    (Story 2.2); otherwise reads the session id from the cookie first, then the
-    `X-Session-Token` header (the dev-bypass fallback), validates it, stashes the
-    `(person, session)` tuple on `request.state.auth`, and re-sends the sliding
-    session cookie so the browser lifetime tracks `expires_at`. Raises 401 if absent.
+    (the normal path, Story 2.2). On the fallback path — a CSRF-exempt request the
+    middleware skipped — reads the session id from the cookie first, then the
+    `X-Session-Token` header, validates it, stashes the `(person, session)` tuple on
+    `request.state.auth`, and re-sends the sliding session cookie so the browser
+    lifetime tracks `expires_at`. Raises 401 if absent.
     """
     cached = getattr(request.state, "auth", None)
     if cached is not None:
@@ -80,13 +83,5 @@ async def get_current_person(
 
     person, session = result
     request.state.auth = result
-    response.set_cookie(
-        SESSION_COOKIE_NAME,
-        session.id,
-        max_age=int(SESSION_TTL.total_seconds()),
-        httponly=True,
-        samesite="lax",
-        secure=not get_settings().debug,
-        path="/",
-    )
+    set_session_cookie(response, session.id)
     return person

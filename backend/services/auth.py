@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 import httpx
+from fastapi import Response
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from sqlalchemy import func, select
@@ -37,6 +38,51 @@ DEV_USER_AGENT = "dev-bypass"
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"  # nosec B105 (URL, not a secret)
 GOOGLE_SCOPES = "openid email profile"
+
+# ── Middleware skip-list (ARCH §2.4 / §2.11) — single source of truth ──
+# Prefixes that bypass ALL middleware (§2.11); paths that mint/need no session (§2.4 b);
+# the machine-to-machine job prefix (§2.4 c). Consumed by the CSRF middleware.
+ALL_MIDDLEWARE_SKIP_PREFIXES = (
+    "/health",
+    "/static/",
+    "/assets/",
+    "/docs/",
+    "/redoc/",
+    "/openapi.json",
+)
+PUBLIC_AUTH_PATHS = ("/auth/login", "/auth/callback", "/auth/dev-login")
+JOB_PATH_PREFIX = "/jobs/"
+
+
+def is_csrf_exempt(path: str) -> bool:
+    """Path-only CSRF/auth-middleware exemption test (ARCH §2.4 a/b/c, §2.11).
+
+    `/auth/me` and `/auth/logout` are intentionally NOT exempt — they require auth and
+    `/auth/logout` is CSRF-protected like any mutation. The method gate lives in the
+    middleware, so safe methods to non-exempt paths still get their session validated.
+    """
+    return (
+        path.startswith(ALL_MIDDLEWARE_SKIP_PREFIXES)
+        or path in PUBLIC_AUTH_PATHS
+        or path.startswith(JOB_PATH_PREFIX)
+    )
+
+
+def set_session_cookie(response: Response, session_id: str) -> None:
+    """Re-send the sliding `session_id` cookie (ARCH §2.3) — the one place its attrs live.
+
+    Called by the CSRF middleware (validated requests) and by `get_current_person`
+    (its fallback path) so the browser cookie lifetime tracks the DB `expires_at`.
+    """
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        session_id,
+        max_age=int(SESSION_TTL.total_seconds()),
+        httponly=True,
+        samesite="lax",
+        secure=not get_settings().debug,
+        path="/",
+    )
 
 
 class NotInvitedError(Exception):

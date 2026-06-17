@@ -243,7 +243,7 @@ async def test_get_or_create_person_no_merge_when_unverified():
 # ── HTTP: callback (never-500) + get_current_person + rate limit ──
 
 
-def _client_with_db(factory) -> TestClient:
+def _client_with_db(factory, monkeypatch=None) -> TestClient:
     app = create_app()
 
     async def _override_get_db():
@@ -256,6 +256,11 @@ def _client_with_db(factory) -> TestClient:
                 raise
 
     app.dependency_overrides[get_db] = _override_get_db
+    # The CSRF middleware validates against its own `async_session_factory` (imported
+    # directly, outside DI) — point it at the temp DB so non-exempt routes don't hit the
+    # real financial_tracker.db. Exempt routes (/auth/*) skip the middleware entirely.
+    if monkeypatch is not None:
+        monkeypatch.setattr("backend.middleware.async_session_factory", factory)
 
     async def _protected(person: Person = Depends(get_current_person)) -> dict:
         return {"person_id": person.id}
@@ -351,7 +356,7 @@ async def test_callback_failures_redirect_oauth_error(monkeypatch):
         await engine.dispose()
 
 
-async def test_get_current_person_cookie_header_and_401():
+async def test_get_current_person_cookie_header_and_401(monkeypatch):
     engine, factory = await _make_factory()
     try:
         person_id, _sub, _email = await _seed_household_member(factory)
@@ -362,7 +367,7 @@ async def test_get_current_person_cookie_header_and_401():
             await db.commit()
             sid = session.id
 
-        client = _client_with_db(factory)
+        client = _client_with_db(factory, monkeypatch)
 
         # cookie path → 200 + re-sent sliding cookie
         client.cookies.set(auth.SESSION_COOKIE_NAME, sid)
