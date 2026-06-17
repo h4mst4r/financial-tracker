@@ -6,6 +6,10 @@ extend-exclude = ["venv", "frontend", "_bmad", "_bmad-output", ".agents", ".clau
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's DI idiom is `param = Depends(...)` in defaults — not a B008 mutable-default bug.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["backend/tests"]

@@ -5,6 +5,7 @@ pydantic==2.13.4
 pydantic-settings==2.14.1
 httpx==0.28.1
 slowapi==0.1.9
+google-auth==2.41.1  # ID-token validation (ARCH §1.6/§2.2) — confidential client, not authlib
 
 # Persistence — listed now; engine/migrations wired in Story 1.2
 SQLAlchemy==2.0.50

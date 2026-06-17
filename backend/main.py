@@ -11,8 +11,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
 
 from backend.config import get_settings
+from backend.errors import problem
+from backend.rate_limit import limiter
+from backend.routers import auth as auth_router
 
 # Built frontend bundle copied here by the Docker build (Stage 1 → frontend_dist).
 # Absent in local dev, where Vite serves the frontend directly.
@@ -22,6 +26,22 @@ FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend_dist"
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Financial Tracker", debug=settings.debug)
+
+    # ── Rate limiter (ARCH §2.10) — full middleware stack lands in Story 2.2 ──
+    app.state.limiter = limiter
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content=problem(
+                type_="rate_limited",
+                title="Too many requests",
+                status=429,
+                detail="Rate limit exceeded",
+                instance=request.url.path,
+            ),
+        )
 
     # ── Global exception handlers (RFC 7807, ARCH §4.6) ──
 
@@ -73,6 +93,8 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.include_router(auth_router.router)
 
     # ── Static + SPA fallback LAST ──
     if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "assets").is_dir():

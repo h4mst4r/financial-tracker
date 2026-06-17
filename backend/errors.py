@@ -103,6 +103,23 @@ def bad_request(
     )
 
 
+def unauthorized(
+    detail: str = "Authentication required",
+    instance: str | None = None,
+) -> None:
+    """Raise 401 Unauthorized — no/invalid/expired session."""
+    raise HTTPException(
+        status_code=401,
+        detail=problem(
+            type_="unauthorized",
+            title="Authentication required",
+            status=401,
+            detail=detail,
+            instance=instance,
+        ),
+    )
+
+
 def forbidden(
     detail: str,
     instance: str | None = None,
