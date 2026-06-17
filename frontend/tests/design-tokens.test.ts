@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { describe, it, expect } from 'vitest'
 
 // Guards against the Tailwind v4 token/class collision documented in
 // .claude/reference/frontend.md §1.4a. A colour token whose name starts with a utility

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useState } from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { Home } from 'lucide-react'
 import {
   Badge,
   Avatar,
@@ -19,7 +20,6 @@ import {
 } from '../src/components/primitives'
 import { useAlertStore } from '../src/stores/alertStore'
 import { ToastContainer } from '../src/components/ToastContainer'
-import { Home } from 'lucide-react'
 
 function wrap(el: React.ReactElement) {
   return <MemoryRouter>{el}</MemoryRouter>

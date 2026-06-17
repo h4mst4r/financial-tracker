@@ -1,5 +1,18 @@
 import { useState, type CSSProperties } from 'react'
 import {
+  Home,
+  Settings,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Copy,
+  Archive,
+  SearchX,
+  Wallet,
+  Star,
+  LineChart,
+} from 'lucide-react'
+import {
   Button,
   Input,
   Label,
@@ -33,19 +46,6 @@ import {
   DESIGN_SYSTEM_GROUPS,
   DESIGN_SYSTEM_SECTIONS,
 } from './designSystemSections'
-import {
-  Home,
-  Settings,
-  MoreVertical,
-  Edit,
-  Trash2,
-  Copy,
-  Archive,
-  SearchX,
-  Wallet,
-  Star,
-  LineChart,
-} from 'lucide-react'
 
 const densityOptions = [
   { value: 'comfortable', label: 'Comfortable' },

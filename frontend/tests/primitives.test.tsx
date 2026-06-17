@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { Home, Settings } from 'lucide-react'
 import {
   Button,
   Input,
@@ -11,7 +12,6 @@ import {
   SegmentedControl,
   Icon,
 } from '../src/components/primitives'
-import { Home, Settings } from 'lucide-react'
 import { useThemeStore } from '../src/stores/themeStore'
 
 function wrap(el: React.ReactElement) {

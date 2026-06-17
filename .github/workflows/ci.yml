@@ -42,6 +42,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: ESLint (JS/TS correctness — no any, import order, rules-of-hooks)
+        run: npm run lint:js
       - name: Typecheck (strict TS, no any)
         run: npm run typecheck
       - name: Stylelint (CSS correctness — not covered by vitest)

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { describe, it, expect } from 'vitest'
 
 // Anti-drift guard (CLAUDE.md P5). The UX spec (§0.2) is the source of truth for exact values; the
 // bible renders them and the app implements them — so the bible's palette and the app's

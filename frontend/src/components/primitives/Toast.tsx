@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
-import type { ToastVariant } from '../../stores/alertStore'
 import { Info, Check, AlertTriangle, XCircle, X } from 'lucide-react'
+import type { ToastVariant } from '../../stores/alertStore'
 
 interface ToastProps {
   variant: ToastVariant

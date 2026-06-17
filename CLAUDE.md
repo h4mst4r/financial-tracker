@@ -51,7 +51,7 @@ Every story, every time, in order:
 8. **Check off ACs** — update the story file in `stories/` with `[x]` (do NOT edit `epics.md`)
 9. **Update sprint-status.yaml** — set story to `done` (sole source of truth for status)
 
-**Definition of Done (frontend):** All ACs checked AND visual verification passed. Gate green: `npm run typecheck && npm run lint:css && npm run test && npm run build` (lint:css = `stylelint`; CSS is NOT covered by the JS tests).
+**Definition of Done (frontend):** All ACs checked AND visual verification passed. Gate green: `npm run lint && npm run test && npm run build` (`lint` = `eslint` (JS/TS — no `any`, import order, rules-of-hooks) + `tsc --noEmit` (types) + `stylelint` (CSS); the eslint/stylelint layers catch what the JS tests can't). Run a single layer with `lint:js` / `typecheck` / `lint:css`.
 
 **Constraints (apply throughout):**
 - No error handling for impossible cases — trust framework / SQLAlchemy guarantees
