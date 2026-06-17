@@ -1,9 +1,10 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Star, MoreVertical, Check } from 'lucide-react'
+import { MoreVertical, Check } from 'lucide-react'
 import { ContextMenu } from '../primitives/ContextMenu'
 import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { Badge } from '../primitives/Badge'
 import { Icon } from '../primitives/Icon'
+import { FavouriteStar } from '../primitives/FavouriteStar'
 import { contrastText } from '../../theme/colour'
 
 // The generic entity card (UX §2, FR-SYS-016) — colour-fill identity (calm/vivid via --entity-colour),
@@ -136,19 +137,11 @@ export function EntityCard({
       {/* Controls cluster — above the overlay (z-raised) so they stay clickable. */}
       <div className="z-raised absolute right-sm top-sm flex items-center gap-xs">
         {onToggleFavourite && (
-          <button
-            type="button"
+          <FavouriteStar
             data-testid="entity-card-favourite"
-            aria-pressed={favourite}
-            aria-label={favourite ? 'Unfavourite' : 'Favourite'}
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleFavourite()
-            }}
-            className="text-favourite flex items-center transition-transform duration-quick hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary"
-          >
-            <Star size={16} fill={favourite ? 'currentColor' : 'none'} aria-hidden />
-          </button>
+            favourite={favourite}
+            onToggle={onToggleFavourite}
+          />
         )}
         {menuItems && menuItems.length > 0 && (
           <ContextMenu

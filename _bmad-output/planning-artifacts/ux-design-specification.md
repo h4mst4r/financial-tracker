@@ -412,9 +412,9 @@ renders its instances through it.
 
 | State | Treatment |
 |---|---|
-| default | calm fill, ⋮ visible, star = outline |
-| hover | lift −2px + shadow; star outline becomes prominent (hover-lift motion, §0.7) |
-| favourited | **solid star**, colour **contrast-aware** (amber/gold default; alternative hue when the card fill is amber/yellow). Favourites **sort first**. |
+| default | calm fill, ⋮ visible, star = **outline gold** (the `--color-favourite` token — outline, not muted) |
+| hover | lift −2px + shadow; star scale-pops (hover-lift + pin-pop motion, §0.7) |
+| favourited | **solid (filled) gold star**, same `--color-favourite` colour, **contrast-aware** (amber/gold default; alternative hue when the card fill is amber/yellow). The favourited vs un-favourited distinction is **fill** (solid vs outline), not colour. Favourites **sort first**. |
 | selected | offset ring (`accent-secondary`) + corner check badge + lift (§0.9) — where multi-select applies |
 | vivid | full-colour fill, contrast-aware text |
 
