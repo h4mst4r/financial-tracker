@@ -95,6 +95,19 @@ describe('/design-system BulkActionBar composite demo (story 1.9c, AC5)', () => 
   })
 })
 
+describe('/design-system MiniSparkline atom demo (story 1.10, AC5)', () => {
+  it('renders the real <MiniSparkline> inside #mini-sparkline', () => {
+    const { container } = render(<DesignSystem />)
+    const section = container.querySelector('section#mini-sparkline')
+    expect(section, 'missing <section id="mini-sparkline">').not.toBeNull()
+    // The real atom's SVG marker (.spark + .spark-line) — not a synthetic <svg> stand-in.
+    expect(
+      section!.querySelector('svg.spark .spark-line'),
+      'MiniSparkline demo is not the real exported component',
+    ).not.toBeNull()
+  })
+})
+
 describe('/design-system section index/nav (story 1.8c, AC1)', () => {
   it('links every demoed section', () => {
     const { container } = render(<DesignSystem />)

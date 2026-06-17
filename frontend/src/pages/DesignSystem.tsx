@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import {
   Button,
   Input,
@@ -15,6 +15,7 @@ import {
   Spinner,
   Skeleton,
   ProgressBar,
+  MiniSparkline,
   Tooltip,
   ContextMenu,
   Modal,
@@ -259,6 +260,7 @@ export function DesignSystem() {
               name="Calm (DBS)"
               hero="S$ 12,840"
               meta="bank · SGD"
+              sparkline={<MiniSparkline data={[30, 28, 30, 22, 18, 14, 12, 9]} />}
               favourite={cardFav}
               onToggleFavourite={() => setCardFav((v) => !v)}
               menuItems={entityCardMenu}
@@ -465,6 +467,42 @@ export function DesignSystem() {
             <ProgressBar value={25} />
             <ProgressBar value={60} />
             <ProgressBar value={100} />
+          </div>
+        </section>
+
+        {/* MiniSparkline — the §9.2 card mini-chart (FR-V-012). Colour comes from --entity-colour (set
+            per-tile here); states: line+delta · bar · <2-points placeholder · loading · onExpand seam. */}
+        <section id="mini-sparkline" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">MiniSparkline</h2>
+          <div className="grid-cols-entity grid gap-md rounded-lg border border-border bg-surface p-md">
+            <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#6366f1' } as CSSProperties}>
+              <div className="text-sm text-text-secondary mb-2xs">Line · rising · delta</div>
+              <MiniSparkline data={[8, 10, 9, 14, 18, 22, 26, 30]} showDelta />
+            </div>
+            <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#ef4444' } as CSSProperties}>
+              <div className="text-sm text-text-secondary mb-2xs">Line · falling · delta</div>
+              <MiniSparkline data={[30, 28, 30, 22, 18, 14, 9, 6]} showDelta />
+            </div>
+            <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#22c55e' } as CSSProperties}>
+              <div className="text-sm text-text-secondary mb-2xs">Bar · discrete (budget months)</div>
+              <MiniSparkline variant="bar" data={[12, 18, 9, 22, 16, 28, 24]} />
+            </div>
+            <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#14b8a6' } as CSSProperties}>
+              <div className="text-sm text-text-secondary mb-2xs">&lt; 2 points</div>
+              <MiniSparkline data={[42]} />
+            </div>
+            <div className="rounded-lg border border-border bg-surface-raised p-md">
+              <div className="text-sm text-text-secondary mb-2xs">Loading</div>
+              <MiniSparkline data={[]} loading />
+            </div>
+            <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#8b5cf6' } as CSSProperties}>
+              <div className="text-sm text-text-secondary mb-2xs">Expandable (Epic-9 seam)</div>
+              <MiniSparkline
+                data={[10, 12, 11, 16, 14, 20, 19, 24]}
+                showDelta
+                onExpand={() => pushToast({ variant: 'info', message: 'Expand → Viewer (Epic 9)' })}
+              />
+            </div>
           </div>
         </section>
 
