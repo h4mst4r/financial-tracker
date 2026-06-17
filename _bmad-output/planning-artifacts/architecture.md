@@ -195,7 +195,8 @@ From the brief and PRD, non-negotiable:
 `react-router-dom` (routing + guards) · `lucide-react` (icons) · `date-fns` (the
 `DD-MM-YYYY` ⇄ ISO display/transport rule, FR-V-010) · `httpx` (server HTTP) ·
 `slowapi` (per-IP rate limiting). Test/quality: `pytest`/`pytest-asyncio`,
-`vitest` + Testing Library, `playwright` (E2E), `ruff` (lint/format), `bandit` +
+`vitest` + Testing Library, `playwright` (E2E), `ruff` (lint/format), `stylelint`
+(CSS correctness — `stylelint-config-recommended`, Tailwind-v4 at-rules allow-listed), `bandit` +
 `pip-audit` (security/CVE).
 
 ### 1.12 Stack summary table
@@ -1921,8 +1922,10 @@ PII in messages** (§4.9). `/health` for Cloud Run liveness. The dev-bypass-in-p
 ### 5.10 CI / security gates (per PRD §4.2)
 
 `ruff` (lint/format) · `pytest` + `pytest-asyncio` + `pytest-cov` (backend) · `vitest` +
-Testing Library (frontend) · `playwright` (E2E) · `bandit` (Python security lint) · `pip-audit`
-(CVE scan) · **OWASP ZAP** on each release — **zero critical findings required to deploy**.
+Testing Library (frontend) · `stylelint` (CSS — rejects malformed CSS the JS test suite can't see, e.g. a
+`*/` that closes a comment early and silently breaks the next `@utility`) · `playwright` (E2E) · `bandit`
+(Python security lint) · `pip-audit` (CVE scan) · **OWASP ZAP** on each release — **zero critical findings
+required to deploy**. The frontend CI job runs typecheck → stylelint → vitest → build → bundle-budget.
 
 ---
 

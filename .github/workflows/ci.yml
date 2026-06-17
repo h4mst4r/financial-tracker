@@ -44,6 +44,8 @@ jobs:
       - run: npm ci
       - name: Typecheck (strict TS, no any)
         run: npm run typecheck
+      - name: Stylelint (CSS correctness — not covered by vitest)
+        run: npm run lint:css
       - name: Unit tests (vitest)
         run: npm test
       - name: Build
