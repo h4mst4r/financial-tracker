@@ -310,6 +310,31 @@
 }
 @utility animate-slide-up { animation: slide-up calc(var(--duration-base) * var(--motion-factor)) ease-out; }
 
+/* ── MiniSparkline (UX §9.2, Bible #entitycard `.spark`). The spark-* colour utilities are full @utility
+   blocks setting fill/stroke directly — NOT the derived colour utilities (which collide with the
+   Tailwind v4 token-to-class parser, §1.4a). Each reads var(--entity-colour) so the sparkline matches the
+   card fill and remaps under immersive themes for free (the consumer sets the variable; the atom only reads
+   it). `h-sparkline` is the footprint height (mirrors the working `h-entity-card`).
+   Ports bible.css `.spark` (height 40px, area opacity .14, line stroke-width 2, end r 2.5).
+   NOTE: keep `*` `/` apart in these comments — a literal star-slash closes the CSS comment early and the
+   next @utility silently breaks (that bug cost real time during 1.10). ── */
+@utility h-sparkline { height: 40px; }
+@utility spark-area  { fill: var(--entity-colour); opacity: 0.14; }
+@utility spark-line  { fill: none; stroke: var(--entity-colour); stroke-width: 2; }
+@utility spark-end   { fill: var(--entity-colour); }
+@utility spark-bar   { fill: var(--entity-colour); }
+
+/* Draw-on-mount for the line stroke (motion-aware via --motion-factor, mirroring animate-shimmer /
+   animate-slide-up). The polyline carries pathLength="1" so dasharray/offset normalise regardless of
+   geometry; offset 1→0 draws it in. * var(--motion-factor) collapses the duration to 0s under
+   reduced-motion, and `forwards` holds the final (fully-drawn) state. (UX §0.7/§9.2) */
+@keyframes spark-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@utility animate-spark-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: spark-draw calc(var(--duration-base) * var(--motion-factor)) ease-out forwards;
+}
+
 /* ═══ Theme palettes — [data-theme] reassigns role-1–3 vars; utilities re-point automatically.
    Base · Dark is the @theme default (no block needed). 'base' resolves to base-light/-dark
    via prefers-color-scheme in useAppearance. (UX §0.2, AC1) ═══ */
@@ -503,3 +528,5 @@
 /* ── Font swap — only --font-sans changes; --font-mono (money) is invariant (AC3) ── */
 [data-font="system"] { --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
 [data-font="mono"]    { --font-sans: var(--font-mono); }
+
+
