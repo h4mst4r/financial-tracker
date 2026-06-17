@@ -51,13 +51,13 @@ Every story, every time, in order:
 8. **Check off ACs** — update the story file in `stories/` with `[x]` (do NOT edit `epics.md`)
 9. **Update sprint-status.yaml** — set story to `done` (sole source of truth for status)
 
-**Definition of Done (frontend):** All ACs checked AND visual verification passed.
+**Definition of Done (frontend):** All ACs checked AND visual verification passed. Gate green: `npm run typecheck && npm run lint:css && npm run test && npm run build` (lint:css = `stylelint`; CSS is NOT covered by the JS tests).
 
 **Constraints (apply throughout):**
 - No error handling for impossible cases — trust framework / SQLAlchemy guarantees
 - No comments explaining WHAT code does — only non-obvious WHY (hidden constraint, workaround, invariant)
 - No `any` in TypeScript — look up the type in existing types files
-- No new Tailwind utilities without a corresponding `@utility` block in `index.css`
+- No new Tailwind utilities without a corresponding `@utility` block in `index.css` (enforced by `stylelint`); never write a literal `*/` inside an `index.css` comment — it closes the comment early and silently breaks the next rule
 
 ---
 

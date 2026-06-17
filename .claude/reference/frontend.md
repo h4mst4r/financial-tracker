@@ -118,6 +118,22 @@ Before switching how a component references a design decision (e.g. inline style
 2. Confirm the new rule comes AFTER any Tailwind shorthand that could override it
 3. If ordering cannot be guaranteed, use inline style (specificity 1-0-0-0, always cascade-immune)
 
+### 1.8a Two distinct CSS failure modes — lint catches one, only a build-grep catches the other
+
+`index.css` is linted by **`stylelint`** (`npm run lint:css`, in CI before the unit tests). It parses the CSS
+and **rejects malformed source** — this is what catches the class of bug that wasted ~90 min in story 1.10: a
+literal **`*/` inside a comment** (e.g. writing `fill-*/stroke-*` in prose) closes the comment early, so the
+text after it becomes invalid CSS and the **next `@utility` silently breaks**. Stylelint flags it as a
+`parseError`; the JS/vitest suite does **not** (JSDOM tests only assert the className is on the element, never
+that the CSS rule emitted). **Rule: never write `*/` — or glob-y `fill-*/stroke-*`, `w-*/h-*` — inside an
+`index.css` comment.**
+
+Stylelint does **not** catch a *silent non-emit* — a custom utility that compiles to nothing (e.g. a §1.4a
+token/class collision where the class is valid-but-dropped). The source is well-formed, so the parser is
+happy. **For "did my new utility actually emit?", the only reliable check is still the §1.8 build-grep:** run
+`npx vite build` and grep the built `dist/assets/index-*.css` for the rule. Do this for every new `@utility`
+or token before marking a story done — green tests + green stylelint are necessary but not sufficient.
+
 ---
 
 ## 2. Component Patterns (full library: UX §1–§8, index UX §7)
