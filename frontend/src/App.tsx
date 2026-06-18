@@ -5,10 +5,12 @@ import { useAuthStore } from './stores/authStore'
 import { DesignSystem } from './pages/DesignSystem'
 import { NeutralShell } from './components/NeutralShell'
 import { NewHouseholdModal } from './components/NewHouseholdModal'
+import { PendingInvitationDialog } from './components/PendingInvitationDialog'
 import { AppShell } from './components/shell/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
+import { JoinHousehold } from './pages/JoinHousehold'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
 
@@ -42,10 +44,12 @@ function GatedApp({
   isLoading,
   authenticated,
   hasHousehold,
+  hasPendingInvitation,
 }: {
   isLoading: boolean
   authenticated: boolean
   hasHousehold: boolean
+  hasPendingInvitation: boolean
 }) {
   if (isLoading) {
     return (
@@ -55,7 +59,16 @@ function GatedApp({
     )
   }
   if (!authenticated) return <Navigate to="/login" replace />
-  if (!hasHousehold) return <NeutralShell />
+  // NULL-household (ARCH §6.5 branch 4): a session reaches here only carrying a pending invite (the
+  // accept/decline gate); after Decline clears it, the branch falls to the Not-Invited page.
+  if (!hasHousehold) {
+    if (!hasPendingInvitation) return <PublicError state="not_invited" />
+    return (
+      <NeutralShell>
+        <PendingInvitationDialog />
+      </NeutralShell>
+    )
+  }
   // In-household app (ARCH §6.5 branch 5): routes render inside the AppShell (Sidebar + Topbar).
   // `/` is the app root (Home until `/dashboard` lands, Epic 9); any other path is an unmatched
   // in-app route → Not Found (ARCH §5.8); real module routes land in Epic 3+. NewHouseholdModal
@@ -81,11 +94,15 @@ export default function App() {
   const { isLoading, authError } = useAuth()
   const currentPerson = useAuthStore((s) => s.currentPerson)
   const household = useAuthStore((s) => s.household)
+  const pendingInvitation = useAuthStore((s) => s.pendingInvitation)
 
   return (
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<LoginRoute authError={authError !== null} />} />
+        {/* Reachable in every auth state (unauth / NULL-household / in-household), before the gated
+            catch-all — the invite link validates the token itself (ARCH §6.5/§6.6). */}
+        <Route path="/join/:token" element={<JoinHousehold />} />
         {import.meta.env.DEV && <Route path="/design-system" element={<DesignSystem />} />}
         <Route
           path="*"
@@ -94,6 +111,7 @@ export default function App() {
               isLoading={isLoading}
               authenticated={currentPerson !== null}
               hasHousehold={household !== null}
+              hasPendingInvitation={pendingInvitation !== null}
             />
           }
         />

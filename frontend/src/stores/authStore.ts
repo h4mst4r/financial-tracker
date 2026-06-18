@@ -11,6 +11,7 @@ interface AuthState {
   setAuth: (me: AuthMe) => void
   clearAuth: () => void
   dismissFirstLogin: () => void
+  clearPendingInvitation: () => void
   setHousehold: (household: Household) => void
 }
 
@@ -46,5 +47,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   // /auth/me — household.created_at is still < 2 min, so a refetch would re-set isFirstLogin true
   // and reopen the modal, Story 2.4c gotcha #1).
   dismissFirstLogin: () => set({ isFirstLogin: false }),
+
+  // Decline routes the NULL-household session to the Not-Invited page — a local clear (no /auth/me
+  // refetch; the dismissFirstLogin pattern). The server already marked the invitation declined.
+  clearPendingInvitation: () => set({ pendingInvitation: null }),
   setHousehold: (household: Household) => set({ household }),
 }))

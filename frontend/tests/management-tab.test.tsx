@@ -26,16 +26,19 @@ function makeResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-/** Route fetch by URL so the two list queries + the PATCH each get the right body. */
-function routeFetch(overrides: { members?: ListResponse<Member>; invitations?: ListResponse<Invitation>; patch?: Household } = {}) {
+/** Route fetch by URL so the list queries + the PATCH each get the right body. The owner/admin path
+ *  reads the token-bearing `…/invitations/manage`; a plain member reads `…/invitations` (Story 2.6b). */
+function routeFetch(overrides: { members?: ListResponse<Member>; invitations?: ListResponse<Invitation>; manage?: ListResponse<unknown>; patch?: Household } = {}) {
   const members = overrides.members ?? MEMBERS
   const invitations = overrides.invitations ?? { items: [], total: 0 }
+  const manage = overrides.manage ?? { items: [], total: 0 }
   return vi.fn(async (url: string | URL, opts?: RequestInit) => {
     const u = String(url)
     if (u === '/api/household' && opts?.method === 'PATCH') {
       return makeResponse(overrides.patch ?? { ...HH, name: 'Renamed' })
     }
     if (u === '/api/household/members') return makeResponse(members)
+    if (u === '/api/household/invitations/manage') return makeResponse(manage)
     if (u === '/api/household/invitations') return makeResponse(invitations)
     throw new Error(`unexpected fetch ${u}`)
   })
@@ -99,14 +102,13 @@ describe('ManagementTab — household config', () => {
 })
 
 describe('ManagementTab — lists', () => {
-  test('members list renders rows; no ⋮ menu / + Invite (P0)', async () => {
+  test('members list renders rows; no ⋮ menu (P0)', async () => {
     renderTab()
     expect(await screen.findByText('Ben Lim')).toBeTruthy()
     expect(screen.getByText('Alex Lim')).toBeTruthy()
     expect(screen.getByText('alex@example.com')).toBeTruthy()
     expect(screen.getByText('owner')).toBeTruthy()
     expect(screen.getByText('admin')).toBeTruthy()
-    expect(screen.queryByText('+ Invite')).toBeNull()
     expect(screen.queryByText('⋮')).toBeNull()
   })
 
@@ -115,7 +117,8 @@ describe('ManagementTab — lists', () => {
     expect(await screen.findByText('No invitations yet')).toBeTruthy()
   })
 
-  test('invitations render rows with status + expiry; no actions', async () => {
+  test('member sees read-only invitations: rows with status + expiry, no actions (2.5 path)', async () => {
+    useAuthStore.setState({ currentPerson: MEMBER })
     fetchMock = routeFetch({
       invitations: {
         items: [{ invitedEmail: 'cara@example.com', status: 'pending', expiresAt: '2026-06-25', createdAt: '2026-06-18' }],
@@ -128,5 +131,8 @@ describe('ManagementTab — lists', () => {
     expect(screen.getByText('pending')).toBeTruthy()
     expect(screen.getByText('25-06-2026')).toBeTruthy()
     expect(screen.queryByText('Revoke')).toBeNull()
+    expect(screen.queryByText('Invite')).toBeNull()
+    // The member-safe endpoint is used, never the token-bearing manage list.
+    expect(fetchMock.mock.calls.some(([u]) => String(u) === '/api/household/invitations/manage')).toBe(false)
   })
 })

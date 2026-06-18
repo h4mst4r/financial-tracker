@@ -25,7 +25,7 @@ describe('PublicPage shell (UX §3)', () => {
 })
 
 describe('PublicError states (bible §3 copy)', () => {
-  it.each(['not_invited', 'access_denied', 'not_found', 'household_deleted', 'removed', 'maintenance'] as const)(
+  it.each(['not_invited', 'access_denied', 'not_found', 'household_deleted', 'removed', 'maintenance', 'invalid_invitation'] as const)(
     'renders %s with its bible title',
     (state) => {
       render(

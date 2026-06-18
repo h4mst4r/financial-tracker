@@ -22,6 +22,27 @@ export interface Invitation {
   createdAt: string
 }
 
+/** An admin/owner invitation row (GET /api/household/invitations/manage). Unlike `Invitation`, it
+ *  carries `invitationId` — the `/join/:token` token — surfaced only behind the role-gated invite
+ *  actions (Story 2.6b). `status` may be the server-derived `"expired"`. */
+export interface InvitationManage {
+  invitationId: string
+  invitedEmail: string
+  status: string
+  expiresAt: string
+  createdAt: string
+}
+
+/** Public token-validation result (GET /api/invitations/:token, always 200). The context fields are
+ *  populated only when `status === 'pending'` (Story 2.6b). */
+export interface InvitationValidation {
+  status: 'pending' | 'invalid'
+  householdName?: string
+  invitedByDisplayName?: string
+  invitedEmail?: string
+  expiresAt?: string
+}
+
 /** The standard list-endpoint envelope (backend.md §2: never a bare array). */
 export interface ListResponse<T> {
   items: T[]

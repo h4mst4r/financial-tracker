@@ -9,9 +9,13 @@ interface ModalProps {
   title?: string
   children: ReactNode
   footer?: ReactNode
+  /** When false, the modal can only be closed by its own footer actions — the X, Escape, and
+   *  backdrop-click dismissals are all suppressed (e.g. a mandatory Accept/Decline choice with no
+   *  surface behind it). Defaults to true. */
+  dismissible?: boolean
 }
 
-export function Modal({ open, onClose, title, children, footer }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, dismissible = true }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const previousFocus = useRef<HTMLElement | null>(null)
   const titleId = useId()
@@ -39,7 +43,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
     const timer = setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 50)
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && dismissible) onClose()
       // Focus trap within panel
       if (e.key === 'Tab') {
         const el = panelRef.current
@@ -76,10 +80,10 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       // Restore focus
       previousFocus.current?.focus()
     }
-  }, [open, onClose])
+  }, [open, onClose, dismissible])
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
+    if (e.target === e.currentTarget && dismissible) {
       onClose()
     }
   }
@@ -112,13 +116,15 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
             <h2 id={titleId} className="text-lg font-medium text-text-primary">
               {title}
             </h2>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="text-text-secondary hover:text-text-primary transition-colors"
-            >
-              <Icon icon={X} size={18} />
-            </button>
+            {dismissible && (
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="text-text-secondary hover:text-text-primary transition-colors"
+              >
+                <Icon icon={X} size={18} />
+              </button>
+            )}
           </div>
         )}
         <div className="px-md py-md">{children}</div>

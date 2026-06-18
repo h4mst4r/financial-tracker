@@ -9,6 +9,7 @@ import {
   Wrench,
   House,
   UserMinus,
+  Ban,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { PublicPageTone } from '../../components/PublicPage'
@@ -26,6 +27,7 @@ export type PublicPageState =
   | 'maintenance'
   | 'household_deleted'
   | 'removed'
+  | 'invalid_invitation'
 
 /** What the page's primary action does. `login` → /login, `home` → /, `reload` → hard refresh. */
 export type PublicPageActionKind = 'login' | 'home' | 'reload'
@@ -128,5 +130,14 @@ export const PUBLIC_PAGE_STATES: Record<PublicPageState, PublicPageConfig> = {
     subtitle: 'You were removed; data preserved for re-invite.',
     actionLabel: 'Sign out',
     actionKind: 'login',
+  },
+  invalid_invitation: {
+    icon: Ban,
+    tone: 'error',
+    title: 'Invite expired',
+    subtitle: 'This invitation is no longer valid.',
+    actionLabel: 'Go to login',
+    actionKind: 'login',
+    actionPrimary: true,
   },
 }
