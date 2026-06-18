@@ -41,6 +41,7 @@ SESSION_TTL = timedelta(minutes=30)
 OAUTH_STATE_TTL = timedelta(minutes=10)
 DEV_SESSION_TTL = timedelta(hours=24)
 DEV_USER_AGENT = "dev-bypass"
+FIRST_LOGIN_WINDOW = timedelta(minutes=2)  # isFirstLogin window after household creation (§2.14.C)
 
 # Dev-bypass synthetic identity (ARCH §2.5) — `google_sub` is spec-fixed; the email is locked here.
 DEV_GOOGLE_SUB = "dev-bypass-user-001"
@@ -442,6 +443,91 @@ async def validate_session(
 
     await db.flush()
     return person, session
+
+
+async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> dict:
+    """Assemble the §2.14.C `/auth/me` payload (camelCase, lockstep with `types/auth.ts`).
+
+    Depends only on the authenticated `(person, session)` — never on household scoping, so a
+    NULL-household (pending-invite) session still resolves to `household: null` + the dialog
+    payload (§2.8). May be reused verbatim by `POST /auth/dev-login` in a later story.
+    """
+    household = None
+    if person.household_id is not None:
+        found = await db.execute(select(Household).where(Household.id == person.household_id))
+        household = found.scalar_one_or_none()
+
+    pending_invitation = None
+    if person.household_id is None:
+        pending_invitation = await _build_pending_invitation(db, person)
+
+    is_first_login = (
+        person.role == "owner"
+        and household is not None
+        and (datetime.now(UTC) - _as_utc(household.created_at)) < FIRST_LOGIN_WINDOW
+    )
+
+    return {
+        "person": {
+            "personId": person.id,
+            "displayName": person.display_name,
+            "email": person.email,
+            "role": person.role,
+            "pictureUrl": person.picture_url,
+            "defaultView": person.default_view,
+            "displayCurrency": person.display_currency,
+            "canCreateHousehold": person.can_create_household,
+        },
+        "household": (
+            {
+                "householdId": household.id,
+                "name": household.name,
+                "baseCurrency": household.base_currency,
+                "timezone": household.timezone,
+            }
+            if household is not None
+            else None
+        ),
+        "csrfToken": session.csrf_token,
+        "pendingInvitation": pending_invitation,
+        "isFirstLogin": is_first_login,
+    }
+
+
+async def _build_pending_invitation(db: AsyncSession, person: Person) -> dict | None:
+    """The first active pending invite for this person's email as the §2.14.C object, else None.
+
+    Same predicate as `seed_household_if_needed` step 2 (§2.6) — `func.lower` email match, status
+    pending, not expired. `token` is the invitation id (the `/join/:token` route consumes it).
+    """
+    now = datetime.now(UTC)
+    found = await db.execute(
+        select(HouseholdInvitation)
+        .where(
+            func.lower(HouseholdInvitation.invited_email) == func.lower(person.email),
+            HouseholdInvitation.status == "pending",
+        )
+        .order_by(HouseholdInvitation.created_at)  # deterministic: oldest pending invite first
+    )
+    for invitation in found.scalars():
+        if _as_utc(invitation.expires_at) <= now:
+            continue
+        household = await db.execute(
+            select(Household).where(Household.id == invitation.household_id)
+        )
+        household = household.scalar_one_or_none()
+        inviter = await db.execute(select(Person).where(Person.id == invitation.invited_by))
+        inviter = inviter.scalar_one_or_none()
+        return {
+            "token": invitation.id,
+            "householdId": invitation.household_id,
+            "householdName": household.name if household is not None else None,
+            "invitedByDisplayName": (inviter.display_name or inviter.email) if inviter else None,
+            "invitedEmail": invitation.invited_email,
+            "expiresAt": _as_utc(invitation.expires_at).isoformat(),
+            "status": invitation.status,
+        }
+    return None
 
 
 async def complete_oauth_login(

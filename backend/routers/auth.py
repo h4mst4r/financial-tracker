@@ -4,7 +4,8 @@ Thin transport only: build/verify the `oauth_state` cookie and the `session_id` 
 delegate all logic to `services/auth.py`. The OAuth endpoints are rate-limited 20/min per IP
 (§2.10) and the callback **never** returns a 500 — a never-invited identity 302s to the
 detachment-aware `?error=` code (§2.6 step 4), any other failure to `?error=oauth_error`.
-`/auth/me` and `/auth/logout` land in Story 2.4a.
+`GET /auth/me` (the §2.14.C contract) lands here (Story 2.4a); `POST /auth/logout` lands with the
+AppShell avatar "sign out" (Story 2.4d).
 """
 
 import logging
@@ -15,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_settings
 from backend.database import get_db
+from backend.dependencies import get_current_person
 from backend.errors import problem
+from backend.models.identity import Person
 from backend.rate_limit import AUTH_RATE_LIMIT, limiter
 from backend.services import auth as auth_service
 
@@ -111,6 +114,22 @@ async def callback(
     )
     response.delete_cookie(auth_service.OAUTH_STATE_COOKIE, path="/auth/callback")
     return response
+
+
+@router.get("/me")
+async def me(
+    request: Request,
+    person: Person = Depends(get_current_person),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the §2.14.C auth payload for the current session (FR-P-001).
+
+    `get_current_person` enforces auth (401 if no session) and sets `request.state.auth =
+    (person, session)`; the session (for `csrfToken`) is read from there — no second validate.
+    Depends only on `get_current_person`, so a NULL-household session still gets 200 (§2.8).
+    """
+    _, session = request.state.auth
+    return await auth_service.build_auth_me(db, person, session)
 
 
 @router.post("/dev-login")
