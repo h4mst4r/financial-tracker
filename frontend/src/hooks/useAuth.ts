@@ -25,6 +25,11 @@ export function useAuth(): UseAuthResult {
       setAuth(me)
       return me
     },
+    // Bootstrap once; never refetch on window-focus/reconnect. A background refetch would call
+    // `setAuth` again and resurrect `isFirstLogin` (household.created_at is still < 2 min), reopening
+    // the New Household modal the user just dismissed/saved (Story 2.4c gotcha #1 — dismissal is local).
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
   return { isLoading: query.isPending, authError: query.error }

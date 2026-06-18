@@ -290,6 +290,26 @@ describe('Modal', () => {
     expect(fn).toHaveBeenCalledTimes(1)
   })
 
+  it('closes on a genuine backdrop click (press + release on the backdrop)', () => {
+    const fn = vi.fn()
+    render(wrap(<Modal open={true} onClose={fn} title="Test">Content</Modal>))
+    const backdrop = screen.getByRole('dialog').parentElement as HTMLElement
+    fireEvent.mouseDown(backdrop)
+    fireEvent.click(backdrop)
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT close when a drag starts inside the panel and releases on the backdrop', () => {
+    const fn = vi.fn()
+    render(wrap(<Modal open={true} onClose={fn} title="Test">Content</Modal>))
+    const dialog = screen.getByRole('dialog')
+    const backdrop = dialog.parentElement as HTMLElement
+    // Press begins on the panel (e.g. selecting text), release lands on the backdrop.
+    fireEvent.mouseDown(dialog)
+    fireEvent.click(backdrop)
+    expect(fn).not.toHaveBeenCalled()
+  })
+
   it('moves focus into the panel on open and restores it to the trigger on close (Task 11)', async () => {
     function Harness() {
       const [open, setOpen] = useState(false)

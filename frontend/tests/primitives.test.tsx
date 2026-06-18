@@ -48,6 +48,13 @@ describe('Button', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
+  it('disabled keeps the variant fill, just dimmed (bible standard, not stripped to transparent)', () => {
+    render(wrap(<Button variant="danger" disabled>Del</Button>))
+    const btn = screen.getByRole('button', { name: 'Del' })
+    expect(btn.className).toContain('bg-error-solid')
+    expect(btn.className).toContain('opacity-50')
+  })
+
   it('renders each variant (smoke)', () => {
     render(wrap(
       <>

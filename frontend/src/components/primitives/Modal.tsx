@@ -18,6 +18,16 @@ interface ModalProps {
 export function Modal({ open, onClose, title, children, footer, dismissible = true }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const previousFocus = useRef<HTMLElement | null>(null)
+  // Where the most recent press started — so a drag that begins inside the panel (e.g. selecting text
+  // in an input) and releases on the backdrop does NOT count as a backdrop dismissal.
+  const mouseDownOnBackdrop = useRef(false)
+  // Read the latest onClose/dismissible from refs inside the open-scoped effect, so a parent re-render
+  // (e.g. typing into a child input, which hands us a fresh onClose closure) does NOT re-run the
+  // focus/scroll-lock effect and yank focus back to the panel mid-type.
+  const onCloseRef = useRef(onClose)
+  const dismissibleRef = useRef(dismissible)
+  onCloseRef.current = onClose
+  dismissibleRef.current = dismissible
   const titleId = useId()
   // Drives the scale+fade entrance (§0.7): mount at scale-95/opacity-0, then flip to final next frame.
   // duration-base carries --motion-factor, so reduce-motion collapses this to instant.
@@ -43,7 +53,7 @@ export function Modal({ open, onClose, title, children, footer, dismissible = tr
     const timer = setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 50)
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissible) onClose()
+      if (e.key === 'Escape' && dismissibleRef.current) onCloseRef.current()
       // Focus trap within panel
       if (e.key === 'Tab') {
         const el = panelRef.current
@@ -80,12 +90,19 @@ export function Modal({ open, onClose, title, children, footer, dismissible = tr
       // Restore focus
       previousFocus.current?.focus()
     }
-  }, [open, onClose, dismissible])
+  }, [open])
+
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    mouseDownOnBackdrop.current = e.target === e.currentTarget
+  }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && dismissible) {
+    // Close only when BOTH the press and the release landed on the backdrop itself — a drag that
+    // started inside the panel (text selection) and ended here must not dismiss the modal.
+    if (e.target === e.currentTarget && mouseDownOnBackdrop.current && dismissible) {
       onClose()
     }
+    mouseDownOnBackdrop.current = false
   }
 
   if (!open) return null
@@ -93,6 +110,7 @@ export function Modal({ open, onClose, title, children, footer, dismissible = tr
   return createPortal(
     <div
       className="fixed inset-0 z-modal flex items-center justify-center p-md"
+      onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
       <div

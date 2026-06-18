@@ -89,6 +89,20 @@ async def get_current_person(
     return person
 
 
+async def get_writable_person(
+    person: Person = Depends(get_current_person),
+    db: AsyncSession = Depends(get_db),
+) -> Person:
+    """Re-load the current person on the route `db` so a route can **mutate** it (backend.md §1.4).
+
+    `get_current_person` hands back a Person attached to the CSRF middleware's already-closed
+    session (detached). Reads are fine, but `person.x = …; await db.flush()` silently no-ops on a
+    detached object. A route that mutates the *current* person (Story 2.7 leave; future
+    self-mutating routes) depends on this instead, so the write lands on the live transaction.
+    """
+    return (await db.execute(select(Person).where(Person.id == person.id))).scalar_one()
+
+
 # Role hierarchy (ARCH §2.8): higher rank == more authority.
 ROLE_RANK = {"member": 1, "admin": 2, "owner": 3}
 

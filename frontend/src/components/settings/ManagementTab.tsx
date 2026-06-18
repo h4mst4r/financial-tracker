@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Lock, MailX, Plus } from 'lucide-react'
+import { Lock, MailX, MoreVertical, Plus, UserMinus } from 'lucide-react'
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
 import { Dropdown } from '../primitives/Dropdown'
@@ -10,9 +10,13 @@ import { Avatar } from '../primitives/Avatar'
 import { Icon } from '../primitives/Icon'
 import { Skeleton } from '../primitives/Skeleton'
 import { EmptyState } from '../primitives/EmptyState'
+import { ContextMenu } from '../primitives/ContextMenu'
+import { ConfirmationDialog } from '../primitives/ConfirmationDialog'
+import { Modal } from '../primitives/Modal'
 import { InviteModal } from './InviteModal'
 import { useAuthStore } from '../../stores/authStore'
 import { useAlertStore } from '../../stores/alertStore'
+import { useLeaveHousehold, useDeleteHousehold } from '../../hooks/useMembershipExit'
 import { api } from '../../api/client'
 import { COMMON_TIMEZONES } from '../../lib/timezones'
 import { formatDateDisplay } from '../../lib/date'
@@ -49,6 +53,7 @@ export function ManagementTab() {
       <HouseholdConfig />
       <MembersSection />
       <InvitationsSection />
+      <DangerZone />
     </div>
   )
 }
@@ -122,10 +127,28 @@ function HouseholdConfig() {
   )
 }
 
+/** Members roster (UX §5.2). Admin/owner viewers get a ⋮ → Remove on every removable row (Path C):
+ *  the owner's row (not removable) and the viewer's own row (use Leave, not Remove) have no ⋮; a plain
+ *  member sees no ⋮ at all. Promote/Demote/Archive are Story 2.8 (P0 — only Remove here). */
 function MembersSection() {
+  const me = useAuthStore((s) => s.currentPerson)
+  const canManage = me?.role === 'owner' || me?.role === 'admin'
+  const pushToast = useAlertStore((s) => s.pushToast)
+  const queryClient = useQueryClient()
+  const [confirmTarget, setConfirmTarget] = useState<Member | null>(null)
+
   const { data, isLoading } = useQuery({
     queryKey: ['household', 'members'],
     queryFn: async () => (await api.get<ListResponse<Member>>('/api/household/members')).data,
+  })
+
+  const removeMember = useMutation({
+    mutationFn: async (personId: string) =>
+      api.post(`/api/household/members/${personId}/remove`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['household', 'members'] })
+      pushToast({ message: 'Member removed', variant: 'success' })
+    },
   })
 
   return (
@@ -135,26 +158,60 @@ function MembersSection() {
         <Skeleton className="h-control" />
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-          {data?.items.map((m) => (
-            <li key={m.personId} className="flex items-center gap-sm px-sm py-sm">
-              <Avatar
-                name={m.displayName ?? m.email}
-                src={m.pictureUrl ?? undefined}
-                colour={m.colour ?? undefined}
-                size={32}
-              />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-medium text-text-primary">
-                  {m.displayName ?? m.email}
-                </span>
-                <span className="truncate text-xs text-text-secondary">{m.email}</span>
-              </div>
-              <Badge variant={ROLE_BADGE[m.role]}>{m.role}</Badge>
-              <Badge variant="success">{m.status}</Badge>
-            </li>
-          ))}
+          {data?.items.map((m) => {
+            const canRemove = canManage && m.role !== 'owner' && m.personId !== me?.personId
+            return (
+              <li key={m.personId} className="flex items-center gap-sm px-sm py-sm">
+                <Avatar
+                  name={m.displayName ?? m.email}
+                  src={m.pictureUrl ?? undefined}
+                  colour={m.colour ?? undefined}
+                  size={32}
+                />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium text-text-primary">
+                    {m.displayName ?? m.email}
+                  </span>
+                  <span className="truncate text-xs text-text-secondary">{m.email}</span>
+                </div>
+                <Badge variant={ROLE_BADGE[m.role]}>{m.role}</Badge>
+                <Badge variant="success">{m.status}</Badge>
+                {canRemove && (
+                  <ContextMenu
+                    trigger={
+                      <span
+                        className="flex items-center text-text-secondary hover:text-text-primary"
+                        aria-label={`Actions for ${m.displayName ?? m.email}`}
+                      >
+                        <Icon icon={MoreVertical} size={16} />
+                      </span>
+                    }
+                    items={[
+                      {
+                        label: 'Remove',
+                        icon: UserMinus,
+                        destructive: true,
+                        onClick: () => setConfirmTarget(m),
+                      },
+                    ]}
+                  />
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
+
+      <ConfirmationDialog
+        open={confirmTarget !== null}
+        onClose={() => setConfirmTarget(null)}
+        onConfirm={() => {
+          if (confirmTarget) removeMember.mutate(confirmTarget.personId)
+        }}
+        title="Remove member"
+        message={`Remove ${confirmTarget?.displayName ?? confirmTarget?.email} from the household? They lose access immediately and can be re-invited later.`}
+        confirmLabel="Remove"
+      />
     </section>
   )
 }
@@ -327,5 +384,113 @@ function AdminInvitationsSection() {
 
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </section>
+  )
+}
+
+/** Danger Zone (UX §5.2, role-conditional). Owner → Delete Household (type-the-name confirm, Path A);
+ *  admin/member → Leave Household (ConfirmationDialog, Path B). Each role sees exactly one control. */
+function DangerZone() {
+  const role = useAuthStore((s) => s.currentPerson?.role)
+  const isOwner = role === 'owner'
+
+  return (
+    <section className="flex flex-col gap-md">
+      {/* Bible §5.2: an error-tinted callout box (error-fill bg + error border) with the heading
+          inside it, not a plain bordered panel. */}
+      <div className="flex flex-col gap-sm rounded-md border border-border-error bg-error-fill p-md">
+        <h2 className="text-lg font-medium text-error">Danger zone</h2>
+        {isOwner ? <DeleteHousehold /> : <LeaveHousehold />}
+      </div>
+    </section>
+  )
+}
+
+function LeaveHousehold() {
+  const [open, setOpen] = useState(false)
+  const leave = useLeaveHousehold()
+
+  return (
+    <div className="flex items-center justify-between gap-md">
+      <div className="flex min-w-0 flex-col">
+        <span className="text-sm font-medium text-text-primary">Leave household</span>
+        <span className="text-xs text-text-secondary">
+          You lose access to this household. Your data is kept and restored if you re-join.
+        </span>
+      </div>
+      <Button variant="danger" onClick={() => setOpen(true)} disabled={leave.isPending}>
+        Leave household
+      </Button>
+      <ConfirmationDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onConfirm={() => leave.mutate()}
+        title="Leave household"
+        message="Leave this household? You'll be signed out and lose access until you're re-invited."
+        confirmLabel="Leave"
+      />
+    </div>
+  )
+}
+
+function DeleteHousehold() {
+  const household = useAuthStore((s) => s.household)
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const del = useDeleteHousehold()
+
+  function close() {
+    setOpen(false)
+    setTyped('')
+  }
+
+  const confirmed = typed === household?.name
+
+  return (
+    <div className="flex items-center justify-between gap-md">
+      <div className="flex min-w-0 flex-col">
+        <span className="text-sm font-medium text-text-primary">Delete household</span>
+        <span className="text-xs text-text-secondary">
+          Permanently deletes the household and all its data, and signs out every member. This cannot
+          be undone.
+        </span>
+      </div>
+      <Button variant="danger" onClick={() => setOpen(true)} disabled={del.isPending}>
+        Delete household
+      </Button>
+      <Modal
+        open={open}
+        onClose={close}
+        title="Delete household"
+        footer={
+          <>
+            <Button variant="ghost" onClick={close} disabled={del.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => del.mutate()}
+              disabled={!confirmed || del.isPending}
+            >
+              Delete household
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-2xs">
+          <p className="text-sm text-text-secondary">
+            This permanently deletes <strong className="text-text-primary">{household?.name}</strong>{' '}
+            and all its data, and signs out every member. This cannot be undone. Type the household
+            name to confirm.
+          </p>
+          <Label htmlFor="delete-confirm">Household name</Label>
+          <Input
+            id="delete-confirm"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            aria-label="Type the household name to confirm"
+          />
+        </div>
+      </Modal>
+    </div>
   )
 }

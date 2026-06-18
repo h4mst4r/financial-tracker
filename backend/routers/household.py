@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.dependencies import get_household_id, require_role
+from backend.dependencies import get_household_id, get_writable_person, require_role
 from backend.models.identity import HouseholdInvitation, Person
 from backend.schemas.household import (
     HouseholdUpdate,
@@ -27,6 +27,7 @@ from backend.schemas.household import (
 from backend.services import auth as auth_service
 from backend.services import household as household_service
 from backend.services import invitation as invitation_service
+from backend.services import membership as membership_service
 
 router = APIRouter(prefix="/api", tags=["household"])
 
@@ -63,6 +64,48 @@ async def patch_household(
     """
     household = await household_service.update_household(db, household_id, person.id, data)
     return auth_service.household_payload(household)
+
+
+@router.delete("/household", status_code=204)
+async def delete_household(
+    person: Person = Depends(_require_owner),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Owner deletes the household — full teardown + detach members + kill all sessions (Path A).
+
+    Hard-deletes every household-scoped row (FR-HH-005), detaches members with
+    `detachment_reason='household_deleted'`, and invalidates every member's sessions (incl. the
+    caller's). Non-owner → 403 via `require_role("owner")`. Irreversible (ARCH §2.8a Path A)."""
+    await membership_service.delete_household(db, household_id, person.id)
+    return Response(status_code=204)
+
+
+@router.post("/household/leave", status_code=204)
+async def leave_household(
+    person: Person = Depends(get_writable_person),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Admin/member leaves the household (Path B). Detaches the caller (`detachment_reason='left'`)
+    and kills their session. An owner gets 409 (delete instead). `get_writable_person` re-loads the
+    caller on the route session so the detach actually persists (backend.md §1.4)."""
+    await membership_service.leave_household(db, person, household_id, person.id)
+    return Response(status_code=204)
+
+
+@router.post("/household/members/{person_id}/remove", status_code=204)
+async def remove_member(
+    person_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Admin/owner removes a member (Path C). Detaches the target (reason `removed`) and kills their
+    sessions. 404 cross-household; 409 owner-target (not removable) or self-target (use leave). The
+    target `Person` survives — re-invite restores access (ARCH §2.8a Path C)."""
+    await membership_service.remove_member(db, household_id, person.id, person_id)
+    return Response(status_code=204)
 
 
 @router.get("/household/members")
