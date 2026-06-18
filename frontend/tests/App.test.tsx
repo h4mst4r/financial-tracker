@@ -73,16 +73,18 @@ test('shows the loading spinner while /auth/me is pending', () => {
   expect(screen.getByRole('status')).toBeInTheDocument()
 })
 
-test('renders the app root for an in-household session', async () => {
+test('renders the app inside the AppShell for an in-household session', async () => {
   fetchMock.mockResolvedValue(makeResponse(IN_HOUSEHOLD))
   renderApp()
-  expect(await screen.findByRole('heading', { name: 'Financial Tracker' })).toBeInTheDocument()
+  expect(await screen.findByTestId('app-shell')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Financial Tracker' })).toBeInTheDocument()
 })
 
-test('renders the neutral shell (no app heading) for a NULL-household session', async () => {
+test('renders the neutral shell (no AppShell) for a NULL-household session', async () => {
   fetchMock.mockResolvedValue(makeResponse({ ...IN_HOUSEHOLD, household: null }))
   renderApp()
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+  expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Financial Tracker' })).not.toBeInTheDocument()
 })
 

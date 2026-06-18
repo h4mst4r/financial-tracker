@@ -22,7 +22,7 @@ import httpx
 from fastapi import Response
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_settings
@@ -95,6 +95,31 @@ def set_session_cookie(response: Response, session_id: str) -> None:
         secure=not get_settings().debug,
         path="/",
     )
+
+
+def clear_session_cookie(response: Response) -> None:
+    """Expire the `session_id` cookie on logout (ARCH §2.14.E step 3).
+
+    Same attrs as `set_session_cookie` but an empty value + `max_age=0`, so the cookie clears
+    deterministically with matching `HttpOnly`/`SameSite`/`Secure`. One source of cookie attrs.
+    """
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        "",
+        max_age=0,
+        httponly=True,
+        samesite="lax",
+        secure=not get_settings().debug,
+        path="/",
+    )
+
+
+async def logout_session(db: AsyncSession, session_id: str) -> None:
+    """Hard-delete the session row (ARCH §2.14.E step 2) — immediate revocation, not a soft flag.
+
+    Idempotent: deleting a missing row is a no-op. Flush-only; the request transaction commits.
+    """
+    await db.execute(delete(Session).where(Session.id == session_id))
 
 
 class NotInvitedError(Exception):

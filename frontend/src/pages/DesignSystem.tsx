@@ -40,6 +40,7 @@ import {
   ConfirmationDialog,
 } from '../components/primitives'
 import { PublicPage } from '../components/PublicPage'
+import { AppShell } from '../components/shell/AppShell'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
 import { useMultiSelect } from '../hooks/useMultiSelect'
@@ -211,6 +212,22 @@ export function DesignSystem() {
 
         {/* ─────────────────────────── Composites (bible #shell) ─────────────────────────── */}
         <GroupHeading>Composites</GroupHeading>
+
+        {/* AppShell — the persistent authenticated chrome (Sidebar + Topbar). Reserved slots for
+            view-context (Epic 9), search + alerts (Epic 10). Clipped to a preview box so the
+            full-height shell doesn't take over the page. Bible #shell. */}
+        <section id="app-shell" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">AppShell</h2>
+          <p className="text-sm text-text-secondary mb-md">
+            Sidebar (grouped nav · bottom Settings) · Topbar avatar menu (profile + sign out).
+            View-context (Epic 9), search &amp; alerts (Epic 10) are reserved slots.
+          </p>
+          <div className="h-appshell-demo overflow-hidden rounded-lg border border-border">
+            <AppShell>
+              <div className="p-md text-text-secondary">Routed page content renders here.</div>
+            </AppShell>
+          </div>
+        </section>
 
         {/* EntityPage — the standardized scaffold (toolbar + filter slot + content slot + states).
             Content tiles are placeholders; EntityCard fills the slot in story 1.9b. */}

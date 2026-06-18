@@ -287,6 +287,18 @@
 /* ── ContextMenu / dropdown min-width (P4: no arbitrary [160px]) ── */
 @utility min-w-menu { min-width: 160px; }
 
+/* ── AppShell sidebar widths (UX §1.1, bible #shell). Fixed layout widths → tokens, not inline px
+   (P4, D-SIZE): expanded column + the ~62px icon-rail (≤ lg). ── */
+@utility w-sidebar      { width: 16rem; }
+@utility w-sidebar-rail { width: 3.875rem; }
+
+/* ── Mobile nav bottom-sheet (UX §1.1, §0.10): height cap + the drag/dismiss handle bar. P4. ── */
+@utility max-h-bottom-sheet { max-height: 80vh; }
+@utility sheet-handle       { width: 2.5rem; height: 0.25rem; }
+
+/* ── /design-system AppShell demo: clipped preview height so the shell doesn't take the page. P4. ── */
+@utility h-appshell-demo { height: 26rem; }
+
 /* ── EntityPage card grid (UX §1.3) — auto-fit/minmax so it drops to fewer columns rather than
    forcing scroll-x on touch (Bible #responsive). P4: no inline grid-template arbitrary value. ── */
 @utility grid-cols-entity { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }

@@ -135,7 +135,10 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 )
 
         response = await call_next(request)
-        if result is not None:
+        # Re-slide the validated session cookie — UNLESS the handler intentionally cleared it
+        # (logout, §2.14.E): set_cookie appends, so re-sliding would add a fresh cookie after the
+        # clearing one and the browser would keep the live session_id.
+        if result is not None and not getattr(request.state, "session_cleared", False):
             set_session_cookie(response, valid_session_id)
         return response
 

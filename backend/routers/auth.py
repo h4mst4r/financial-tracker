@@ -4,13 +4,13 @@ Thin transport only: build/verify the `oauth_state` cookie and the `session_id` 
 delegate all logic to `services/auth.py`. The OAuth endpoints are rate-limited 20/min per IP
 (§2.10) and the callback **never** returns a 500 — a never-invited identity 302s to the
 detachment-aware `?error=` code (§2.6 step 4), any other failure to `?error=oauth_error`.
-`GET /auth/me` (the §2.14.C contract) lands here (Story 2.4a); `POST /auth/logout` lands with the
-AppShell avatar "sign out" (Story 2.4d).
+`GET /auth/me` (the §2.14.C contract) and `POST /auth/logout` (the AppShell avatar "sign out",
+§2.14.E) both land here (Stories 2.4a / 2.4d).
 """
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,6 +130,27 @@ async def me(
     """
     _, session = request.state.auth
     return await auth_service.build_auth_me(db, person, session)
+
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    person: Person = Depends(get_current_person),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Hard-delete the session and clear the cookie (ARCH §2.14.E).
+
+    `get_current_person` enforces auth (401 if no session) and sets `request.state.auth =
+    (person, session)`; CSRF-protected like any mutation (the middleware validated the token).
+    Depends only on `get_current_person`, so a NULL-household session can still log out (§2.8).
+    """
+    _, session = request.state.auth
+    await auth_service.logout_session(db, session.id)
+    # Tell the CSRF middleware NOT to re-slide the session cookie — we are clearing it (§2.14.E).
+    request.state.session_cleared = True
+    response = Response(status_code=204)
+    auth_service.clear_session_cookie(response)
+    return response
 
 
 @router.post("/dev-login")

@@ -5,16 +5,18 @@ import { useAuthStore } from './stores/authStore'
 import { DesignSystem } from './pages/DesignSystem'
 import { NeutralShell } from './components/NeutralShell'
 import { NewHouseholdModal } from './components/NewHouseholdModal'
+import { AppShell } from './components/shell/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Login } from './pages/Login'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
 
-function Placeholder() {
+// Minimal in-shell home until the Dashboard route lands (Epic 9); `/` does not yet redirect.
+function Home() {
   return (
-    <main className="min-h-screen bg-bg text-text-primary">
-      <h1>Financial Tracker</h1>
-    </main>
+    <div className="p-lg text-text-primary">
+      <h1 className="text-2xl font-medium">Financial Tracker</h1>
+    </div>
   )
 }
 
@@ -51,17 +53,20 @@ function GatedApp({
   }
   if (!authenticated) return <Navigate to="/login" replace />
   if (!hasHousehold) return <NeutralShell />
-  // In-household app: `/` is the app root (the Placeholder until the AppShell story, 2.4d); any other
-  // path is an unmatched in-app route → Not Found (ARCH §5.8). Real module routes land in Epic 3+.
-  // NewHouseholdModal self-gates on `isFirstLogin` (Story 2.4c) — route-agnostic, so it survives the
-  // AppShell swap (2.4d).
+  // In-household app (ARCH §6.5 branch 5): routes render inside the AppShell (Sidebar + Topbar).
+  // `/` is the app root (Home until `/dashboard` lands, Epic 9); any other path is an unmatched
+  // in-app route → Not Found (ARCH §5.8); real module routes land in Epic 3+. NewHouseholdModal
+  // self-gates on `isFirstLogin` (Story 2.4c) — route-agnostic, mounted alongside the shell so it
+  // overlays it. The ToastContainer stays outside AppShell (main.tsx, ARCH §6.1).
   return (
     <>
       <NewHouseholdModal />
-      <Routes>
-        <Route path="/" element={<Placeholder />} />
-        <Route path="*" element={<PublicError state="not_found" />} />
-      </Routes>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="*" element={<PublicError state="not_found" />} />
+        </Routes>
+      </AppShell>
     </>
   )
 }
