@@ -22,6 +22,7 @@ from backend.errors import problem
 from backend.middleware import CSRFMiddleware, DevBypassMiddleware, SecurityHeadersMiddleware
 from backend.rate_limit import limiter
 from backend.routers import auth as auth_router
+from backend.routers import household as household_router
 from backend.services.auth import seed_bootstrap_owners
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth_router.router)
+    app.include_router(household_router.router)
 
     # ── Static + SPA fallback LAST ──
     if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "assets").is_dir():

@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth'
 import { useAuthStore } from './stores/authStore'
 import { DesignSystem } from './pages/DesignSystem'
 import { NeutralShell } from './components/NeutralShell'
+import { NewHouseholdModal } from './components/NewHouseholdModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Login } from './pages/Login'
 import { PublicError } from './pages/public/PublicError'
@@ -52,11 +53,16 @@ function GatedApp({
   if (!hasHousehold) return <NeutralShell />
   // In-household app: `/` is the app root (the Placeholder until the AppShell story, 2.4d); any other
   // path is an unmatched in-app route → Not Found (ARCH §5.8). Real module routes land in Epic 3+.
+  // NewHouseholdModal self-gates on `isFirstLogin` (Story 2.4c) — route-agnostic, so it survives the
+  // AppShell swap (2.4d).
   return (
-    <Routes>
-      <Route path="/" element={<Placeholder />} />
-      <Route path="*" element={<PublicError state="not_found" />} />
-    </Routes>
+    <>
+      <NewHouseholdModal />
+      <Routes>
+        <Route path="/" element={<Placeholder />} />
+        <Route path="*" element={<PublicError state="not_found" />} />
+      </Routes>
+    </>
   )
 }
 

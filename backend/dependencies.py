@@ -5,7 +5,9 @@
 `validate_session` + sliding-cookie re-send live in the CSRF middleware; this dependency
 is primarily a `request.state.auth` reader, falling back to validate-and-set-cookie for
 CSRF-exempt routes the middleware skipped.
-`get_household_id` / `require_role` still land in later Epic-2 stories (2.4a / role work).
+`get_household_id` / `require_role` — household-scoping + role-gate seams (ARCH §2.8); first
+consumers are Story 2.4c's `PATCH /api/household` (owner-scoped). Both depend only on
+`get_current_person`.
 """
 
 from uuid import UUID
@@ -85,3 +87,30 @@ async def get_current_person(
     request.state.auth = result
     set_session_cookie(response, session.id)
     return person
+
+
+# Role hierarchy (ARCH §2.8): higher rank == more authority.
+ROLE_RANK = {"member": 1, "admin": 2, "owner": 3}
+
+
+async def get_household_id(person: Person = Depends(get_current_person)) -> str:
+    """Return the authenticated person's `household_id`, raising 401 if NULL (ARCH §2.8).
+
+    Household-scoped routes depend on this; services receive `household_id` as their first
+    positional argument — never trust a request body for scoping. A NULL-household session
+    (pending-invitation user, §2.6 step 2) correctly 401s here.
+    """
+    if person.household_id is None:
+        errors.unauthorized(detail="No household for this session")
+    return person.household_id
+
+
+def require_role(min_role: str):
+    """Dependency factory enforcing a minimum household role (ARCH §2.8); 403 below threshold."""
+
+    async def _require_role(person: Person = Depends(get_current_person)) -> Person:
+        if ROLE_RANK[person.role] < ROLE_RANK[min_role]:
+            errors.forbidden(detail=f"This action requires the {min_role} role")
+        return person
+
+    return _require_role

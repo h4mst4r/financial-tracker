@@ -192,8 +192,8 @@ From the brief and PRD, non-negotiable:
 
 ### 1.11 Supporting libraries (decided, low-controversy)
 
-`react-router-dom` (routing + guards) · `lucide-react` (icons) · `date-fns` (the
-`DD-MM-YYYY` ⇄ ISO display/transport rule, FR-V-010) · `httpx` (server HTTP) ·
+`react-router-dom` (routing + guards) · `lucide-react` (icons) · `date-fns` (per-person
+date display/input ⇄ ISO storage, FR-V-010 / FR-P-009) · `httpx` (server HTTP) ·
 `slowapi` (per-IP rate limiting). Test/quality: `pytest`/`pytest-asyncio`,
 `vitest` + Testing Library, `playwright` (E2E), `ruff` (lint/format), `eslint`
 (JS/TS correctness — flat config: no-`any`, import order, rules-of-hooks), `stylelint`
@@ -396,12 +396,14 @@ categories via `category_service.seed_default_categories`. The invitation-accept
 clears `detachment_reason`/`detached_at` when it sets `household_id`.
 
 > **`SGD` / `Asia/Singapore` are *defaults*, not a hardcoded final value.** The callback runs
-> server-side and cannot prompt, so it seeds these defaults; the owner then sets the real
-> timezone / date-format / **base currency** in the first-login **New Household modal** (FR-HH-001,
-> `isFirstLogin`-gated). Because a freshly-seeded household has zero transactions, applying a
-> different base currency there is a clean base-`Currency` row replace + `Household.base_currency`
-> update with **no** `amount_base` recompute (the recompute path, FR-CU-005, is only for *changing*
-> base currency on an established household).
+> server-side and cannot prompt, so it seeds these defaults; the owner then sets the **household name
+> / timezone** in the first-login **New Household modal** (FR-HH-001, `isFirstLogin`-gated, Story
+> 2.4c). **Base currency is configured in Epic 3, not the modal** (Story 3.9 / FR-CU-005): a
+> freshly-seeded household has zero transactions, so changing the base currency is a clean
+> base-`Currency` row replace + `Household.base_currency` update with **no** `amount_base` recompute
+> any time before the first transaction; the FR-CU-005 recompute path only matters once financial
+> events exist. **Date format is not set here** — it is a per-person preference (`Person.display_format`,
+> FR-P-009 / Story 2.11; default `DD-MM-YYYY`), never a household value.
 
 ### 2.7 Approved Owners
 
@@ -761,8 +763,9 @@ view with no table** (§3.10) — listed here only for conceptual completeness.
    ALL its rows** (accounts, events, categories, budgets, …) — the account-closure path —
    bypassing the "hard-delete only if empty" rule. Member `Person` rows survive with
    `household_id=NULL` (§2.6); do not soft-delete first. See §2.8a Path A.
-5. **Dates** stored/transmitted ISO 8601 (`YYYY-MM-DD`); display `DD-MM-YYYY` is a frontend
-   concern (FR-V-010). Timestamps are tz-aware UTC.
+5. **Dates** stored/transmitted ISO 8601 (`YYYY-MM-DD`); **display + input format is a per-person
+   frontend concern** — each person's `Person.display_format` (default `DD-MM-YYYY`; FR-V-010 /
+   FR-P-009), never affecting storage/transport or CSV export. Timestamps are tz-aware UTC.
 6. **Audit:** every create/update/archive/restore/delete writes an `audit_logs` row
    (except hard-delete of empty entities).
 7. **STI for polymorphic families:** Accounts and FinancialEvents each use **Single Table
@@ -889,10 +892,11 @@ default_view(household|personal), google_sub(unique), last_active_at, can_create
 Also adds `theme` (str, def `'base'`; per-person theme per FR-P-003)
 and `colour` (hex; **fallback** initials-avatar background for payee identity — the Google
 `picture_url` avatar is used first when present). Per-person preference columns
-(FR-P-003 / FR-DB-003): `font` (str, def `'base'`), `density` (`comfortable|compact`, def
-`comfortable`), `reduce_motion` (bool, def false), `notification_prefs` (JSON — per-alert-type
-opt-in map, FR-SYS-007), `dashboard_layout` (JSON — `{widget_type, span, order, scope?}[]`,
-FR-DB-003).
+(FR-P-003 / FR-P-009 / FR-DB-003): `font` (str, def `'base'`), `density` (`comfortable|compact`, def
+`comfortable`), `reduce_motion` (bool, def false), `display_format` (str(20), def `'DD-MM-YYYY'`;
+one of `DD-MM-YYYY | MM-DD-YYYY | YYYY-MM-DD` — per-person date display/input, FR-P-009 / Story 2.11),
+`notification_prefs` (JSON — per-alert-type opt-in map, FR-SYS-007), `dashboard_layout` (JSON —
+`{widget_type, span, order, scope?}[]`, FR-DB-003).
 **Detachment tracking (§2.8a):** `detachment_reason` (enum `left | removed | household_deleted`,
 nullable — NULL while in a household) and `detached_at` (timestamp, nullable) record *why* a
 person's `household_id` went NULL, so re-login can route them to the correct §3 page
@@ -1758,6 +1762,15 @@ restore and unreliable in-process scheduling — are handled in §5.5 and §5.6.
 client-side routes (`/login`, `/accounts`, `/join/:token`) resolve. Built assets are served
 from `/assets/*`, which is already in the middleware skip-list (§2.11). No CORS is needed —
 the browser sees a single origin, matching the CSP (`connect-src 'self'`).
+
+**Dev (two servers).** The same-origin model holds in production because FastAPI serves the built
+SPA. In local dev the SPA runs on the Vite dev server (`:5173`) for HMR while the API runs under
+`uvicorn` (`:8000`), so Vite must **proxy** the backend route prefixes (`/auth`, `/api`, `/health`,
+`/jobs`) to the API server — otherwise the API client's relative-path `fetch`es hit Vite and 404.
+This proxy is configured in `frontend/vite.config.ts` (`server.proxy`, target overridable via
+`VITE_API_TARGET`, default `http://localhost:8000`); it is the same proxy whose `Set-Cookie`
+stripping the dev-bypass `X-Session-Token` path works around (§2.3). Production needs none of this —
+one origin, no proxy.
 
 ### 5.4 Configuration & secrets *(matrix)*
 

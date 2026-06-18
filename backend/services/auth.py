@@ -445,6 +445,17 @@ async def validate_session(
     return person, session
 
 
+def household_payload(household: Household) -> dict:
+    """The §2.14.C `household` object (camelCase). Shared by `build_auth_me` and
+    `PATCH /api/household` so the two never drift."""
+    return {
+        "householdId": household.id,
+        "name": household.name,
+        "baseCurrency": household.base_currency,
+        "timezone": household.timezone,
+    }
+
+
 async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> dict:
     """Assemble the §2.14.C `/auth/me` payload (camelCase, lockstep with `types/auth.ts`).
 
@@ -478,16 +489,7 @@ async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> d
             "displayCurrency": person.display_currency,
             "canCreateHousehold": person.can_create_household,
         },
-        "household": (
-            {
-                "householdId": household.id,
-                "name": household.name,
-                "baseCurrency": household.base_currency,
-                "timezone": household.timezone,
-            }
-            if household is not None
-            else None
-        ),
+        "household": household_payload(household) if household is not None else None,
         "csrfToken": session.csrf_token,
         "pendingInvitation": pending_invitation,
         "isFirstLogin": is_first_login,

@@ -249,6 +249,16 @@ hard-deleted (not archived) — no audit log entry produced.
 *Acceptance:* System checks all FK references before permitting hard delete. If any
 exist, hard delete is blocked and archiving is offered instead.
 
+**FR-P-009 — Date Display Format Preference**
+Any person may choose the date format used to **display and enter** dates throughout the UI,
+independently of other members — e.g. `DD-MM-YYYY` (SG / NZ / AU / UK), `MM-DD-YYYY` (US), or
+`YYYY-MM-DD` (ISO-style). Stored on `persons.display_format` (default `DD-MM-YYYY`). Only rendering and
+input parsing change; **storage and transport remain ISO 8601** (`YYYY-MM-DD`) and CSV export stays ISO
+(FR-V-010). The selector lives in UX §5.1 Profile → App, beside density / reduce-motion.
+*Acceptance:* Changing the preference re-renders every displayed date in the new format for that person
+only and makes date inputs accept the chosen ordering; stored ISO date/`amount` values are unchanged; a
+new person defaults to `DD-MM-YYYY`.
+
 ---
 
 ### FR-A — EntityAccounts
@@ -915,11 +925,14 @@ Toggle between Household and My Finances is persistent across sessions, stored i
 `Person.default_view` (`household` | `personal`) per FR-P-006.
 
 **FR-V-010 — Date Display Format**
-All dates displayed in the UI use `DD-MM-YYYY` format.
-All date inputs accept `DD-MM-YYYY` format.
-All dates are stored and transmitted as ISO 8601 `YYYY-MM-DD`.
-*Acceptance:* A date entered as "27-05-2026" is stored as "2026-05-27".
-A date stored as "2026-01-15" is displayed as "15-01-2026" everywhere in the UI.
+Dates are displayed and entered in **each viewing person's chosen format**
+(`Person.display_format`, default `DD-MM-YYYY`; see FR-P-009) — consistently everywhere in the UI for
+that person.
+All dates are **stored and transmitted as ISO 8601 `YYYY-MM-DD`** regardless of display preference, and
+CSV export uses ISO 8601.
+*Acceptance:* With the default `DD-MM-YYYY`, a date entered "27-05-2026" is stored as "2026-05-27" and a
+date stored "2026-01-15" displays "15-01-2026". A person who selects `MM-DD-YYYY` sees the same stored
+date as "01-15-2026" and enters dates month-first; the stored ISO value is identical for both.
 
 **FR-V-011 — Universal Visualization Viewer**
 A single reusable viewer renders any chartable data set. It is opened either inline

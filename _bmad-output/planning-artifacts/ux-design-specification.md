@@ -536,23 +536,21 @@ Invited** page (§3).
 Shown **once**, automatically, when `/auth/me` returns `isFirstLogin: true` (owner + household
 `created_at` within the last 2 min, architecture §2.14.C) — i.e. immediately after an approved owner's
 first login, over the app shell. It lets the owner replace the **defaults** the server seeded (the
-callback runs server-side and cannot prompt, so `_create_and_seed_household` seeds `SGD` /
-`Asia/Singapore`, architecture §2.6).
+callback runs server-side and cannot prompt, so `_create_and_seed_household` seeds the
+`"<display name>'s Household"` name and `Asia/Singapore` timezone, architecture §2.6).
 
 - Icon (`home-plus`, accent) · title "Set up your household" · body "We've created your household with
   sensible defaults — adjust them now or change later in Settings."
-- Fields (mirrors the §5.2 Management config, **minus** the recompute warning — a brand-new household has
-  no transactions): **household name** · **timezone** · **date format** · **base currency** (the
-  currency picker; the seeded `SGD` is pre-selected).
+- Fields: **household name** · **timezone**.
 - Actions (§4.2 convention): **Skip** (left, ghost — keeps the seeded defaults) / **Save** (right,
   primary).
-- **Save** persists via `PATCH /api/household` (architecture §2.8 owner-scoped). Changing the base
-  currency here is a **clean swap with no recompute** (demote the seeded base `Currency`, promote the
-  chosen one to `is_base`, update `Household.base_currency`) — permitted **only** while the household has
-  zero financial events; this is distinct from the established-household FR-CU-005 path (Settings →
-  Management → base currency + recompute warning), which is delivered in Epic 3.
-- **Dismissible:** Skip / close keeps the SGD defaults (the household already functions). The modal does
-  not reappear (it is `isFirstLogin`-gated, which is false on the next login).
+- **Save** persists via `PATCH /api/household` (architecture §2.8 owner-scoped) — name/timezone only.
+- **Dismissible:** Skip / close keeps the seeded defaults (the household already functions). The modal
+  does not reappear (it is `isFirstLogin`-gated, which is false on the next login).
+- **Base currency is not set here.** It is configured in **Epic 3** (Currencies page / Settings →
+  Management, FR-CU-003/FR-CU-005, Story 3.9): a brand-new household has zero transactions, so the base
+  currency changes with **no recompute** any time before the first transaction. **Date format is not a
+  field** — the UI uses a fixed `DD-MM-YYYY` (FR-V-010), not a per-household/per-person setting.
 
 ---
 
@@ -568,12 +566,16 @@ Single column of personal preferences:
 - **Appearance:** theme picker (swatch dropdown) · font dropdown (`Person.font`).
 - **Notifications:** checkboxes per alert type (`Person.notification_prefs`) — budget
   warnings/overruns, missed recurring, upcoming payments, FX stale, backups.
-- **App:** density toggle (comfortable/compact, §0.4) · reduce-motion toggle (§0.7).
+- **App:** density toggle (comfortable/compact, §0.4) · reduce-motion toggle (§0.7) · **date format**
+  (per-person `Person.display_format`: `DD-MM-YYYY` · `MM-DD-YYYY` · `YYYY-MM-DD`; default `DD-MM-YYYY` —
+  FR-P-009/FR-V-010). This is the **only** date-format control in the app; it is per-person, not a
+  household setting (§5.2 has none).
 
 ### 5.2 Management tab (the household)
 
 - **Household config** (owner-editable; **read-only + lock for others**): name · timezone ·
-  date format · **base currency** + recompute warning (FR-CU-005).
+  **base currency** + recompute warning (FR-CU-005, Epic 3). *(Date format is not configurable — the UI
+  uses a fixed `DD-MM-YYYY`, FR-V-010.)*
 - **Members:** avatar · name+email · role chip · status. **⋮:** Promote/Demote (role change
   owner-only; owner not demotable), **Archive/Restore**, **Remove** (FR-P-005/007). The two are
   distinct: **Archive/Restore** is the in-household lifecycle archive of the Person record
