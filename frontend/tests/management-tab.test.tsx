@@ -17,8 +17,8 @@ const MEMBER: Person = { ...OWNER, personId: 'p2', displayName: 'Mem', email: 'm
 
 const MEMBERS: ListResponse<Member> = {
   items: [
-    { personId: 'p1', displayName: 'Ben Lim', email: 'ben@example.com', role: 'owner', pictureUrl: null, colour: '#6366f1', status: 'active' },
-    { personId: 'p2', displayName: 'Alex Lim', email: 'alex@example.com', role: 'admin', pictureUrl: null, colour: null, status: 'active' },
+    { personId: 'p1', displayName: 'Ben Lim', email: 'ben@example.com', role: 'owner', pictureUrl: null, colour: '#6366f1', status: 'active', canDelete: false },
+    { personId: 'p2', displayName: 'Alex Lim', email: 'alex@example.com', role: 'admin', pictureUrl: null, colour: null, status: 'active', canDelete: false },
   ],
   total: 2,
 }

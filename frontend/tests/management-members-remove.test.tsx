@@ -24,9 +24,9 @@ const PLAIN: Person = { ...base, personId: 'pM', displayName: 'Mem', email: 'mem
 
 const MEMBERS: ListResponse<Member> = {
   items: [
-    { personId: 'pO', displayName: 'Owner', email: 'owner@example.com', role: 'owner', pictureUrl: null, colour: null, status: 'active' },
-    { personId: 'pA', displayName: 'Admin', email: 'admin@example.com', role: 'admin', pictureUrl: null, colour: null, status: 'active' },
-    { personId: 'pM', displayName: 'Mem', email: 'mem@example.com', role: 'member', pictureUrl: null, colour: null, status: 'active' },
+    { personId: 'pO', displayName: 'Owner', email: 'owner@example.com', role: 'owner', pictureUrl: null, colour: null, status: 'active', canDelete: false },
+    { personId: 'pA', displayName: 'Admin', email: 'admin@example.com', role: 'admin', pictureUrl: null, colour: null, status: 'active', canDelete: false },
+    { personId: 'pM', displayName: 'Mem', email: 'mem@example.com', role: 'member', pictureUrl: null, colour: null, status: 'active', canDelete: false },
   ],
   total: 3,
 }

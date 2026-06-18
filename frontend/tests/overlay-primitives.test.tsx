@@ -443,12 +443,13 @@ describe('ToastContainer', () => {
     expect(screen.getByText('Test toast')).toBeInTheDocument()
   })
 
-  it('removes toast on dismiss', () => {
+  it('removes toast on dismiss', async () => {
     useAlertStore.getState().pushToast({ variant: 'error', message: 'Error!' })
     render(wrap(<ToastContainer />))
     expect(screen.getByText('Error!')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByText('Error!')).not.toBeInTheDocument()
+    // Dismiss plays the slide-out, then removes the toast after TOAST_EXIT_MS — so removal is async.
+    await waitFor(() => expect(screen.queryByText('Error!')).not.toBeInTheDocument())
   })
 })
 

@@ -1,8 +1,9 @@
 /** Settings → Management rosters (Story 2.5). camelCase mirrors the §2.14.C person /
  *  pendingInvitation shapes (D-CASE-LISTS). */
 
-/** A household member row (GET /api/household/members). `status` is synthetic ("active") until
- *  Story 2.8 adds the member archive lifecycle. */
+/** A household member row (GET /api/household/members). `status` is the real lifecycle status
+ *  (archived members stay listed); `canDelete` is the per-row FK-emptiness signal for the §5.2
+ *  Delete-if-empty item — `true` only for a non-owner with zero references (Story 2.8). */
 export interface Member {
   personId: string
   displayName: string | null
@@ -10,7 +11,8 @@ export interface Member {
   role: 'owner' | 'admin' | 'member'
   pictureUrl: string | null
   colour: string | null
-  status: string
+  status: 'active' | 'archived'
+  canDelete: boolean
 }
 
 /** A household invitation row (GET /api/household/invitations). No `id`/token — that is the

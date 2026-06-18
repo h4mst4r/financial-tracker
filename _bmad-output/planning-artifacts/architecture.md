@@ -401,6 +401,16 @@ person is in a household again), seeds the base `SGD` `Currency`, and seeds defa
 categories via `category_service.seed_default_categories`. The invitation-accept path likewise
 clears `detachment_reason`/`detached_at` when it sets `household_id`.
 
+**Archived-member login block (FR-P-007, Story 2.8).** An **archived** member keeps `household_id`
+(membership intact — archive is the in-household lifecycle flag `Person.archived`/`status`, §3.1, **not**
+a detachment), so step 1 above would otherwise return and mint a session. `complete_oauth_login`
+therefore adds an explicit guard **after `get_or_create_person`**: if `person.archived`, raise
+`AccountArchivedError` (no session created) → the callback 302s to `?error=account_archived` → the
+**Account Suspended** page (§5.8 / UX §3). This is a distinct redirect from the three `detachment_reason`
+codes (the person is not detached). Defense-in-depth: `validate_session` also returns `None` for an
+archived person, and `archive_member` deletes the member's sessions at archive time (§2.14.B.1). An admin
+**Restore** clears `archived` and re-enables login.
+
 > **`SGD` / `Asia/Singapore` are *defaults*, not a hardcoded final value.** The callback runs
 > server-side and cannot prompt, so it seeds these defaults; the owner then sets the **household name
 > / timezone** in the first-login **New Household modal** (FR-HH-001, `isFirstLogin`-gated, Story
@@ -747,6 +757,7 @@ EntityHousehold
 │
 ├── EntityBudgets                    (monthly/yearly aspirational targets; §3.7)
 ├── EntityCategories                 (household-specific, hierarchical, max 2 levels; §3.7)
+├── EntityTags                       (household-specific, flat, free-form M2M on transactions; §3.7a)
 ├── EntityCurrencies                 (base configurable + daily FX + fees + multi-display; §3.8)
 ├── EntityFormulas                   (system defaults + user-configurable registry; §3.8)
 └── EntityDebt                       (computed view — derived, never stored; §3.10)
@@ -1007,7 +1018,7 @@ link back to the originating account, so FR-A-017 creates a recurring-payment ev
 transaction_status(pending|completed|cancelled|reconciled, def completed),
 payee_person_id(FK persons), payment_method, category_id(FK categories), transaction_type
 (inflow|outflow|transfer), is_shared_expense(bool), notes, is_gst_claimable(bool),
-is_gift(bool), source_account_id(FK accounts, null)` *(the single account link — **no separate
+source_account_id(FK accounts, null)` *(the single account link — **no separate
 `account_id` column**, see note below)*`, linked_recurring_id(FK self)`,
 `source (manual|csv_import|bank_feed, def manual)`, `external_ref(null)` — provenance
 (FR-E-001), bank-feed hook.
@@ -1157,6 +1168,37 @@ CHECK `depth <= 1` (max 2 levels). Index: `(household_id, parent_id)`.
   | 13 | Miscellaneous | both | `#64748b` | 📦 |
 
   (UX §6, epics Stories 2.3 / 3.1 / 3.3.)
+
+### 3.7a Tags
+
+Free-form labels on transactions, **separate from categories** (a transaction has exactly one
+category but **any number of tags**). Tags classify by *nature / controllability* — the dimension
+category can't express (one-off vs recurring, essential vs discretionary, emergency, vacation, gift).
+
+**`tags`** (BaseEntity, household-scoped) — `id, household_id(FK, INDEX), name, slug,
+colour(token ref, def neutral), archived(bool)`. UNIQUE (`household_id, slug`).
+**Full CRUD — every tag can be created, renamed, recoloured, archived, and deleted by any
+member.** There are **no system/protected tags** — nothing is locked. A tag is **always
+hard-deletable** (unlike most entities): its only referrer is `transaction_tags`, whose rows are
+removed with it, so there is no "in use" block — delete simply unlinks it everywhere. `archived` is
+an optional soft-hide for a tag you want to keep but stop offering.
+
+**`transaction_tags`** (join) — `transaction_id(FK financial_events, INDEX),
+tag_id(FK tags, INDEX)`, PK (`transaction_id, tag_id`). Many-to-many. **Deleting a tag just
+removes its join rows** — the affected transactions keep all their data and simply lose that one
+tag (no cascade to the transaction).
+
+> **Starter tags are seeded, not special.** At household creation a convenience set —
+> **Gift · Essential · Discretionary · Emergency · One-off · Vacation** — is inserted as ordinary
+> deletable rows (`is_system` does **not** exist). A household can rename, recolour, or delete any
+> of them and add its own.
+
+> **Tags carry no behaviour — the two behavioural flags stay typed columns.**
+> `is_shared_expense` (sole driver of internal household debt, §3.10; CHECK `outflow only`; dedicated
+> index) and `is_gst_claimable` (tax-report integrity) are **typed booleans, never tags**, precisely
+> because logic keys off them. Tags are pure labels: filtered and visualised (§4.12), never wired
+> into debt, budgets, or reports. `is_gift` (an earlier boolean) is **removed** — "gift" is now just
+> a starter tag.
 
 ### 3.8 Currencies, Formulas
 
@@ -1573,6 +1615,16 @@ DELETE /api/<es>/{id}       -> 204
 seeders; route-ordering (static before parameterized); permission via `require_role` or
 per-row ownership check.
 
+**Tags follow the same template** (`/api/tags`, full CRUD incl. hard-delete — its only referrer is
+`transaction_tags`, whose rows are removed with it, so a tag is **always** deletable). The
+**transaction** create/edit payload carries `tag_ids: UUID[]` (the service replaces the
+`transaction_tags` set in the same transaction → audit), and the **ledger list** accepts a
+`tag_ids` filter (OR semantics — a row matches if it has any listed tag), mirroring the
+`VisualizationFilter.tag_ids` (§4.12). Tag assignment touches no debt/budget recompute — tags are
+inert labels. The CRUD is consumed **inline by the TagInput picker** (create + rename + recolour +
+archive + delete from the dropdown) — there is **no dedicated tag-management page or nav module**
+(UX §7/§12.7).
+
 **"Own" = `created_by` (authoritative).** The per-row ownership check is
 `row.created_by == current_person.id` — a Member may edit/delete only rows **they created**;
 Admin/Owner may edit/delete any. This holds for every entity (events included): ownership follows
@@ -1643,13 +1695,14 @@ interface VisualizationFilter {
   person_ids: UUID[];          // [] = household aggregate
   category_ids: UUID[];        // [] = all; set on segment click
   account_ids: UUID[];         // [] = all
+  tag_ids: UUID[];             // [] = no filter; OR semantics — a tx matches if it has ANY listed tag
   currency_mode: 'raw' | 'converted';
   display_currency: ISO4217;   // from Person.display_currency
   transaction_type: 'all' | 'inflow' | 'outflow';
   is_shared_expense: boolean | null;   // null = no filter (debt drill-down sets true)
   comparison_mode: 'persons' | 'categories' | null;   // mutually exclusive w/ single filtering
   comparison_ids: UUID[];
-  comparison_group_by: 'category'|'month'|'quarter'|'year'|'payment_method' | null;
+  comparison_group_by: 'category'|'tag'|'month'|'quarter'|'year'|'payment_method' | null;
 }
 ```
 
@@ -1960,6 +2013,7 @@ Phase-3 UX). All error bodies are RFC 7807 JSON (§4.6) — never a stack trace.
 | OAuth `?error=not_invited` | Not Invited |
 | OAuth `?error=removed` (detachment_reason=removed) | Removed from Household |
 | OAuth `?error=household_deleted` (detachment_reason=household_deleted) | Household Deleted |
+| OAuth `?error=account_archived` (Person.archived, membership intact) | Account Suspended |
 | OAuth `?error=oauth_error` | Login (with error notice) |
 | 403 (role too low / CSRF invalid) | Forbidden / Access Denied |
 | 404 (incl. cross-household) | Not Found |

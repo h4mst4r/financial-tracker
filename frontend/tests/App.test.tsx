@@ -104,6 +104,7 @@ test.each([
   ['not_invited', 'Not invited'],
   ['removed', 'Removed from household'],
   ['household_deleted', 'Household deleted'],
+  ['account_archived', 'Account suspended'],
 ])('routes /login?error=%s to its public page', (code, heading) => {
   fetchMock.mockReturnValue(new Promise(() => {}))
   renderApp(`/login?error=${code}`)

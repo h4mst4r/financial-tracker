@@ -1,6 +1,17 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Lock, MailX, MoreVertical, Plus, UserMinus } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
+  Lock,
+  MailX,
+  MoreVertical,
+  Plus,
+  Trash2,
+  UserMinus,
+} from 'lucide-react'
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
 import { Dropdown } from '../primitives/Dropdown'
@@ -10,14 +21,14 @@ import { Avatar } from '../primitives/Avatar'
 import { Icon } from '../primitives/Icon'
 import { Skeleton } from '../primitives/Skeleton'
 import { EmptyState } from '../primitives/EmptyState'
-import { ContextMenu } from '../primitives/ContextMenu'
+import { ContextMenu, type ContextMenuEntry } from '../primitives/ContextMenu'
 import { ConfirmationDialog } from '../primitives/ConfirmationDialog'
 import { Modal } from '../primitives/Modal'
 import { InviteModal } from './InviteModal'
 import { useAuthStore } from '../../stores/authStore'
 import { useAlertStore } from '../../stores/alertStore'
 import { useLeaveHousehold, useDeleteHousehold } from '../../hooks/useMembershipExit'
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
 import { COMMON_TIMEZONES } from '../../lib/timezones'
 import { formatDateDisplay } from '../../lib/date'
 import type { Household } from '../../types/auth'
@@ -40,12 +51,12 @@ const INVITATION_BADGE: Record<string, BadgeVariant> = {
 }
 
 /**
- * Settings → Management tab (UX §5.2, FR-HH-002, Stories 2.5/2.6b). Household config (name/timezone
- * editable by the owner via the Story 2.4c `PATCH /api/household`; base currency read-only — Epic 3),
- * the read-only Members roster, and the Invitations roster — read-only for a plain member, with the
- * admin/owner + Invite + per-row actions (Story 2.6b). The Members ⋮ menus (2.8), Integrations, and
- * Danger Zone (2.7 / Epic 3) remain deliberately absent (P0 / D-DEFER). The lists are bespoke
- * token-styled layouts pending the Epic-5 Table primitive (D-TABLE).
+ * Settings → Management tab (UX §5.2, FR-HH-002, Stories 2.5/2.6b/2.7/2.8). Household config
+ * (name/timezone editable by the owner via the Story 2.4c `PATCH /api/household`; base currency
+ * read-only — Epic 3), the Members roster (with the adaptive ⋮ — role/archive/remove/delete, Story
+ * 2.8), the Invitations roster (admin/owner Invite + per-row actions, 2.6b), and the Danger Zone
+ * (2.7). Integrations remain absent (Epic 3, P0 / D-DEFER). The lists are bespoke token-styled
+ * layouts pending the Epic-5 Table primitive (D-TABLE).
  */
 export function ManagementTab() {
   return (
@@ -127,29 +138,174 @@ function HouseholdConfig() {
   )
 }
 
-/** Members roster (UX §5.2). Admin/owner viewers get a ⋮ → Remove on every removable row (Path C):
- *  the owner's row (not removable) and the viewer's own row (use Leave, not Remove) have no ⋮; a plain
- *  member sees no ⋮ at all. Promote/Demote/Archive are Story 2.8 (P0 — only Remove here). */
+/** A confirm-dialog member action (Archive/Restore/Remove/Delete). Promote/Demote skip the confirm
+ *  (a reversible role toggle), so they are not in this map. */
+type MemberActionKind = 'archive' | 'restore' | 'remove' | 'delete'
+
+const ACTION_COPY: Record<
+  MemberActionKind,
+  { title: string; confirmLabel: string; destructive: boolean; body: (name: string) => string }
+> = {
+  archive: {
+    title: 'Archive member',
+    confirmLabel: 'Archive',
+    destructive: true,
+    body: (name) =>
+      `Archive ${name}? They're signed out and can't sign in until an admin restores them. Their history is kept.`,
+  },
+  restore: {
+    title: 'Restore member',
+    confirmLabel: 'Restore',
+    destructive: false,
+    body: (name) => `Restore ${name}? They'll be able to sign in again.`,
+  },
+  remove: {
+    title: 'Remove member',
+    confirmLabel: 'Remove',
+    destructive: true,
+    body: (name) =>
+      `Remove ${name} from the household? They lose access immediately and can be re-invited later.`,
+  },
+  delete: {
+    title: 'Delete member',
+    confirmLabel: 'Delete',
+    destructive: true,
+    body: (name) => `Permanently delete ${name}? This can't be undone.`,
+  },
+}
+
+/** Members roster (UX §5.2). The ⋮ is adaptive by viewer role + row state (Story 2.8):
+ *  Promote/Demote (owner viewer, non-owner row) · Archive/Restore + Remove (admin/owner, non-owner,
+ *  non-self) · Delete-if-empty (owner viewer, non-owner row, disabled-with-reason via `canDelete`).
+ *  The owner row and the viewer's own row never show role/lifecycle items; a plain member sees no ⋮. */
 function MembersSection() {
   const me = useAuthStore((s) => s.currentPerson)
-  const canManage = me?.role === 'owner' || me?.role === 'admin'
+  const isOwner = me?.role === 'owner'
+  const canManage = isOwner || me?.role === 'admin'
   const pushToast = useAlertStore((s) => s.pushToast)
   const queryClient = useQueryClient()
-  const [confirmTarget, setConfirmTarget] = useState<Member | null>(null)
+  const [pending, setPending] = useState<{ member: Member; kind: MemberActionKind } | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['household', 'members'],
     queryFn: async () => (await api.get<ListResponse<Member>>('/api/household/members')).data,
   })
 
-  const removeMember = useMutation({
-    mutationFn: async (personId: string) =>
-      api.post(`/api/household/members/${personId}/remove`),
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['household', 'members'] })
+
+  const setRole = useMutation({
+    mutationFn: async (vars: { personId: string; role: 'admin' | 'member' }) =>
+      api.patch(`/api/household/members/${vars.personId}/role`, { role: vars.role }),
+    onSuccess: invalidate,
+  })
+  const archive = useMutation({
+    mutationFn: async (personId: string) => api.post(`/api/household/members/${personId}/archive`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['household', 'members'] })
+      invalidate()
+      pushToast({ message: 'Member archived', variant: 'success' })
+    },
+  })
+  const restore = useMutation({
+    mutationFn: async (personId: string) => api.post(`/api/household/members/${personId}/restore`),
+    onSuccess: () => {
+      invalidate()
+      pushToast({ message: 'Member restored', variant: 'success' })
+    },
+  })
+  const remove = useMutation({
+    mutationFn: async (personId: string) => api.post(`/api/household/members/${personId}/remove`),
+    onSuccess: () => {
+      invalidate()
       pushToast({ message: 'Member removed', variant: 'success' })
     },
   })
+  const del = useMutation({
+    mutationFn: async (personId: string) => api.delete(`/api/household/members/${personId}`),
+    onSuccess: () => {
+      invalidate()
+      pushToast({ message: 'Member deleted', variant: 'success' })
+    },
+    // 409 has_dependencies — a race (data appeared since the list loaded); the disabled state
+    // normally prevents this. Refetch (the row's canDelete flips) and explain the archive path. Any
+    // other error gets a generic message (don't claim "has data" for a 404/5xx).
+    onError: (err: unknown) => {
+      invalidate()
+      const hasData = err instanceof ApiError && err.status === 409
+      pushToast({
+        message: hasData
+          ? "Can't delete — this member has data; archive instead"
+          : 'Could not delete the member',
+        variant: 'error',
+      })
+    },
+  })
+
+  function runPending() {
+    if (!pending) return
+    const id = pending.member.personId
+    if (pending.kind === 'archive') archive.mutate(id)
+    else if (pending.kind === 'restore') restore.mutate(id)
+    else if (pending.kind === 'remove') remove.mutate(id)
+    else del.mutate(id)
+  }
+
+  function itemsFor(m: Member): ContextMenuEntry[] {
+    const items: ContextMenuEntry[] = []
+    const isOwnerRow = m.role === 'owner'
+    const isSelf = m.personId === me?.personId
+    // Promote/Demote — owner viewer only; never the owner row (FR-P-005).
+    if (isOwner && !isOwnerRow) {
+      items.push(
+        m.role === 'admin'
+          ? {
+              label: 'Demote to member',
+              icon: ArrowDown,
+              onClick: () => setRole.mutate({ personId: m.personId, role: 'member' }),
+            }
+          : {
+              label: 'Promote to admin',
+              icon: ArrowUp,
+              onClick: () => setRole.mutate({ personId: m.personId, role: 'admin' }),
+            },
+      )
+    }
+    // Archive/Restore + Remove — admin/owner; never the owner row or the viewer's own row.
+    if (canManage && !isOwnerRow && !isSelf) {
+      items.push(
+        m.status === 'archived'
+          ? {
+              label: 'Restore',
+              icon: ArchiveRestore,
+              onClick: () => setPending({ member: m, kind: 'restore' }),
+            }
+          : {
+              label: 'Archive',
+              icon: Archive,
+              destructive: true,
+              onClick: () => setPending({ member: m, kind: 'archive' }),
+            },
+      )
+      items.push({
+        label: 'Remove',
+        icon: UserMinus,
+        destructive: true,
+        onClick: () => setPending({ member: m, kind: 'remove' }),
+      })
+    }
+    // Delete-if-empty — owner viewer only; disabled-with-reason unless empty (§8.1).
+    if (isOwner && !isOwnerRow) {
+      items.push({
+        label: 'Delete',
+        icon: Trash2,
+        destructive: true,
+        disabled: !m.canDelete,
+        disabledReason: 'Has data — archive instead',
+        onClick: () => setPending({ member: m, kind: 'delete' }),
+      })
+    }
+    return items
+  }
 
   return (
     <section className="flex flex-col gap-md">
@@ -159,9 +315,13 @@ function MembersSection() {
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
           {data?.items.map((m) => {
-            const canRemove = canManage && m.role !== 'owner' && m.personId !== me?.personId
+            const items = itemsFor(m)
+            const archived = m.status === 'archived'
             return (
-              <li key={m.personId} className="flex items-center gap-sm px-sm py-sm">
+              <li
+                key={m.personId}
+                className={`flex items-center gap-sm px-sm py-sm ${archived ? 'opacity-60' : ''}`}
+              >
                 <Avatar
                   name={m.displayName ?? m.email}
                   src={m.pictureUrl ?? undefined}
@@ -175,8 +335,10 @@ function MembersSection() {
                   <span className="truncate text-xs text-text-secondary">{m.email}</span>
                 </div>
                 <Badge variant={ROLE_BADGE[m.role]}>{m.role}</Badge>
-                <Badge variant="success">{m.status}</Badge>
-                {canRemove && (
+                <Badge variant={archived ? 'neutral' : 'success'}>
+                  {archived ? 'archived' : 'active'}
+                </Badge>
+                {items.length > 0 && (
                   <ContextMenu
                     trigger={
                       <span
@@ -186,14 +348,7 @@ function MembersSection() {
                         <Icon icon={MoreVertical} size={16} />
                       </span>
                     }
-                    items={[
-                      {
-                        label: 'Remove',
-                        icon: UserMinus,
-                        destructive: true,
-                        onClick: () => setConfirmTarget(m),
-                      },
-                    ]}
+                    items={items}
                   />
                 )}
               </li>
@@ -203,14 +358,17 @@ function MembersSection() {
       )}
 
       <ConfirmationDialog
-        open={confirmTarget !== null}
-        onClose={() => setConfirmTarget(null)}
-        onConfirm={() => {
-          if (confirmTarget) removeMember.mutate(confirmTarget.personId)
-        }}
-        title="Remove member"
-        message={`Remove ${confirmTarget?.displayName ?? confirmTarget?.email} from the household? They lose access immediately and can be re-invited later.`}
-        confirmLabel="Remove"
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        onConfirm={runPending}
+        title={pending ? ACTION_COPY[pending.kind].title : ''}
+        message={
+          pending
+            ? ACTION_COPY[pending.kind].body(pending.member.displayName ?? pending.member.email)
+            : ''
+        }
+        confirmLabel={pending ? ACTION_COPY[pending.kind].confirmLabel : 'Confirm'}
+        destructive={pending ? ACTION_COPY[pending.kind].destructive : true}
       />
     </section>
   )

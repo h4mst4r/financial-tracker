@@ -144,6 +144,10 @@
   --focus-ring-width:  2px;
   --focus-ring-offset: 2px;
   --touch-target:     44px;
+
+  /* ── Toast slot (UX §1.1/§7) — top inset clears the ~57px topbar so a freshly-pushed toast slides
+     in BELOW the bar, never over it. Composed from spacing tokens (no magic px). ── */
+  --toast-inset-top: calc(var(--spacing-2xl) + var(--spacing-sm));
 }
 
 /* Default for the runtime per-instance entity colour so a fill utility used without an
@@ -190,6 +194,11 @@
 [data-theme="base-light"] *,
 [data-theme="retro"],
 [data-theme="retro"] * { scrollbar-color: var(--color-border-strong) transparent; }
+
+/* Reserve the scrollbar gutter so a scroll region's content box width is constant whether or not the
+   scrollbar is showing — without this, a centred (mx-auto) column re-centres by ~half the scrollbar
+   width when content grows/shrinks past the viewport (e.g. switching Settings tabs). (UX §0.10) */
+@utility scrollbar-gutter-stable { scrollbar-gutter: stable; }
 
 /* ── Reduced-motion engine — --motion-factor collapses token-driven durations to instant.
    OS preference OR the per-person [data-reduce-motion] override (Epic-2 seam, story 2-9). (UX §0.7/§0.11, NFR-A11Y-006) ── */
@@ -340,6 +349,15 @@
   100% { transform: translateY(0); opacity: 1; }
 }
 @utility animate-slide-up { animation: slide-up calc(var(--duration-base) * var(--motion-factor)) ease-out; }
+
+/* ── Toast enter / exit (UX §0.7 "Toast in/out", §7). The toast body slides in from the right + fades
+   (translate-x-full→0, opacity 0→1) while its row height animates 0fr→1fr, so a new toast BUMPS the
+   older ones down; dismiss reverses every property. `transition-toast` is the shared property set —
+   paired in TSX with the motion-aware `duration-base` (folds to 0s under reduce-motion) + `ease-spring`
+   (the slight overshoot is the "bump"). Removal is timer-driven in ToastContainer, never a
+   transitionend, because a 0s reduce-motion transition emits none. (§1.1 places the stack via top-toast.) ── */
+@utility top-toast { top: var(--toast-inset-top); }
+@utility transition-toast { transition-property: grid-template-rows, opacity, transform; }
 
 /* ── MiniSparkline (UX §9.2, Bible #entitycard `.spark`). The spark-* colour utilities are full @utility
    blocks setting fill/stroke directly — NOT the derived colour utilities (which collide with the

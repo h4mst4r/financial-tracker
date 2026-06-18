@@ -340,7 +340,7 @@ async def test_get_members_returns_household_members_camelcase(monkeypatch):
         names = {m["displayName"] for m in body["items"]}
         assert "Outsider" not in names
         first = body["items"][0]
-        # camelCase keys + synthetic status (Story 2.5)
+        # camelCase keys + real status + canDelete emptiness signal (Story 2.5 / 2.8)
         assert set(first.keys()) == {
             "personId",
             "displayName",
@@ -349,6 +349,7 @@ async def test_get_members_returns_household_members_camelcase(monkeypatch):
             "pictureUrl",
             "colour",
             "status",
+            "canDelete",
         }
         assert all(m["status"] == "active" for m in body["items"])
         assert owner_id in {m["personId"] for m in body["items"]}

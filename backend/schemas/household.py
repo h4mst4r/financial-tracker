@@ -24,9 +24,12 @@ class HouseholdUpdate(_CamelModel):
 
 
 class MemberOut(_CamelModel):
-    """A household member row for the Settings → Management members list (Story 2.5).
+    """A household member row for the Settings → Management members list (Story 2.5/2.8).
 
-    `status` is synthetic (`"active"`) until Story 2.8 adds the member archive column.
+    `status` is the Person's real lifecycle status (`"active"` | `"archived"`, Story 2.8 — an
+    archived member stays listed, membership intact). `can_delete` is the per-row FK-emptiness
+    signal for the §5.2 Delete-if-empty item: `True` only when the member is a non-owner with zero
+    `persons.id` references (so the UI shows Delete enabled vs disabled-with-reason; UX §8.1).
     """
 
     person_id: str
@@ -36,6 +39,14 @@ class MemberOut(_CamelModel):
     picture_url: str | None
     colour: str | None
     status: str
+    can_delete: bool
+
+
+class RoleUpdate(_CamelModel):
+    """Body for `PATCH /api/household/members/{id}/role` (Story 2.8, FR-P-005). The allowed values
+    (`admin`/`member`) are validated in the service (no pydantic enum — like `InvitationCreate`)."""
+
+    role: str
 
 
 class InvitationOut(_CamelModel):

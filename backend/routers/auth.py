@@ -63,8 +63,8 @@ async def callback(
     """Verify state → exchange → validate → person → seed → session (§2.2 step 2).
 
     Never a 500: a `NotInvitedError` 302s to `?error=` chosen from `detachment_reason`
-    (`not_invited`/`removed`/`household_deleted`, §2.6 step 4); any other failure →
-    `?error=oauth_error`.
+    (`not_invited`/`removed`/`household_deleted`, §2.6 step 4); an `AccountArchivedError` 302s to
+    `?error=account_archived` (FR-P-007); any other failure → `?error=oauth_error`.
     """
     settings = get_settings()
     cookie_state = request.cookies.get(auth_service.OAUTH_STATE_COOKIE)
@@ -90,6 +90,14 @@ async def callback(
         logger.warning("oauth_callback_not_invited", extra={"reason": exc.detachment_reason})
         failure = RedirectResponse(
             f"{settings.frontend_url}/login?error={code_param}", status_code=302
+        )
+        failure.delete_cookie(auth_service.OAUTH_STATE_COOKIE, path="/auth/callback")
+        return failure
+    except auth_service.AccountArchivedError:
+        # Archived member, membership intact (FR-P-007) — own code, NOT a detachment (§2.8/§5.8).
+        logger.warning("oauth_callback_account_archived")
+        failure = RedirectResponse(
+            f"{settings.frontend_url}/login?error=account_archived", status_code=302
         )
         failure.delete_cookie(auth_service.OAUTH_STATE_COOKIE, path="/auth/callback")
         return failure

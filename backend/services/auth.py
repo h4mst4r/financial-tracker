@@ -135,6 +135,19 @@ class NotInvitedError(Exception):
         self.detachment_reason = detachment_reason
 
 
+class AccountArchivedError(Exception):
+    """An archived Person tried to authenticate (FR-P-007, Story 2.8).
+
+    Archive keeps `household_id` (membership intact), so this is NOT a detachment — it gets its own
+    `?error=account_archived` redirect (the Account Suspended page, §5.8), distinct from the
+    `detachment_reason` codes. Raised in `complete_oauth_login` before a session is minted.
+    """
+
+    def __init__(self, email: str) -> None:
+        super().__init__(email)
+        self.email = email
+
+
 class OAuthError(Exception):
     """Any recoverable OAuth callback failure → the router redirects ?error=oauth_error."""
 
@@ -456,15 +469,20 @@ async def validate_session(
     ):
         return None
 
-    # Slide the window.
-    session.last_activity_at = now
-    if not is_dev:
-        session.expires_at = now + SESSION_TTL
-
     found_person = await db.execute(select(Person).where(Person.id == session.person_id))
     person = found_person.scalar_one_or_none()
     if person is None:
         return None
+    # An archived person cannot authenticate (FR-P-007) — defense-in-depth: archive deletes their
+    # sessions, this rejects any surviving/raced session. Checked BEFORE the slide so a session we
+    # are rejecting is never extended.
+    if person.archived:
+        return None
+
+    # Slide the window.
+    session.last_activity_at = now
+    if not is_dev:
+        session.expires_at = now + SESSION_TTL
 
     await db.flush()
     return person, session
@@ -566,5 +584,9 @@ async def complete_oauth_login(
     if claims.get("email_verified") is not True:
         raise OAuthError("email_not_verified")
     person = await get_or_create_person(db, claims)
+    # An archived member keeps household_id (membership intact), so seed would return at step 1 and
+    # mint a session — block before that (FR-P-007). Own redirect (not a detachment_reason).
+    if person.archived:
+        raise AccountArchivedError(person.email)
     await seed_household_if_needed(db, person)
     return await create_session(db, person, ip=ip, user_agent=user_agent)

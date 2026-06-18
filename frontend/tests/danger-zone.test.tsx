@@ -22,7 +22,7 @@ const ADMIN: Person = { ...OWNER, personId: 'p2', displayName: 'Al', email: 'al@
 const MEMBER: Person = { ...ADMIN, personId: 'p3', displayName: 'Mo', email: 'mo@example.com', role: 'member' }
 
 const MEMBERS: ListResponse<Member> = {
-  items: [{ personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner', pictureUrl: null, colour: null, status: 'active' }],
+  items: [{ personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner', pictureUrl: null, colour: null, status: 'active', canDelete: false }],
   total: 1,
 }
 

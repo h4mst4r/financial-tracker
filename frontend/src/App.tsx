@@ -35,6 +35,7 @@ function LoginRoute({ authError }: { authError: boolean }) {
   if (error === 'not_invited') return <PublicError state="not_invited" />
   if (error === 'removed') return <PublicError state="removed" />
   if (error === 'household_deleted') return <PublicError state="household_deleted" />
+  if (error === 'account_archived') return <PublicError state="account_archived" />
   return <Login oauthError={error === 'oauth_error'} />
 }
 

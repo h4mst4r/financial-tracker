@@ -16,7 +16,7 @@ const OWNER: Person = {
 const MEMBER: Person = { ...OWNER, personId: 'p2', email: 'mem@example.com', role: 'member', canCreateHousehold: false }
 
 const MEMBERS: ListResponse<Member> = {
-  items: [{ personId: 'p1', displayName: 'Ben Lim', email: 'ben@example.com', role: 'owner', pictureUrl: null, colour: null, status: 'active' }],
+  items: [{ personId: 'p1', displayName: 'Ben Lim', email: 'ben@example.com', role: 'owner', pictureUrl: null, colour: null, status: 'active', canDelete: false }],
   total: 1,
 }
 const MANAGE: ListResponse<InvitationManage> = {

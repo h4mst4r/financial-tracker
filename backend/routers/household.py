@@ -23,6 +23,7 @@ from backend.schemas.household import (
     InvitationOut,
     MemberListOut,
     MemberOut,
+    RoleUpdate,
 )
 from backend.services import auth as auth_service
 from backend.services import household as household_service
@@ -34,6 +35,22 @@ router = APIRouter(prefix="/api", tags=["household"])
 # Module-level singletons so `require_role(...)` isn't a call in an argument default (ruff B008).
 _require_owner = require_role("owner")
 _require_admin = require_role("admin")
+
+
+def _member_out(person: Person, *, can_delete: bool) -> MemberOut:
+    """Map a Person → the member row with its precomputed `can_delete` emptiness signal (2.8).
+    Shared by `get_members` (batched scan) and the role/archive/restore responses so they never
+    drift on shape."""
+    return MemberOut(
+        person_id=person.id,
+        display_name=person.display_name,
+        email=person.email,
+        role=person.role,
+        picture_url=person.picture_url,
+        colour=person.colour,
+        status=person.status,
+        can_delete=can_delete,
+    )
 
 
 def _manage_out(inv: HouseholdInvitation, now: datetime) -> InvitationManageOut:
@@ -108,25 +125,75 @@ async def remove_member(
     return Response(status_code=204)
 
 
+@router.patch("/household/members/{person_id}/role")
+async def patch_member_role(
+    person_id: str,
+    data: RoleUpdate,
+    person: Person = Depends(_require_owner),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """Owner sets a member's role to admin/member (FR-P-005). Takes effect on the member's next
+    request (no session kill). 404 cross-household; 400 bad role; 409 owner-target."""
+    updated = await membership_service.set_member_role(
+        db, household_id, person.id, person_id, data.role
+    )
+    return _member_out(updated, can_delete=await membership_service.member_can_delete(db, updated))
+
+
+@router.post("/household/members/{person_id}/archive")
+async def archive_member(
+    person_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """Admin/owner archives a member (FR-P-007) — membership intact, login blocked, sessions killed.
+    404 cross-household; 409 owner/self/already-archived."""
+    updated = await membership_service.archive_member(db, household_id, person.id, person_id)
+    return _member_out(updated, can_delete=await membership_service.member_can_delete(db, updated))
+
+
+@router.post("/household/members/{person_id}/restore")
+async def restore_member(
+    person_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """Admin/owner restores an archived member (FR-P-007). 404 cross-household; 409 if active."""
+    updated = await membership_service.restore_member(db, household_id, person.id, person_id)
+    return _member_out(updated, can_delete=await membership_service.member_can_delete(db, updated))
+
+
+@router.delete("/household/members/{person_id}", status_code=204)
+async def delete_member(
+    person_id: str,
+    person: Person = Depends(_require_owner),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Owner hard-deletes an empty member (FR-P-008). 204 if empty (no audit row); 409
+    `has_dependencies` otherwise (UI offers Archive); 404 cross-household; 409 owner-target."""
+    await membership_service.delete_member(db, household_id, person.id, person_id)
+    return Response(status_code=204)
+
+
 @router.get("/household/members")
 async def get_members(
     household_id: str = Depends(get_household_id),
     db: AsyncSession = Depends(get_db),
 ) -> MemberListOut:
     """The household's members (any member may view, FR-HH-002). `get_household_id` 401s a
-    NULL-household session — no role gate. `status` is synthetic (`active`) until Story 2.8."""
+    NULL-household session — no role gate. `status` is the real Person status (archived members stay
+    listed); each row carries the `can_delete` emptiness signal (Story 2.8)."""
     members = await household_service.list_members(db, household_id)
+    # Batch the emptiness scan: one query per `persons.id` FK column over all non-owner members,
+    # rather than a per-row scan (the owner is never deletable, so it is excluded up front).
+    candidates = [m.id for m in members if m.role != "owner"]
+    referenced = await membership_service.referenced_person_ids(db, candidates)
     items = [
-        MemberOut(
-            person_id=m.id,
-            display_name=m.display_name,
-            email=m.email,
-            role=m.role,
-            picture_url=m.picture_url,
-            colour=m.colour,
-            status="active",
-        )
-        for m in members
+        _member_out(m, can_delete=m.role != "owner" and m.id not in referenced) for m in members
     ]
     return MemberListOut(items=items, total=len(items))
 

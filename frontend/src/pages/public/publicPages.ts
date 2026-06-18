@@ -27,6 +27,7 @@ export type PublicPageState =
   | 'maintenance'
   | 'household_deleted'
   | 'removed'
+  | 'account_archived'
   | 'invalid_invitation'
 
 /** What the page's primary action does. `login` → /login, `home` → /, `reload` → hard refresh. */
@@ -131,6 +132,16 @@ export const PUBLIC_PAGE_STATES: Record<PublicPageState, PublicPageConfig> = {
     actionLabel: 'Sign out',
     actionKind: 'login',
   },
+  // Story 2.8 / FR-P-007 — an archived member (membership intact) reaching login via
+  // `?error=account_archived`; recoverable by an admin Restore, so warning (not error), like removed.
+  account_archived: {
+    icon: Ban,
+    tone: 'warning',
+    title: 'Account suspended',
+    subtitle: 'An admin suspended your access; your data is preserved until they restore it.',
+    actionLabel: 'Sign out',
+    actionKind: 'login',
+  },
   invalid_invitation: {
     icon: Ban,
     tone: 'error',
@@ -138,6 +149,8 @@ export const PUBLIC_PAGE_STATES: Record<PublicPageState, PublicPageConfig> = {
     subtitle: 'This invitation is no longer valid.',
     actionLabel: 'Go to login',
     actionKind: 'login',
-    actionPrimary: true,
+    // Secondary, not primary — the bible §4.1a renders "Go to login" as a plain `btn` (primary is
+    // reserved for the active sign-in CTAs: Not Invited / Logout). Matches the bible-foundation.
+    actionPrimary: false,
   },
 }

@@ -223,6 +223,7 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 | Pin-pop / check-draw | favourite / save | scale-pop + star · checkmark draw 300ms | instant |
 | Drag-follow | reorder / pin drag | lift (scale 1.03 + shadow) → follows pointer → spring-settle on drop | no lift, instant move |
 | Skeleton shimmer | loading | 1.5s linear loop | static |
+| Toast in / out | toast pushed / dismissed | **slide in from the right + fade** while the row height grows `0fr→1fr` so the new toast (newest on top) **bumps the older ones down**; dismiss reverses every property · 200ms spring | snap in/out, no slide |
 
 ### 0.8 Gestures (the interaction library)
 
@@ -291,6 +292,11 @@ the viewer (§later).
   track**, `radius-full`; Firefox fallback via `scrollbar-width: thin` + `scrollbar-color`.
   **Light themes use a darker structural thumb (`border-strong`)** — `surface-active` is too pale to see.
   Overlay / picker panels inherit the same treatment.
+- **Reserve the scrollbar gutter** on every app scroll region (`scrollbar-gutter: stable`, e.g. the
+  AppShell `<main>`). Without it, a scrollbar appearing/disappearing as content grows past the
+  viewport narrows the content box, and any centred (`mx-auto`) column re-centres by ~half the
+  scrollbar width — a visible horizontal jump when switching tabs/views (e.g. Settings tabs). A
+  reserved gutter keeps content width constant, so tabbed/header/row surfaces don't shift.
 
 ### 0.11 Accessibility (WCAG 2.1 AA)
 
@@ -459,6 +465,7 @@ branded spinner**; in-app loading uses skeletons (§0.7).
 | Maintenance | tool | info | maintenance mode | (passive — retry later) |
 | Household Deleted | home-x | error | re-login after owner deleted the household — `?error=household_deleted` (ARCH §5.8 / §2.8a Path A) | Sign out / await new household |
 | Removed from Household | user-x | warning | re-login after removal by owner/admin — `?error=removed` (ARCH §5.8 / §2.8a Path C) | Sign out / await re-invite |
+| Account Suspended | ban | warning | re-login while **archived** (membership intact — `household_id` kept, not a detachment) — `?error=account_archived` (ARCH §5.8 / FR-P-007, Story 2.8) | Sign out / await an admin Restore |
 
 Copy is **calm and plain** throughout. Rate-limited (429) surfaces as a toast, not a full page.
 
@@ -578,13 +585,19 @@ Single column of personal preferences:
 - **Household config** (owner-editable; **read-only + lock for others**): name · timezone ·
   **base currency** + recompute warning (FR-CU-005, Epic 3). *(Date format is not configurable — the UI
   uses a fixed `DD-MM-YYYY`, FR-V-010.)*
-- **Members:** avatar · name+email · role chip · status. **⋮:** Promote/Demote (role change
-  owner-only; owner not demotable), **Archive/Restore**, **Remove** (FR-P-005/007). The two are
-  distinct: **Archive/Restore** is the in-household lifecycle archive of the Person record
-  (membership intact); **Remove** detaches the member (`household_id=NULL`), **archives all their
-  data**, and **invalidates their sessions** → they hit the "Removed from Household" page (§3) and
-  are re-invitable with data restored (admin/owner only; ARCH §2.8a Path C). The owner is not
-  removable.
+- **Members:** avatar · name+email · role chip · status (an **archived** member stays listed, shown
+  with the desaturated `Archived` treatment, §2.3 — `PersonRef` reads "(archived)"). **⋮:**
+  Promote/Demote (role change owner-only; owner not demotable), **Archive/Restore**, **Remove**, and
+  **Delete** (FR-P-005/007/008). The three are distinct: **Archive/Restore** is the in-household
+  lifecycle archive of the Person record (membership intact — the archived member can no longer log
+  in: a re-login hits the **Account Suspended** page, §3, until an admin Restores them; admin/owner
+  only); **Remove** detaches the member (`household_id=NULL`), **archives all their data**, and
+  **invalidates their sessions** → they hit the "Removed from Household" page (§3) and are re-invitable
+  with data restored (admin/owner only; ARCH §2.8a Path C); **Delete** (owner-only) **hard-deletes an
+  empty Person** (zero references) and is **disabled with a reason** ("Has data — archive instead")
+  when the row reports **`canDelete=false`** — the members list carries a per-row `canDelete` emptiness
+  signal, mirroring the §8.1 "Delete-if-empty" rule (a referenced Person can only be Archived, not
+  deleted; ARCH §3.0a tenet 5 / §4). The owner is **not removable, archivable, or deletable**.
 - **Invitations:** **+ Invite** → modal (Google email). Rows: email · status
   (pending/accepted/declined/expired/revoked) · expiry. Actions: Copy join link (`/join/<id>`),
   Resend, Revoke (pending) / Delete (terminal) (FR-HH-003/004).
@@ -619,7 +632,8 @@ tabular list in the app — not a bespoke layout.
      import column layout (FR-IE-005): **Name · Transaction Date · Currency Type · Amount ·
      Amount (SGD) · Payee · Payment Method · Transaction Type · Category · Status**, plus
      **Description** (→ `notes`), **GST Claim** (→ `is_gst_claimable`), **Personal** (Yes ⇒
-     `is_shared_expense = false`; default is shared), and optional **Gift** (→ `is_gift`). Header
+     `is_shared_expense = false`; default is shared), and optional **Tags** (comma-separated →
+     matched or created as tags; a legacy **Gift** column maps to the Gift tag). Header
      row matched case-insensitively; **Amount (SGD)** is optional (recomputed via FX if blank);
      **Payment Method** maps to the "Paid with" account / Cash (§12.3); **Category** matched by
      name (`Parent > Child` ⇒ subcategory).
@@ -696,7 +710,8 @@ Every UI element resolves to a library component; **every component appears on `
 - **Primitives:** Button · Input · Label · Checkbox · Toggle · Dropdown · SegmentedControl ·
   DatePicker · ColourPicker · EmojiIconPicker · Badge · Avatar · Card · Divider · Spinner ·
   Skeleton · ProgressBar · Tooltip · **ContextMenu** · **Modal** · Drawer · Toast · Accordion ·
-  Table · TagInput · EmptyState · AlertBanner · ConfirmationDialog · Icon (wrapper) ·
+  Table · TagInput *(transaction tags — assign + create + inline rename/recolour/archive/delete; §12.7)* ·
+  EmptyState · AlertBanner · ConfirmationDialog · Icon (wrapper) ·
   MonetaryValueInput · RecurringDateInput.
 - **Composites:** AppShell (Sidebar · Topbar) · EntityPage · **EntityCard** · **EntityModal** ·
   BulkActionBar · CategoryTree · PendingInvitationDialog · HouseholdConflictDialog.
@@ -983,7 +998,7 @@ error remains. Computed results are **hover-revealed** on asset/capital cards (F
 
 EntityPage scaffold. **Header:** "Transactions" + info (count · out/in totals in base) · **+ New**.
 **Filter bar:** search · date range · category · type (all/inflow/outflow) · a **Filters** popover
-for secondary filters (account, person, status, GST/gift, reconciled).
+for secondary filters (account, person, status, GST, tags, reconciled).
 
 ### 12.1 Columns (desktop)
 checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-line) · **Payee**
@@ -995,8 +1010,9 @@ checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-
   Outflow/inflow is conveyed by amount **sign + colour** (red/green), not a separate column.
 - **Status is de-emphasized** — a faint dot (green paid · amber pending · grey cancelled);
   rarely edited, full state in the detail modal.
-- **Shared is the default**; only **exceptions** are flagged — a small icon for *personal (not
-  shared)* or *gift* (most expenses are shared).
+- **Shared is the default**; only the **exception** is icon-flagged — a small icon for *personal*
+  (= shared off; most expenses are shared). Any **tags** on a row render as small colour chips (the
+  tag's own colour), after the Category chip — tags are free-form labels, not the category.
 - Foreign rows: Base differs from Amount; `fx_delta` shows in the detail/modal.
 - **Column alignment:** a **fixed-width column grid** (table-layout) so Payee / Category /
   Currency / Amount / SGD align cleanly across every row — columns never overlap.
@@ -1053,8 +1069,12 @@ The EntityModal (§8.2) plus the money block — the visible payoff of the FX ar
   `manual` = amber. Breakdown line shows spot rate · fee · **fx Δ** (forex loss). Editing it →
   flips to `manual`. When `currency == base`, the FX part collapses (no source/Δ).
 - **Flags (outflow only, FR-E-007 — hidden for inflow):** a single **Shared expense** toggle
-  (**default ON**; off = personal) + **Gift** + **GST claimable**. (No separate "Personal"
-  toggle — it is simply shared=off.)
+  (**default ON**; off = personal) + **GST claimable**. (No separate "Personal" toggle — it is
+  simply shared=off.) These two are the only typed flags — they drive behaviour (debt / GST report).
+- **Tags (FR-E-022, shown for inflow too — tags aren't outflow-only):** a **TagInput** (§7) to
+  attach any number of household tags or **create one inline**; the picker dropdown also lets you
+  **rename / recolour / archive / delete** a tag in place (no separate management screen). "Gift" is
+  now just one of the seeded tags. Persisted via `tag_ids`.
 - **Duplicate detection on save (FR-E-008):** a candidate surfaces an inline warning
   (Link as duplicate / Ignore) before the record commits.
 
@@ -1064,9 +1084,10 @@ The EntityModal (§8.2) plus the money block — the visible payoff of the FX ar
 
 A **Visualize** action in the ledger (toolbar, and on the bulk-selection bar) opens the **Viewer
 (§9)** seeded with the **current filter / selection** as an *event set*, where you pick a
-**metric** (count / sum(`amount_base`) / avg) and **group-by** (day/month/quarter/year) — e.g.
-"Netflix, counted by month" or "Groceries summed by quarter" (FR-V-013). The series uses the
-lead category's colour (or neutral for mixed sets).
+**metric** (count / sum(`amount_base`) / avg) and **group-by** (day/month/quarter/year, **or tag**)
+— e.g. "Netflix, counted by month", "Groceries summed by quarter", or "spend by tag
+(essential vs discretionary)" (FR-V-013, FR-E-022). The series uses the lead category's colour (or
+neutral for mixed sets); a tag group-by uses each tag's own colour.
 
 The expandable-row mechanism (parent → expand) is the **same reusable pattern** behind
 CategoryTree (§6) and Recurring's occurrence history (§13).
