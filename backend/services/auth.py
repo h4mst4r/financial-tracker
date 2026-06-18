@@ -62,7 +62,7 @@ ALL_MIDDLEWARE_SKIP_PREFIXES = (
     "/redoc/",
     "/openapi.json",
 )
-PUBLIC_AUTH_PATHS = ("/auth/login", "/auth/callback", "/auth/dev-login")
+PUBLIC_AUTH_PATHS = ("/auth/login", "/auth/callback", "/auth/dev-login", "/auth/config")
 JOB_PATH_PREFIX = "/jobs/"
 
 

@@ -8,11 +8,14 @@ import { NewHouseholdModal } from './components/NewHouseholdModal'
 import { AppShell } from './components/shell/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Login } from './pages/Login'
+import { Settings } from './pages/Settings'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
 
-// Minimal in-shell home until the Dashboard route lands (Epic 9); `/` does not yet redirect.
-function Home() {
+// Minimal in-shell dashboard placeholder until the real Dashboard lands (Epic 9). It mounts at
+// `/dashboard` (the canonical path the Sidebar nav + the "Back to dashboard" error actions target);
+// `/` redirects here so the landing page and the nav agree.
+function DashboardHome() {
   return (
     <div className="p-lg text-text-primary">
       <h1 className="text-2xl font-medium">Financial Tracker</h1>
@@ -63,7 +66,9 @@ function GatedApp({
       <NewHouseholdModal />
       <AppShell>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardHome />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<PublicError state="not_found" />} />
         </Routes>
       </AppShell>

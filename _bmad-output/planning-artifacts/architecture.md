@@ -357,8 +357,14 @@ step 6 is what neutralizes them once the flag is turned off.
   a browser cannot authenticate after bypass is disabled.
 - **`POST /auth/dev-login`** returns the same `/auth/me`-shaped payload and `404`s when the
   flag is off.
-- `/auth/login`, `/auth/callback`, `/auth/dev-login` are excluded from the bypass
-  (they create their own sessions).
+- **`GET /auth/config`** is a public, unauthenticated read returning `{ authBypassEnabled }` (no
+  secrets). The SPA Login page (UX §4.1) shows its **Dev login** button + **DEV BYPASS ON** badge
+  **only** when this reports `true` (combined with a dev build), so the control reflects the live
+  backend flag rather than the build mode — it never appears in prod or when the flag is off. The
+  dev-login browser path is the `X-Session-Token` fallback (§2.3) the button populates, not the
+  middleware cookie injection (unreliable through the Vite dev proxy).
+- `/auth/login`, `/auth/callback`, `/auth/dev-login`, `/auth/config` are excluded from the bypass
+  (the first three create their own sessions; `/auth/config` must never conjure one).
 
 > **Production guard:** the app factory logs `CRITICAL` if `AUTH_BYPASS_ENABLED` is true
 > while `ENV != "development"`.
@@ -539,7 +545,8 @@ IP**. The OAuth-initiating endpoints `/auth/login`, `/auth/callback`, `/auth/dev
 - **Skip prefixes** (bypass all middleware): `/health`, `/static/`, `/assets/`, `/docs/`,
   `/redoc/`, `/openapi.json`.
 - **Public auth paths** (no session required): `/auth/login`, `/auth/callback`,
-  `/auth/dev-login`. Note `/auth/me` and `/auth/logout` **require** auth.
+  `/auth/dev-login`, `/auth/config` (read-only `{authBypassEnabled}`, §2.5). Note `/auth/me` and
+  `/auth/logout` **require** auth.
 
 ### 2.12 Invariants — correct by design
 
@@ -909,6 +916,13 @@ again. Index: `(household_id, email)`.
 **`household_invitations`** (Base) — `id, household_id, invited_email(320), invited_by(FK
 persons), created_at, expires_at, accepted_at, status`. **Status enum** (type `InvitationStatus`,
 §4.13): `pending | accepted | declined | revoked | expired`. **Expiry = 7 days** per FR-HH-003.
+
+> **The `id` is the `/join/:token` token — do not broadcast it.** The member-viewable Settings
+> invitation list (`GET /api/household/invitations`, any member per FR-HH-002) returns
+> `invited_email · status · expires_at · created_at` **only** — never the `id`. "Copy join link" is an
+> admin/owner action (UX §5.2), so the token rides only the role-gated invite actions (Story 2.6).
+> Likewise `GET /api/household/members` is an any-member household-scoped read (name/email/role/status);
+> both are `{items, total}` and never expose another household's rows.
 
 > **Token validation has no separate "already-used" state (resolved).** A join token is
 > actionable **only** while `status=pending` (and not past `expires_at`). Validation returns a

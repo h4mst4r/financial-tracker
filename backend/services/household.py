@@ -1,17 +1,19 @@
-"""Household update service (ARCH §2.8 / §4.10).
+"""Household services (ARCH §2.8 / §4.10).
 
-Owner-scoped name/timezone update for `PATCH /api/household` (Story 2.4c, reused by the Settings →
-Management tab in Story 2.5). Base-currency change is an Epic-3 concern (FR-CU-005) and is NOT
-handled here — this service never touches `base_currency` or `currencies`.
+`update_household` — owner-scoped name/timezone update for `PATCH /api/household` (Story 2.4c).
+`list_members` / `list_invitations` — read-only rosters for the Settings → Management tab
+(Story 2.5; household-scoped, no audit). Base-currency change is an Epic-3 concern (FR-CU-005),
+NOT handled here — this module never touches `base_currency` or `currencies`.
 """
 
+from collections.abc import Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
-from backend.models.identity import Household
+from backend.models.identity import Household, HouseholdInvitation, Person
 from backend.schemas.household import HouseholdUpdate
 from backend.services.audit import audit
 
@@ -60,3 +62,28 @@ async def update_household(
         after={"name": household.name, "timezone": household.timezone},
     )
     return household
+
+
+async def list_members(db: AsyncSession, household_id: str) -> Sequence[Person]:
+    """Every person in the household (owner first, then by name). Reads are not audited (§4.7).
+
+    Detached members (`household_id = NULL`) are naturally excluded. Member archive is Story 2.8.
+    """
+    result = await db.execute(
+        select(Person)
+        .where(Person.household_id == household_id)
+        # Owner first (`role != 'owner'` is 0 for the owner, 1 otherwise), then everyone by name.
+        .order_by(Person.role != "owner", Person.display_name)
+    )
+    return result.scalars().all()
+
+
+async def list_invitations(db: AsyncSession, household_id: str) -> Sequence[HouseholdInvitation]:
+    """The household's invitation rows, newest first. Returned as stored — expiry/lifecycle is
+    Story 2.6/2.3, not computed here."""
+    result = await db.execute(
+        select(HouseholdInvitation)
+        .where(HouseholdInvitation.household_id == household_id)
+        .order_by(HouseholdInvitation.created_at.desc())
+    )
+    return result.scalars().all()

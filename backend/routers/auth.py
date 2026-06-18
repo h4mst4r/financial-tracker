@@ -153,6 +153,17 @@ async def logout(
     return response
 
 
+@router.get("/config")
+async def auth_config() -> dict:
+    """Public, unauthenticated auth-surface config for the SPA's pre-login screen (ARCH §2.5).
+
+    Just `authBypassEnabled`, so the Login page shows the dev-login control only when the backend
+    bypass is genuinely on (UX §4.1), not on every dev build. No secrets. Exempt (in
+    `PUBLIC_AUTH_PATHS`) so reading it never conjures a dev session.
+    """
+    return {"authBypassEnabled": get_settings().auth_bypass_enabled}
+
+
 @router.post("/dev-login")
 async def dev_login(
     request: Request,

@@ -36,6 +36,8 @@ Run `alembic upgrade head` **from the project root** (venv active). Do not add a
 
 `get_db` → `get_current_person` → `get_household_id`. Service layer always receives `household_id` as first positional arg. **Never** trust request body for household scoping. See ARCH §4.4 for full code.
 
+**The injected `person` is a read-only snapshot — re-`select` it to mutate.** Per ARCH §2.4, the CSRF middleware is the single `validate_session()` caller: it loads `(person, session)` in its **own** session, commits, and closes it *before* the route's `get_db` opens (deliberate — keeps SQLite writes sequential, §2.13). With `expire_on_commit=False` the detached `person` keeps its column values, so **reads are fine** (and most routes only need `person.id` — e.g. `update_household` loads its target fresh). But mutating the injected `person` (`person.x = …; await db.flush()`) **silently no-ops** — it isn't in the route session, and there is **no error**. To change the *current* person (e.g. accept-invite sets `household_id`/`role`; future leave/archive-self), first re-load it on the route `db`: `(await db.execute(select(Person).where(Person.id == person.id))).scalar_one()`, then mutate that row. (Story 2.6a does this in `invitation.accept_invitation`; a shared `get_writable_person` DI dependency should be introduced when 2.7/2.8 add more self-mutating routes.)
+
 ### 1.5 Error Responses
 
 Use `raise HTTPException(status_code=..., detail={...})` — the global handler formats RFC 7807 Problem Details. See ARCH §4.6 for the canonical format table.

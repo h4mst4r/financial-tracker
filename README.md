@@ -36,10 +36,15 @@ venv\Scripts\activate
 source venv/bin/activate
 
 pip install -r requirements.txt
-uvicorn backend.main:app --reload --port 8080
+uvicorn backend.main:app --reload --port 8000
 ```
 
-`GET http://localhost:8080/health` → `{"status": "ok"}`.
+`GET http://localhost:8000/health` → `{"status": "ok"}`.
+
+> **Port matters:** the Vite dev proxy forwards `/auth`, `/api`, `/health`, `/jobs` to
+> `http://localhost:8000` by default ([frontend/vite.config.ts](frontend/vite.config.ts)). Run
+> uvicorn on **8000**, or override the target with `VITE_API_TARGET` (e.g. `--port 8080` →
+> `VITE_API_TARGET=http://localhost:8080 npm run dev`).
 
 ### 3. Frontend
 
@@ -51,6 +56,23 @@ npm run dev       # Vite dev server on http://localhost:5173
 
 In dev, Vite serves the frontend; FastAPI serves the SPA only in the built image
 (see Docker below).
+
+### 4. Local dev without Google OAuth (auth bypass)
+
+To click through the in-household app without configuring Google OAuth, enable the localhost-only
+dev bypass (ARCH §2.5):
+
+```bash
+# in .env (gitignored)
+AUTH_BYPASS_ENABLED=true
+```
+
+With it on, the Login page shows a **Dev login** button (gated on the live flag via `GET /auth/config`,
+so it never appears when the flag is off) — click it to sign in as a synthetic **"Dev User" owner** with
+a seeded household. First load shows the New Household modal once (Skip or set a name); then the sidebar,
+Settings, etc. are all reachable. The bypass is **inert** unless the request is from localhost and
+`AUTH_BYPASS_ENABLED=true` — leave it `false` (the default) everywhere but local dev. You can also mint
+a dev session headlessly: `curl -c jar -b jar http://localhost:8000/auth/me`.
 
 ## Tests & quality gates
 

@@ -475,8 +475,10 @@ A `PublicPage`-shell variant (no semantic-error icon — it's the entry point):
 - Branding **wordmark + mark** (from the `branding` config). **No tagline.**
 - **Continue with Google** button (primary path; OAuth, §architecture 1.2).
 - **Error banner** (calm, red) on `?error=oauth_error` — "Sign-in failed — please try again."
-- **Dev login** button + a **DEV BYPASS ON** badge — rendered **only** when
-  `AUTH_BYPASS_ENABLED` (FR-SYS-002); calls `POST /auth/dev-login`.
+- **Dev login** button + a **DEV BYPASS ON** badge — rendered **only** when the backend reports
+  `AUTH_BYPASS_ENABLED` (FR-SYS-002), read from the public `GET /auth/config`; calls
+  `POST /auth/dev-login`. (Gating on the live backend flag — not the build's `import.meta.env.DEV` —
+  keeps the badge from claiming "on" when the flag is off.)
 - `?error=not_invited` routes to the **Not Invited** page (§3), not Login.
 
 ### 4.1a JoinHousehold page (`/join/:token`)

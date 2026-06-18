@@ -211,6 +211,41 @@ async def test_dev_login_404_when_off_200_when_on(monkeypatch):
         await engine.dispose()
 
 
+def test_auth_config_reports_bypass_flag(monkeypatch):
+    """`GET /auth/config` (public, no session) mirrors `AUTH_BYPASS_ENABLED` so the Login page can
+    show the dev-login control only when the flag is genuinely on."""
+    try:
+        monkeypatch.setenv("AUTH_BYPASS_ENABLED", "false")
+        get_settings.cache_clear()
+        client_off = TestClient(create_app(), client=LOCALHOST)
+        resp_off = client_off.get("/auth/config")
+        assert resp_off.status_code == 200
+        assert resp_off.json() == {"authBypassEnabled": False}
+
+        monkeypatch.setenv("AUTH_BYPASS_ENABLED", "true")
+        get_settings.cache_clear()
+        client_on = TestClient(create_app(), client=LOCALHOST)
+        resp_on = client_on.get("/auth/config")
+        assert resp_on.status_code == 200
+        assert resp_on.json() == {"authBypassEnabled": True}
+    finally:
+        get_settings.cache_clear()
+
+
+def test_auth_config_does_not_conjure_a_dev_session(monkeypatch):
+    """Reading /auth/config with bypass on must NOT inject a dev session (it is exempt) — only
+    /auth/me and other non-exempt paths do."""
+    monkeypatch.setenv("AUTH_BYPASS_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        client = TestClient(create_app(), client=LOCALHOST)
+        resp = client.get("/auth/config")
+        assert resp.status_code == 200
+        assert "set-cookie" not in {k.lower() for k in resp.headers}
+    finally:
+        get_settings.cache_clear()
+
+
 def test_production_guard_logs_critical_when_bypass_on_in_non_dev(monkeypatch, caplog):
     monkeypatch.setenv("AUTH_BYPASS_ENABLED", "true")
     monkeypatch.setenv("ENV", "production")

@@ -7,6 +7,7 @@ mutating, non-exempt route, so requests carry the session cookie **and** the `X-
 """
 
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,9 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from backend.database import get_db
 from backend.main import create_app
-from backend.models.base import Base
+from backend.models.base import Base, _utcnow
 from backend.models.currency import Currency
-from backend.models.identity import Household, Person
+from backend.models.identity import Household, HouseholdInvitation, Person
 from backend.models.system import AuditLog
 from backend.rate_limit import limiter
 from backend.services import auth
@@ -279,5 +280,197 @@ async def test_patch_household_null_household_401(monkeypatch):
         resp = client.patch("/api/household", json={"name": "X"})
         assert resp.status_code == 401
         assert resp.json()["type"] == "unauthorized"
+    finally:
+        await engine.dispose()
+
+
+# ── Members / Invitations lists (Story 2.5) ──
+
+
+async def _add_person(factory, household_id: str, *, role: str, name: str) -> str:
+    person_id = str(uuid4())
+    async with factory() as db:
+        db.add(
+            Person(
+                id=person_id,
+                household_id=household_id,
+                email=f"{uuid4()}@example.com",
+                display_name=name,
+                role=role,
+                google_sub=f"sub-{uuid4()}",
+            )
+        )
+        await db.commit()
+    return person_id
+
+
+async def _add_invitation(factory, household_id: str, invited_by: str, *, email: str, status: str):
+    async with factory() as db:
+        db.add(
+            HouseholdInvitation(
+                id=str(uuid4()),
+                household_id=household_id,
+                invited_email=email,
+                invited_by=invited_by,
+                expires_at=_utcnow() + timedelta(days=7),
+                status=status,
+            )
+        )
+        await db.commit()
+
+
+async def test_get_members_returns_household_members_camelcase(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        owner_id, hh_id = await _seed_owner_household(factory)
+        await _add_person(factory, hh_id, role="member", name="Alex Lim")
+        # A second household whose member must NOT leak into the first household's list.
+        other_owner, other_hh = await _seed_owner_household(factory)
+        await _add_person(factory, other_hh, role="member", name="Outsider")
+
+        sid, csrf = await _seed_session(factory, owner_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.get("/api/household/members")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        emails = {m["email"] for m in body["items"]}
+        names = {m["displayName"] for m in body["items"]}
+        assert "Outsider" not in names
+        first = body["items"][0]
+        # camelCase keys + synthetic status (Story 2.5)
+        assert set(first.keys()) == {
+            "personId",
+            "displayName",
+            "email",
+            "role",
+            "pictureUrl",
+            "colour",
+            "status",
+        }
+        assert all(m["status"] == "active" for m in body["items"])
+        assert owner_id in {m["personId"] for m in body["items"]}
+        assert other_owner not in {m["personId"] for m in body["items"]}
+        assert len(emails) == 2
+    finally:
+        await engine.dispose()
+
+
+async def test_get_members_accessible_to_plain_member(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        _owner, hh_id = await _seed_owner_household(factory)
+        member_id = await _add_person(factory, hh_id, role="member", name="Member Person")
+        sid, csrf = await _seed_session(factory, member_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.get("/api/household/members")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 2
+    finally:
+        await engine.dispose()
+
+
+async def test_get_members_null_household_401(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id = str(uuid4())
+        async with factory() as db:
+            db.add(
+                Person(
+                    id=person_id,
+                    household_id=None,
+                    email=f"{uuid4()}@example.com",
+                    role="owner",
+                    google_sub=f"sub-{uuid4()}",
+                )
+            )
+            await db.commit()
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.get("/api/household/members")
+        assert resp.status_code == 401
+    finally:
+        await engine.dispose()
+
+
+async def test_get_invitations_returns_rows_scoped(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        owner_id, hh_id = await _seed_owner_household(factory)
+        await _add_invitation(factory, hh_id, owner_id, email="cara@example.com", status="pending")
+        await _add_invitation(factory, hh_id, owner_id, email="dee@example.com", status="declined")
+        # Second household's invitation must not leak.
+        other_owner, other_hh = await _seed_owner_household(factory)
+        await _add_invitation(
+            factory, other_hh, other_owner, email="ghost@example.com", status="pending"
+        )
+
+        sid, csrf = await _seed_session(factory, owner_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.get("/api/household/invitations")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        emails = {i["invitedEmail"] for i in body["items"]}
+        assert emails == {"cara@example.com", "dee@example.com"}
+        statuses = {i["status"] for i in body["items"]}
+        assert statuses == {"pending", "declined"}
+        # No invitation id/token is exposed in the member-visible list (it is the /join token).
+        assert set(body["items"][0].keys()) == {
+            "invitedEmail",
+            "status",
+            "expiresAt",
+            "createdAt",
+        }
+        assert "invitationId" not in body["items"][0]
+        assert "id" not in body["items"][0]
+    finally:
+        await engine.dispose()
+
+
+async def test_get_invitations_empty(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        owner_id, _hh = await _seed_owner_household(factory)
+        sid, csrf = await _seed_session(factory, owner_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.get("/api/household/invitations")
+        assert resp.status_code == 200
+        assert resp.json() == {"items": [], "total": 0}
+    finally:
+        await engine.dispose()
+
+
+async def test_get_invitations_null_household_401(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id = str(uuid4())
+        async with factory() as db:
+            db.add(
+                Person(
+                    id=person_id,
+                    household_id=None,
+                    email=f"{uuid4()}@example.com",
+                    role="owner",
+                    google_sub=f"sub-{uuid4()}",
+                )
+            )
+            await db.commit()
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.get("/api/household/invitations")
+        assert resp.status_code == 401
     finally:
         await engine.dispose()
