@@ -86,8 +86,37 @@ test('renders the neutral shell (no app heading) for a NULL-household session', 
   expect(screen.queryByRole('heading', { name: 'Financial Tracker' })).not.toBeInTheDocument()
 })
 
-test('renders the /login placeholder for the login route', () => {
-  fetchMock.mockReturnValue(new Promise(() => {}))
+test('renders the real Login page at /login', () => {
+  fetchMock.mockReturnValue(new Promise(() => {})) // /auth/me pending; /login renders ungated
   renderApp('/login')
-  expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
+})
+
+test('shows Refused Connection on /login when the bootstrap fails (non-401)', async () => {
+  fetchMock.mockRejectedValue(new TypeError('network down'))
+  renderApp('/login')
+  expect(await screen.findByRole('heading', { name: 'Refused connection' })).toBeInTheDocument()
+})
+
+test.each([
+  ['not_invited', 'Not invited'],
+  ['removed', 'Removed from household'],
+  ['household_deleted', 'Household deleted'],
+])('routes /login?error=%s to its public page', (code, heading) => {
+  fetchMock.mockReturnValue(new Promise(() => {}))
+  renderApp(`/login?error=${code}`)
+  expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+})
+
+test('routes /login?error=oauth_error to Login with the error banner', () => {
+  fetchMock.mockReturnValue(new Promise(() => {}))
+  renderApp('/login?error=oauth_error')
+  expect(screen.getByText(/Sign-in failed/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
+})
+
+test('renders Not Found for an unmatched in-household path', async () => {
+  fetchMock.mockResolvedValue(makeResponse(IN_HOUSEHOLD))
+  renderApp('/bogus')
+  expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument()
 })

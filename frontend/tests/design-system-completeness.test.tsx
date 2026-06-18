@@ -46,6 +46,8 @@ const SECTION_MARKER: Record<string, string> = {
   'context-menu': 'button',
   // States
   'empty-state': '.max-w-empty-state',
+  // Public & error
+  'public-page': '[data-testid="public-page"]',
 }
 
 // DOM unmount is handled by the global afterEach(cleanup) in tests/setup.ts; here we only need to

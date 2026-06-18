@@ -19,6 +19,7 @@ export const DESIGN_SYSTEM_GROUPS = [
   'Pickers',
   'Feedback & overlay',
   'States',
+  'Public & error',
 ] as const
 export type DesignSystemGroup = (typeof DESIGN_SYSTEM_GROUPS)[number]
 
@@ -53,6 +54,9 @@ export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
   { id: 'modal', label: 'Modal', group: 'Feedback & overlay' },
   { id: 'context-menu', label: 'ContextMenu', group: 'Feedback & overlay' },
   { id: 'empty-state', label: 'EmptyState', group: 'States' },
+  // Public & error (bible §3) — the shared PublicPage shell. Not a primitives-barrel export, so it has
+  // no PRIMITIVE_DEMO_SECTION entry; the completeness guard's real-component marker covers it.
+  { id: 'public-page', label: 'PublicPage', group: 'Public & error' },
 ]
 
 // Maps every primitive exported from components/primitives/index.ts to the section that demos it.

@@ -11,6 +11,9 @@ import {
   Wallet,
   Star,
   LineChart,
+  Mail,
+  Lock,
+  Wrench,
 } from 'lucide-react'
 import {
   Button,
@@ -36,6 +39,7 @@ import {
   EmptyState,
   ConfirmationDialog,
 } from '../components/primitives'
+import { PublicPage } from '../components/PublicPage'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
 import { useMultiSelect } from '../hooks/useMultiSelect'
@@ -720,6 +724,65 @@ export function DesignSystem() {
             description="Try adjusting your search or filter to find what you're looking for."
             action={<Button variant="primary">Clear Filters</Button>}
           />
+        </section>
+
+        {/* ─────────────────────────── Public & error (bible §3) ─────────────────────────── */}
+        <GroupHeading>Public &amp; error</GroupHeading>
+
+        {/* PublicPage — the shared shell for every UX §3 public/error state (icon-circle/title/subtitle/
+            action). Real exported component, one frame per tone; the full 11-state set lives in
+            pages/public/publicPages.tsx and renders at the routes (e.g. /login?error=…). Bible §3. */}
+        <section id="public-page" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">PublicPage</h2>
+          <div className="grid-cols-entity grid gap-md">
+            <div className="overflow-hidden rounded-lg border border-border">
+              <PublicPage
+                className="min-h-0"
+                header={<Spinner size={28} />}
+                title="Loading"
+                subtitle="Just a moment."
+              />
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border">
+              <PublicPage
+                className="min-h-0"
+                icon={Mail}
+                tone="warning"
+                title="Not invited"
+                subtitle="This account isn't part of a household yet."
+                action={<Button variant="primary">Sign in with another account</Button>}
+              />
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border">
+              <PublicPage
+                className="min-h-0"
+                icon={Lock}
+                tone="error"
+                title="Access denied"
+                subtitle="You don't have permission to view this."
+                action={<Button variant="secondary">Back to dashboard</Button>}
+              />
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border">
+              <PublicPage
+                className="min-h-0"
+                icon={SearchX}
+                tone="neutral"
+                title="Not found"
+                subtitle="That page doesn't exist."
+                action={<Button variant="secondary">Back to dashboard</Button>}
+              />
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border">
+              <PublicPage
+                className="min-h-0"
+                icon={Wrench}
+                tone="info"
+                title="Maintenance"
+                subtitle="Back shortly."
+              />
+            </div>
+          </div>
         </section>
         </div>
       </div>
