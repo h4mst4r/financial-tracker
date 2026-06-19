@@ -56,6 +56,7 @@ const SECTION_MARKER: Record<string, string> = {
   card: '[role="button"]',
   // Pickers
   dropdown: 'button[aria-haspopup="listbox"]',
+  'theme-picker': 'button[aria-haspopup="listbox"]',
   // Feedback & overlay (the demos render real trigger Buttons; the overlays portal on interaction)
   toast: 'button',
   'confirmation-dialog': 'button',

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useAuth } from '../src/hooks/useAuth'
 import { useAuthStore } from '../src/stores/authStore'
+import { useThemeStore } from '../src/stores/themeStore'
 import type { AuthMe } from '../src/types/auth'
 
 function makeResponse(body: unknown, status = 200) {
@@ -31,6 +32,14 @@ const PAYLOAD: AuthMe = {
     defaultView: 'household',
     displayCurrency: 'SGD',
     canCreateHousehold: true,
+    theme: 'base',
+    font: 'base',
+    density: 'comfortable',
+    reduceMotion: false,
+    notificationPrefs: {
+      budgetWarnings: true, budgetOverruns: true, missedRecurring: true,
+      upcomingPayments: false, fxStale: true, backups: false,
+    },
   },
   household: { householdId: 'h1', name: 'HH', baseCurrency: 'SGD', timezone: 'Asia/Singapore' },
   csrfToken: 'csrf-1',
@@ -66,6 +75,24 @@ describe('useAuth — bootstrap', () => {
     expect(useAuthStore.getState().currentPerson?.personId).toBe('p1')
     expect(useAuthStore.getState().csrfToken).toBe('csrf-1')
     expect(result.current.authError).toBeNull()
+  })
+
+  test('bootstraps the persisted appearance into the theme store (Story 2.9)', async () => {
+    useThemeStore.setState({ theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false })
+    fetchMock.mockResolvedValue(
+      makeResponse({
+        ...PAYLOAD,
+        person: { ...PAYLOAD.person, theme: 'retro', font: 'mono', density: 'compact', reduceMotion: true },
+      }),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper: wrapper() })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    const theme = useThemeStore.getState()
+    expect(theme.theme).toBe('retro')
+    expect(theme.font).toBe('mono')
+    expect(theme.density).toBe('compact')
+    expect(theme.reduceMotion).toBe(true)
   })
 
   test('sets authError on a non-401 failure (5xx)', async () => {

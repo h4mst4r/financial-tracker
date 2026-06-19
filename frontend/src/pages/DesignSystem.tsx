@@ -22,6 +22,7 @@ import {
   Checkbox,
   Toggle,
   Dropdown,
+  ThemePicker,
   SegmentedControl,
   Icon,
   Badge,
@@ -166,6 +167,8 @@ export function DesignSystem() {
   // Settings) is a separate later story and intentionally NOT built here.
   const density = useThemeStore((s) => s.density)
   const setDensity = useThemeStore((s) => s.setDensity)
+  const themeId = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
 
   const contextMenuItems = [
     { label: 'Edit', icon: Edit, onClick: () => {} },
@@ -671,6 +674,16 @@ export function DesignSystem() {
           <div className="flex flex-col gap-density max-w-input">
             <Dropdown value={dropdownValue} options={dropdownOptions} onChange={setDropdownValue} placeholder="Select…" />
             <Dropdown value="" options={dropdownOptions} onChange={() => {}} disabled placeholder="Disabled" />
+          </div>
+        </section>
+
+        {/* ThemePicker — Dropdown + per-theme swatch (UX §5.1 Appearance, Story 2.9). Bound to the
+            global theme store so picking a theme reskins this page live. */}
+        <section id="theme-picker" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">ThemePicker</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <ThemePicker value={themeId} onChange={setTheme} />
+            <ThemePicker value={themeId} onChange={() => {}} disabled />
           </div>
         </section>
 

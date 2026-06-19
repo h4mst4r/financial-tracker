@@ -29,3 +29,28 @@ export const PALETTES: Record<ResolvedThemeId, PaletteMeta> = {
   brown: { immersive: false },
   gameboy: { immersive: true, tint: '#8bac0f', tintRamp: ['#9bbc0f', '#8bac0f', '#306230', '#0f380f'] },
 }
+
+/** A user-selectable theme for the Profile → Appearance ThemePicker (Story 2.9, UX §5.1). `base` is
+ *  the auto light/dark default; the rest are explicit palettes. `swatch` is the palette's
+ *  `--color-accent-primary` (index.css) — kept here in the registry (the sanctioned home for palette
+ *  hex, alongside `tint`/`tintRamp`) so the picker reads a named value, never a raw hex in TSX (P4). */
+export interface ThemeOption {
+  value: ThemeId
+  label: string
+  swatch: string
+}
+
+export const THEME_OPTIONS: ThemeOption[] = [
+  { value: 'base', label: 'Base (auto)', swatch: '#6366f1' },
+  { value: 'base-light', label: 'Base Light', swatch: '#4f46e5' },
+  { value: 'retro', label: 'Retro 70s', swatch: '#d2691e' },
+  { value: 'brown', label: 'Muted Brown', swatch: '#b08968' },
+  { value: 'gameboy', label: 'Game Boy', swatch: '#8bac0f' },
+]
+
+/** Font options for the Profile → Appearance font Dropdown (Story 2.9, UX §5.1). */
+export const FONT_OPTIONS: { value: FontId; label: string }[] = [
+  { value: 'base', label: 'Inter' },
+  { value: 'system', label: 'System' },
+  { value: 'mono', label: 'JetBrains Mono' },
+]

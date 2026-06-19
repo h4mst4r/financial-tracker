@@ -662,7 +662,12 @@ Dev sessions use a 24-hour expiry and are exempt from step 7.
     "personId": "uuid", "displayName": "str", "email": "str",
     "role": "owner|admin|member", "pictureUrl": "str|null",
     "defaultView": "household|personal", "displayCurrency": "ISO-4217",
-    "canCreateHousehold": true
+    "canCreateHousehold": true,
+    // Profile & appearance prefs (Story 2.9, FR-P-003) — the SPA bootstraps these into the theming engine
+    "theme": "base|base-light|retro|brown|gameboy", "font": "base|system|mono",
+    "density": "comfortable|compact", "reduceMotion": false,
+    "notificationPrefs": { "budgetWarnings": true, "budgetOverruns": true, "missedRecurring": true,
+                           "upcomingPayments": false, "fxStale": true, "backups": false }
   },
   "household": null,            // null when person has no household (pending-invite case)
   // else: { "householdId": "uuid", "name": "str", "baseCurrency": "ISO", "timezone": "IANA" }

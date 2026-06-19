@@ -13,6 +13,7 @@ interface AuthState {
   dismissFirstLogin: () => void
   clearPendingInvitation: () => void
   setHousehold: (household: Household) => void
+  setCurrentPerson: (person: Person) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -52,4 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   // refetch; the dismissFirstLogin pattern). The server already marked the invitation declined.
   clearPendingInvitation: () => set({ pendingInvitation: null }),
   setHousehold: (household: Household) => set({ household }),
+  // Profile self-edit (Story 2.9): the PATCH /api/profile response is the updated §2.14.C person —
+  // refresh the store so display name / avatar update app-wide. Keep defaultView in sync.
+  setCurrentPerson: (person: Person) => set({ currentPerson: person, defaultView: person.defaultView }),
 }))

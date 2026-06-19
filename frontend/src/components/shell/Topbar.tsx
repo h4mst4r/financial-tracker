@@ -7,7 +7,8 @@ import { useLogout } from '../../hooks/useLogout'
 
 /** Persistent topbar (UX §1.1). The avatar menu is the sole user menu (profile + sign out). The
  *  left view-context cluster (Epic 9), search/command-palette and alerts bell (Epic 10) are reserved
- *  layout slots — NOT built here (P0). Theme/font pickers remain Story 2.9. */
+ *  layout slots — NOT built here (P0). The persisted theme/font controls live in the Settings →
+ *  Profile tab (Story 2.9); the §3.357 inline avatar quick-pickers are a deferred enhancement. */
 export function Topbar() {
   const currentPerson = useAuthStore((s) => s.currentPerson)
   const navigate = useNavigate()
@@ -17,9 +18,9 @@ export function Topbar() {
   if (!currentPerson) return null
 
   const menuItems: ContextMenuEntry[] = [
-    // Profile (personal) → /profile (Story 2.9); the sidebar Settings → /settings is household config
-    // (Story 2.5). Both resolve to Not Found until their pages exist.
-    { label: 'Profile', icon: User, onClick: () => navigate('/profile') },
+    // Profile → the Settings Profile tab (Story 2.9 made it the default tab); the sidebar Settings
+    // link targets the same page. Personal preferences vs household config are tabs within /settings.
+    { label: 'Profile', icon: User, onClick: () => navigate('/settings') },
     { divider: true },
     // Disable while a logout is in flight so a rapid second click can't fire a 2nd request (whose
     // now-deleted session would 401 → api-client hard-reload, overriding the SPA navigate).

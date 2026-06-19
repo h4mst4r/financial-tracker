@@ -12,6 +12,8 @@ const HH: Household = { householdId: 'h1', name: "Ben's Household", baseCurrency
 const OWNER: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: true,
+  theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false,
+  notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
 }
 const MEMBER: Person = { ...OWNER, personId: 'p2', email: 'mem@example.com', role: 'member', canCreateHousehold: false }
 

@@ -29,6 +29,7 @@ from backend.config import get_settings
 from backend.models.currency import Currency
 from backend.models.identity import ApprovedOwner, Household, HouseholdInvitation, Person, Session
 from backend.services.category import seed_default_categories
+from backend.services.profile import parse_notification_prefs
 
 logger = logging.getLogger(__name__)
 
@@ -499,6 +500,28 @@ def household_payload(household: Household) -> dict:
     }
 
 
+def person_payload(person: Person) -> dict:
+    """The §2.14.C `person` object (camelCase). Shared by `build_auth_me` and `PATCH /api/profile`
+    (Story 2.9) so the two never drift. Carries the appearance preferences the SPA bootstraps into
+    the Epic-1 theming engine; `notificationPrefs` is the parsed, default-completed six-key object.
+    Stories 2.11 (`displayFormat`) and 3.9 (`displayCurrency` editability) extend this shape."""
+    return {
+        "personId": person.id,
+        "displayName": person.display_name,
+        "email": person.email,
+        "role": person.role,
+        "pictureUrl": person.picture_url,
+        "defaultView": person.default_view,
+        "displayCurrency": person.display_currency,
+        "canCreateHousehold": person.can_create_household,
+        "theme": person.theme,
+        "font": person.font,
+        "density": person.density,
+        "reduceMotion": person.reduce_motion,
+        "notificationPrefs": parse_notification_prefs(person.notification_prefs),
+    }
+
+
 async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> dict:
     """Assemble the §2.14.C `/auth/me` payload (camelCase, lockstep with `types/auth.ts`).
 
@@ -525,16 +548,7 @@ async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> d
     )
 
     return {
-        "person": {
-            "personId": person.id,
-            "displayName": person.display_name,
-            "email": person.email,
-            "role": person.role,
-            "pictureUrl": person.picture_url,
-            "defaultView": person.default_view,
-            "displayCurrency": person.display_currency,
-            "canCreateHousehold": person.can_create_household,
-        },
+        "person": person_payload(person),
         "household": household_payload(household) if household is not None else None,
         "csrfToken": session.csrf_token,
         "pendingInvitation": pending_invitation,

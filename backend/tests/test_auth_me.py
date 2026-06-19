@@ -145,6 +145,12 @@ async def test_auth_me_in_household_returns_full_contract(monkeypatch):
             "defaultView",
             "displayCurrency",
             "canCreateHousehold",
+            # Appearance preferences (Story 2.9) — the SPA bootstraps these into the theming engine.
+            "theme",
+            "font",
+            "density",
+            "reduceMotion",
+            "notificationPrefs",
         }
         assert body["person"]["personId"] == person_id
         assert body["person"]["role"] == "owner"
