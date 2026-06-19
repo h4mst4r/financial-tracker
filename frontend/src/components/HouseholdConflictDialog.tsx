@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Modal } from './primitives/Modal'
@@ -5,33 +6,45 @@ import { Button } from './primitives/Button'
 import { useAuthStore } from '../stores/authStore'
 import { api } from '../api/client'
 
-interface HouseholdConflictDialogProps {
-  targetHouseholdName: string
-  token: string
-}
-
 /**
- * Conflict dialog for an invitee who already belongs to a household (UX §4.4, FR-HH-003). Reached
- * via the `/join/:token` link in-household (D-CONFLICT-ENTRY), never an `/auth/me` push. Copy varies
- * by role; there is **no Accept** — the invitee must delete (owner) or leave (member/admin) first.
- * Decline is terminal; **Go to Settings** only navigates (Leave/Delete are Story 2.7, D-DZ-SEAM).
+ * Conflict dialog for an invitee who already belongs to a household (UX §4.4, FR-HH-003). Mounts at
+ * the in-household app root and self-gates on the store's `pendingInvitation` (the `/auth/me`
+ * conflict-push, ARCH §2.8a / Story 2.6c) — the inverse of `PendingInvitationDialog`, which gates on
+ * the NULL-household branch. Copy varies by role; there is **no Accept** — the invitee must delete
+ * (owner) or leave (member/admin) first. Decline is terminal; **Go to Settings** only navigates
+ * (Leave/Delete live in the Settings Danger Zone, Story 2.7).
+ *
+ * Dismiss (close or "Go to Settings") hides the dialog for this session via a local flag but does
+ * **not** clear `pendingInvitation` — so a still-pending invite re-surfaces on next login, when a
+ * fresh `/auth/me` rehydrates the store (UX §4.4 "reappears next login").
  */
-export function HouseholdConflictDialog({
-  targetHouseholdName,
-  token,
-}: HouseholdConflictDialogProps) {
+export function HouseholdConflictDialog() {
+  const pendingInvitation = useAuthStore((s) => s.pendingInvitation)
+  const household = useAuthStore((s) => s.household)
   const role = useAuthStore((s) => s.currentPerson?.role)
-  const currentName = useAuthStore((s) => s.household?.name)
+  const clearPendingInvitation = useAuthStore((s) => s.clearPendingInvitation)
   const navigate = useNavigate()
-  const isOwner = role === 'owner'
+  // Keyed to the token, not a bare boolean: a dismiss suppresses *this* invite for the session, but a
+  // different invite surfacing later (an /auth/me refetch without a reload) is not pre-dismissed.
+  const [dismissedToken, setDismissedToken] = useState<string | null>(null)
+
+  const token = pendingInvitation?.token
 
   const decline = useMutation({
     mutationFn: async () => {
       await api.post(`/api/invitations/${token}/decline`)
     },
-    onSuccess: () => navigate('/', { replace: true }),
+    // Terminal: the server marks the invite declined, so clearing locally just closes the dialog and
+    // it can never re-surface (unlike a plain dismiss, which leaves it pending).
+    onSuccess: () => clearPendingInvitation(),
   })
 
+  // In-household branch only (the opposite of PendingInvitationDialog's NULL-household gate).
+  if (pendingInvitation == null || household == null || token === dismissedToken) return null
+
+  const isOwner = role === 'owner'
+  const targetHouseholdName = pendingInvitation.householdName
+  const currentName = household.name
   const title = isOwner ? 'Already own a household' : 'Already in a household'
   const body = isOwner
     ? `You own ${currentName}. To join ${targetHouseholdName} you must delete your current household first — owners can't simply leave. Or decline.`
@@ -40,14 +53,20 @@ export function HouseholdConflictDialog({
   return (
     <Modal
       open
-      onClose={() => navigate('/', { replace: true })}
+      onClose={() => setDismissedToken(pendingInvitation.token)}
       title={title}
       footer={
         <>
           <Button variant="ghost" onClick={() => decline.mutate()} disabled={decline.isPending}>
             Decline
           </Button>
-          <Button onClick={() => navigate('/settings')} disabled={decline.isPending}>
+          <Button
+            onClick={() => {
+              setDismissedToken(pendingInvitation.token)
+              navigate('/settings')
+            }}
+            disabled={decline.isPending}
+          >
             Go to Settings
           </Button>
         </>

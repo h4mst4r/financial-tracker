@@ -145,9 +145,10 @@
   --focus-ring-offset: 2px;
   --touch-target:     44px;
 
-  /* ── Toast slot (UX §1.1/§7) — top inset clears the ~57px topbar so a freshly-pushed toast slides
-     in BELOW the bar, never over it. Composed from spacing tokens (no magic px). ── */
-  --toast-inset-top: calc(var(--spacing-2xl) + var(--spacing-sm));
+  /* ── Toast slot (UX §1.1/§7) — bottom inset for the bottom-right stack: deliberately off the
+     top-right cluster (search · alerts bell · avatar menu) + a centered command palette, so a toast
+     never obscures an open menu/panel. A named spacing token (no magic px). ── */
+  --toast-inset-bottom: var(--spacing-lg);
 }
 
 /* Default for the runtime per-instance entity colour so a fill utility used without an
@@ -351,12 +352,13 @@
 @utility animate-slide-up { animation: slide-up calc(var(--duration-base) * var(--motion-factor)) ease-out; }
 
 /* ── Toast enter / exit (UX §0.7 "Toast in/out", §7). The toast body slides in from the right + fades
-   (translate-x-full→0, opacity 0→1) while its row height animates 0fr→1fr, so a new toast BUMPS the
-   older ones down; dismiss reverses every property. `transition-toast` is the shared property set —
-   paired in TSX with the motion-aware `duration-base` (folds to 0s under reduce-motion) + `ease-spring`
-   (the slight overshoot is the "bump"). Removal is timer-driven in ToastContainer, never a
-   transitionend, because a 0s reduce-motion transition emits none. (§1.1 places the stack via top-toast.) ── */
-@utility top-toast { top: var(--toast-inset-top); }
+   (translate-x-full→0, opacity 0→1) while its row height animates 0fr→1fr, so a new toast at the bottom
+   of the bottom-right stack BUMPS the older ones up; dismiss reverses every property. `transition-toast`
+   is the shared property set — paired in TSX with the motion-aware `duration-base` (folds to 0s under
+   reduce-motion) + `ease-spring` (the slight overshoot is the "bump"). Removal is timer-driven in
+   ToastContainer, never a transitionend, because a 0s reduce-motion transition emits none. (§1.1 places
+   the stack via bottom-toast.) ── */
+@utility bottom-toast { bottom: var(--toast-inset-bottom); }
 @utility transition-toast { transition-property: grid-template-rows, opacity, transform; }
 
 /* ── MiniSparkline (UX §9.2, Bible #entitycard `.spark`). The spark-* colour utilities are full @utility

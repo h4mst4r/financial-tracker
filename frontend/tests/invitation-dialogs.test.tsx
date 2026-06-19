@@ -96,14 +96,16 @@ describe('PendingInvitationDialog (UX §4.3)', () => {
   })
 })
 
+// The conflict dialog self-gates on the store (Story 2.6c): an in-household session (`household`
+// set) carrying a cross-household `pendingInvitation`. No props.
 function renderConflict(role: Person['role']) {
-  useAuthStore.setState({ currentPerson: { ...PERSON, role }, household: HH })
+  useAuthStore.setState({ currentPerson: { ...PERSON, role }, household: HH, pendingInvitation: INVITE })
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/']}>
         <Routes>
-          <Route path="/" element={<HouseholdConflictDialog targetHouseholdName="Acme" token="tok" />} />
+          <Route path="/" element={<HouseholdConflictDialog />} />
           <Route path="/settings" element={<div>SETTINGS PAGE</div>} />
         </Routes>
       </MemoryRouter>
@@ -126,7 +128,20 @@ describe('HouseholdConflictDialog (UX §4.4)', () => {
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
   })
 
-  test('Decline POSTs decline', async () => {
+  test('does not render for an in-household session without a pending invitation', () => {
+    useAuthStore.setState({ currentPerson: { ...PERSON }, household: HH, pendingInvitation: null })
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <HouseholdConflictDialog />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByRole('heading', { name: 'Already in a household' })).toBeNull()
+  })
+
+  test('Decline POSTs decline and clears the pending invitation', async () => {
     const fetchMock = routeFetch()
     vi.stubGlobal('fetch', fetchMock)
     renderConflict('member')
@@ -134,11 +149,35 @@ describe('HouseholdConflictDialog (UX §4.4)', () => {
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([u, o]) => String(u) === '/api/invitations/tok/decline' && o?.method === 'POST')).toBe(true),
     )
+    await waitFor(() => expect(useAuthStore.getState().pendingInvitation).toBeNull())
   })
 
-  test('Go to Settings navigates to /settings', async () => {
+  test('dismissal is keyed to the token — a different invite re-opens the dialog', () => {
+    useAuthStore.setState({ currentPerson: { ...PERSON }, household: HH, pendingInvitation: INVITE })
+    const client = new QueryClient()
+    const ui = (
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <HouseholdConflictDialog />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+    const { rerender } = render(ui)
+    // Dismiss invite 'tok' via the close (×) button — store stays pending (not cleared).
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('heading', { name: 'Already in a household' })).toBeNull()
+    expect(useAuthStore.getState().pendingInvitation).toEqual(INVITE)
+    // A DIFFERENT invite arrives mid-session (e.g. an /auth/me refetch) → the dialog re-opens.
+    useAuthStore.setState({ pendingInvitation: { ...INVITE, token: 'tok2', householdName: 'Globex' } })
+    rerender(ui)
+    expect(screen.getByRole('heading', { name: 'Already in a household' })).toBeTruthy()
+  })
+
+  test('Go to Settings navigates to /settings and leaves the invitation pending', async () => {
     renderConflict('member')
     fireEvent.click(screen.getByRole('button', { name: 'Go to Settings' }))
     expect(await screen.findByText('SETTINGS PAGE')).toBeTruthy()
+    // Dismiss must NOT clear the store — the invite re-surfaces on next login (ARCH §2.8a).
+    expect(useAuthStore.getState().pendingInvitation).toEqual(INVITE)
   })
 })

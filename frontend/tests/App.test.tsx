@@ -80,6 +80,28 @@ test('renders the app inside the AppShell for an in-household session', async ()
   expect(screen.getByRole('heading', { name: 'Financial Tracker' })).toBeInTheDocument()
 })
 
+test('shows the HouseholdConflictDialog over the shell for an in-household cross-household invite', async () => {
+  // Story 2.6c: /auth/me now returns a pendingInvitation alongside a non-null household.
+  fetchMock.mockResolvedValue(
+    makeResponse({
+      ...IN_HOUSEHOLD,
+      pendingInvitation: {
+        token: 'tok',
+        householdId: 'h2',
+        householdName: 'Acme',
+        invitedByDisplayName: 'Ada',
+        invitedEmail: 'pat@example.com',
+        expiresAt: '2026-06-25',
+        status: 'pending',
+      },
+    }),
+  )
+  renderApp()
+  // The shell still renders; the conflict dialog (owner variant) overlays it at the app root.
+  expect(await screen.findByTestId('app-shell')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Already own a household' })).toBeInTheDocument()
+})
+
 test('renders the neutral shell (no AppShell) for a NULL-household session', async () => {
   fetchMock.mockResolvedValue(makeResponse({ ...IN_HOUSEHOLD, household: null }))
   renderApp()

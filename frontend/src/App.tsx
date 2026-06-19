@@ -6,6 +6,7 @@ import { DesignSystem } from './pages/DesignSystem'
 import { NeutralShell } from './components/NeutralShell'
 import { NewHouseholdModal } from './components/NewHouseholdModal'
 import { PendingInvitationDialog } from './components/PendingInvitationDialog'
+import { HouseholdConflictDialog } from './components/HouseholdConflictDialog'
 import { AppShell } from './components/shell/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Login } from './pages/Login'
@@ -73,11 +74,13 @@ function GatedApp({
   // In-household app (ARCH §6.5 branch 5): routes render inside the AppShell (Sidebar + Topbar).
   // `/` is the app root (Home until `/dashboard` lands, Epic 9); any other path is an unmatched
   // in-app route → Not Found (ARCH §5.8); real module routes land in Epic 3+. NewHouseholdModal
-  // self-gates on `isFirstLogin` (Story 2.4c) — route-agnostic, mounted alongside the shell so it
-  // overlays it. The ToastContainer stays outside AppShell (main.tsx, ARCH §6.1).
+  // self-gates on `isFirstLogin` (Story 2.4c) and HouseholdConflictDialog on a cross-household
+  // `pendingInvitation` (Story 2.6c, ARCH §2.8a conflict-push) — both route-agnostic, mounted
+  // alongside the shell so they overlay it. The ToastContainer stays outside AppShell (main.tsx).
   return (
     <>
       <NewHouseholdModal />
+      <HouseholdConflictDialog />
       <AppShell>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

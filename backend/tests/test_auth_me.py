@@ -352,6 +352,68 @@ async def test_auth_me_null_household_no_invite(monkeypatch):
         await engine.dispose()
 
 
+# ── In-household cross-household conflict-push (Story 2.6c, ARCH §2.8a) ──
+
+
+async def test_auth_me_in_household_with_cross_household_pending_invite(monkeypatch):
+    """An in-household person with a pending invite to a *different* household sees BOTH the
+    non-null `household` (their own) AND the `pendingInvitation` (the target) — the conflict-push
+    that drives the login-time HouseholdConflictDialog (ARCH §2.8a / §2.14.C)."""
+    engine, factory = await _make_factory()
+    try:
+        # The invitee's OWN household (they are a member here).
+        invitee_id, own_hh_id = await _seed_owner_household(
+            factory, created_at=datetime.now(UTC) - timedelta(hours=1), role="member"
+        )
+        # A DIFFERENT household with a pending invite to that same person's email.
+        target_hh_id = str(uuid4())
+        inviter_id = str(uuid4())
+        invite_id = str(uuid4())
+        async with factory() as db:
+            invitee = await db.get(Person, invitee_id)
+            invitee_email = invitee.email
+            db.add(Household(id=target_hh_id, name="Target HH", created_by=inviter_id))
+            await db.flush()
+            db.add(
+                Person(
+                    id=inviter_id,
+                    household_id=target_hh_id,
+                    email=f"{uuid4()}@example.com",
+                    display_name="Inviting Owner",
+                    role="owner",
+                    google_sub=f"sub-{uuid4()}",
+                )
+            )
+            await db.flush()  # inviter must exist before the invitation's invited_by FK
+            db.add(
+                HouseholdInvitation(
+                    id=invite_id,
+                    household_id=target_hh_id,
+                    invited_email=invitee_email.upper(),  # exercise func.lower match
+                    invited_by=inviter_id,
+                    expires_at=datetime.now(UTC) + timedelta(days=7),
+                    status="pending",
+                )
+            )
+            await db.commit()
+        sid, _csrf = await _seed_session_for_person(factory, invitee_id)
+
+        client = _client_with_db(factory, monkeypatch)
+        client.cookies.set(auth.SESSION_COOKIE_NAME, sid)
+        resp = client.get("/auth/me")
+        assert resp.status_code == 200
+        body = resp.json()
+        # The person stays in their own household...
+        assert body["household"]["householdId"] == own_hh_id
+        # ...and the pending invite to the OTHER household is surfaced alongside it.
+        assert body["pendingInvitation"]["token"] == invite_id
+        assert body["pendingInvitation"]["householdId"] == target_hh_id
+        assert body["pendingInvitation"]["householdName"] == "Target HH"
+        assert body["isFirstLogin"] is False
+    finally:
+        await engine.dispose()
+
+
 async def test_auth_me_no_session_401(monkeypatch):
     engine, factory = await _make_factory()
     try:

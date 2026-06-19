@@ -504,16 +504,19 @@ async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> d
 
     Depends only on the authenticated `(person, session)` — never on household scoping, so a
     NULL-household (pending-invite) session still resolves to `household: null` + the dialog
-    payload (§2.8). May be reused verbatim by `POST /auth/dev-login` in a later story.
+    payload (§2.8). `household` and `pendingInvitation` are independent fields: an in-household
+    person with a cross-household pending invite gets both populated (ARCH §2.8a conflict-push,
+    Story 2.6c). May be reused verbatim by `POST /auth/dev-login` in a later story.
     """
     household = None
     if person.household_id is not None:
         found = await db.execute(select(Household).where(Household.id == person.household_id))
         household = found.scalar_one_or_none()
 
-    pending_invitation = None
-    if person.household_id is None:
-        pending_invitation = await _build_pending_invitation(db, person)
+    # Computed regardless of household: a NULL-household session surfaces the accept/decline dialog,
+    # while an in-household session with a (necessarily cross-household) pending invite surfaces the
+    # login-time HouseholdConflictDialog (ARCH §2.8a conflict-push, Story 2.6c).
+    pending_invitation = await _build_pending_invitation(db, person)
 
     is_first_login = (
         person.role == "owner"

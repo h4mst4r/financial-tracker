@@ -74,13 +74,13 @@ describe('JoinHousehold /join/:token (UX §4.1a)', () => {
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeTruthy()
   })
 
-  test('valid + logged-in WITH a household → conflict dialog', async () => {
+  test('valid + logged-in WITH a household → hands off to the root conflict dialog', async () => {
+    // Story 2.6c: branch (d) redirects to `/`; the root HouseholdConflictDialog (driven by the
+    // store's pendingInvitation from /auth/me) takes over, mirroring the NULL-household hand-off.
     useAuthStore.setState({ currentPerson: PERSON, household: HH })
     vi.stubGlobal('fetch', routeFetch(PENDING))
     renderJoin()
-    expect(await screen.findByRole('heading', { name: 'Already in a household' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Go to Settings' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+    expect(await screen.findByText('ROOT')).toBeTruthy()
   })
 
   test('email mismatch (logged-in) → Invite expired', async () => {

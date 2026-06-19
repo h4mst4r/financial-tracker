@@ -5,7 +5,6 @@ import { PublicError } from './public/PublicError'
 import { Button } from '../components/primitives/Button'
 import { Badge } from '../components/primitives/Badge'
 import { Avatar } from '../components/primitives/Avatar'
-import { HouseholdConflictDialog } from '../components/HouseholdConflictDialog'
 import { useAuthStore } from '../stores/authStore'
 import { api } from '../api/client'
 import type { InvitationValidation } from '../types/household'
@@ -21,12 +20,11 @@ function continueWithGoogle() {
  * in-household. Validates the token (public 200-always endpoint — never 401, gotcha #1) and branches:
  * invalid → Invite-expired; valid+logged-out → invite-context card + Continue with Google;
  * valid+logged-in+no-household → hand off to the root PendingInvitationDialog; valid+logged-in+
- * with-household → the conflict dialog (or invalid on email mismatch).
+ * with-household → hand off to the root HouseholdConflictDialog (or invalid on email mismatch).
  */
 export function JoinHousehold() {
   const { token } = useParams<{ token: string }>()
   const currentPerson = useAuthStore((s) => s.currentPerson)
-  const household = useAuthStore((s) => s.household)
 
   const { data, isPending } = useQuery({
     queryKey: ['invitation', token],
@@ -64,8 +62,8 @@ export function JoinHousehold() {
   }
 
   // (c) logged-in, NO household → hand off to the root PendingInvitationDialog (it reads the store).
-  if (household == null) return <Navigate to="/" replace />
-
-  // (d) logged-in, WITH a household → the conflict dialog (no Accept; D-CONFLICT-ENTRY).
-  return <HouseholdConflictDialog targetHouseholdName={data.householdName!} token={token!} />
+  // (d) logged-in, WITH a household → hand off to the root HouseholdConflictDialog (Story 2.6c, the
+  // `/auth/me` conflict-push). Both dialogs self-gate on the store, so a single redirect to the app
+  // root surfaces the right one.
+  return <Navigate to="/" replace />
 }

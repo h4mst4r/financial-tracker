@@ -60,8 +60,10 @@ function ToastItem({ toast }: { toast: ToastModel }) {
 
 /**
  * Toast container — renders the toast queue using the styled Toast primitive.
- * Mounted outside AppShell so z-index isn't trapped by a child stacking context. `top-toast` clears
- * the topbar; `flex-col-reverse` puts the newest toast on top so it bumps the older ones down (§0.7).
+ * Mounted outside AppShell so z-index isn't trapped by a child stacking context. Anchored
+ * **bottom-right** (`bottom-toast`), deliberately off the top-right cluster (search · alerts bell ·
+ * avatar menu) so a toast never obscures an open menu/panel; `flex-col` keeps the newest toast at the
+ * bottom so a freshly-pushed one bumps the older ones up (§0.7).
  */
 export function ToastContainer() {
   const toasts = useAlertStore((s) => s.toasts)
@@ -69,7 +71,7 @@ export function ToastContainer() {
   if (toasts.length === 0) return <></>
 
   return (
-    <div className="fixed top-toast right-md z-toast flex flex-col-reverse">
+    <div className="fixed bottom-toast right-md z-toast flex flex-col">
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} />
       ))}

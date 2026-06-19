@@ -223,7 +223,7 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 | Pin-pop / check-draw | favourite / save | scale-pop + star · checkmark draw 300ms | instant |
 | Drag-follow | reorder / pin drag | lift (scale 1.03 + shadow) → follows pointer → spring-settle on drop | no lift, instant move |
 | Skeleton shimmer | loading | 1.5s linear loop | static |
-| Toast in / out | toast pushed / dismissed | **slide in from the right + fade** while the row height grows `0fr→1fr` so the new toast (newest on top) **bumps the older ones down**; dismiss reverses every property · 200ms spring | snap in/out, no slide |
+| Toast in / out | toast pushed / dismissed | **slide in from the right + fade** while the row height grows `0fr→1fr` so the new toast (newest at the **bottom** of the bottom-right stack) **bumps the older ones up**; dismiss reverses every property · 200ms spring | snap in/out, no slide |
 
 ### 0.8 Gestures (the interaction library)
 
@@ -356,6 +356,11 @@ Per-tenant white-label (and a server-driven config) is post-MVP.
   active member filter; FR-SYS-010, backed by `GET /api/search`) · **alerts bell** (unread badge;
   opens the alert panel) · **avatar menu** (the sole user menu — profile, theme + font pickers,
   sign out).
+
+**Toast stack** (§0.7, §7) — fixed **bottom-right** (`z-toast`, above modals), deliberately **off the
+top-right cluster** (search · alerts bell · avatar menu) and a centered command palette, so a transient
+toast never obscures an open menu/panel. Newest at the bottom (bumps older ones up); ~4s auto-dismiss.
+Persistent notices use the Alerts panel / AlertBanner, never a lingering toast.
 
 **Alerts panel** (FR-SYS-007) — dropdown from the bell:
 - Header: "Alerts" + "Mark all read".
