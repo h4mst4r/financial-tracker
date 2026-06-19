@@ -149,6 +149,7 @@ async def test_auth_me_in_household_returns_full_contract(monkeypatch):
             "theme",
             "font",
             "density",
+            "displayFormat",
             "reduceMotion",
             "notificationPrefs",
         }

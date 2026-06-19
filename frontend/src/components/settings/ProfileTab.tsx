@@ -13,7 +13,15 @@ import { useAlertStore } from '../../stores/alertStore'
 import { api } from '../../api/client'
 import { FONT_OPTIONS } from '../../theme/palettes'
 import type { ThemeId, FontId } from '../../theme/palettes'
+import type { DisplayFormat } from '../../lib/date'
 import type { Person, NotificationPrefs } from '../../types/auth'
+
+/** The three date-format orderings (FR-P-009, Story 2.11) — label == token. */
+const DATE_FORMAT_OPTIONS: { value: DisplayFormat; label: string }[] = [
+  { value: 'DD-MM-YYYY', label: 'DD-MM-YYYY' },
+  { value: 'MM-DD-YYYY', label: 'MM-DD-YYYY' },
+  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+]
 
 /** The six alert types (UX §5.1 / bible §5.1), in render order. */
 const NOTIFICATION_FIELDS: { key: keyof NotificationPrefs; label: string }[] = [
@@ -31,6 +39,7 @@ type ProfilePatch = Partial<{
   theme: ThemeId
   font: FontId
   density: 'comfortable' | 'compact'
+  displayFormat: DisplayFormat
   reduceMotion: boolean
   notificationPrefs: Partial<NotificationPrefs>
 }>
@@ -40,8 +49,8 @@ type ProfilePatch = Partial<{
  * (display name editable; display currency read-only — Story 3.9), Appearance (theme + font),
  * Notifications (per-alert checkboxes), and App (density + reduce-motion). Appearance/App changes
  * apply live through the Epic-1 theming engine (themeStore → useAppearance) and persist immediately;
- * the display name has an explicit Save. Date format is Story 2.11; no colour control (UX §5.1 omits
- * one — D-COLOUR).
+ * the display name has an explicit Save. The App date format (Story 2.11) persists per person and is
+ * read by lib/date.ts (storage stays ISO 8601). No colour control (UX §5.1 omits one — D-COLOUR).
  */
 export function ProfileTab() {
   const person = useAuthStore((s) => s.currentPerson)
@@ -89,6 +98,11 @@ export function ProfileTab() {
   function toggleReduceMotion(next: boolean) {
     setReduceMotion(next)
     save.mutate({ reduceMotion: next })
+  }
+  function pickDateFormat(next: string) {
+    // No themeStore involvement — lib/date.ts reads displayFormat from currentPerson, which the
+    // mutation's onSuccess (setCurrentPerson) refreshes. Persist only.
+    save.mutate({ displayFormat: next as DisplayFormat })
   }
   function toggleNotification(key: keyof NotificationPrefs, next: boolean) {
     // Send only the changed key — the backend merges over the stored set. Sending the full render-time
@@ -171,6 +185,17 @@ export function ProfileTab() {
               aria-label="Reduce motion"
               checked={reduceMotion}
               onChange={toggleReduceMotion}
+            />
+          </div>
+          {/* Fixed width (bible §5.1 App, ~160px): the wrapping toggle row would otherwise shrink this
+              field to content width, cramping the w-full Dropdown trigger onto two lines. */}
+          <div className="flex w-44 flex-col gap-2xs">
+            <Label htmlFor="profile-date-format">Date format</Label>
+            <Dropdown
+              id="profile-date-format"
+              value={person.displayFormat}
+              options={DATE_FORMAT_OPTIONS}
+              onChange={pickDateFormat}
             />
           </div>
         </div>

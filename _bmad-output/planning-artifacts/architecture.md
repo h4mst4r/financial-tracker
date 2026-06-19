@@ -666,6 +666,8 @@ Dev sessions use a 24-hour expiry and are exempt from step 7.
     // Profile & appearance prefs (Story 2.9, FR-P-003) — the SPA bootstraps these into the theming engine
     "theme": "base|base-light|retro|brown|gameboy", "font": "base|system|mono",
     "density": "comfortable|compact", "reduceMotion": false,
+    // Per-person date-format preference (Story 2.11, FR-P-009) — display/input only; storage stays ISO 8601
+    "displayFormat": "DD-MM-YYYY|MM-DD-YYYY|YYYY-MM-DD",
     "notificationPrefs": { "budgetWarnings": true, "budgetOverruns": true, "missedRecurring": true,
                            "upcomingPayments": false, "fxStale": true, "backups": false }
   },
@@ -1859,7 +1861,7 @@ one origin, no proxy.
 | `BOOTSTRAP_OWNER_EMAILS` | config | seed list for `approved_owners` (§2.7) |
 | `SERVICE_ACCOUNT_KEY` | **secret** | Shared bearer token for `/jobs/*` — **local/manual fallback only**; unset in prod where OIDC is required (§5.6) |
 | `JOB_INVOKER_SA` | config | Service-account email the Cloud Scheduler OIDC token must carry (`email` claim), verified by `get_job_auth` (§5.6) |
-| `MAINTENANCE_MODE` | config | bool, default `false`. When `true`, a middleware short-circuits `/api/*` and `/auth/*` (and the SPA app routes) with a **503** RFC-7807 body → frontend renders the Maintenance page (§5.8, UX §3). `/health` and the static/asset prefixes (§2.11) are **exempt** so liveness and the shell still serve. |
+| `MAINTENANCE_MODE` | config | bool, default `false`. When `true`, a middleware short-circuits **`/api/*` and `/auth/*`** with a **503** RFC-7807 body. The **SPA document routes still serve `index.html`** and `/health` + the static/asset prefixes (§2.11) are **exempt** — so liveness, the static bundle, and the shell all keep loading. The booted SPA's bootstrap `GET /auth/me` gets the 503, which the frontend maps to the **Maintenance** page (§5.8, UX §3). (Document routes are *not* 503'd: if they were, the shell could never boot to render the React Maintenance page — the user would see raw 7807 JSON. Only the data + auth layer 503s.) The maintenance middleware runs just inside `SecurityHeaders` and outside `DevBypass`/`CSRF` (so the 503 still carries the §2.9 headers and no session/DB work runs during maintenance — §2.1 order). |
 | `AUTH_BYPASS_ENABLED` | config | dev only; CRITICAL log if true in non-dev |
 | `ENV` | config | `development` / `production` |
 | `DEBUG` | config | SQL echo + cookie `Secure` toggle |

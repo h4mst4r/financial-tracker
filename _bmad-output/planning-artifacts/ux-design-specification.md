@@ -321,9 +321,12 @@ Currencies, Formula, Budgets, and the list-lean Transactions/Recurring/Transfers
 
 **Branding (swappable config).** App name, logo/mark, wordmark, favicon — **and the default theme
 (base palette/colours) + default font** — come from a single `branding` config at
-`frontend/src/config/branding.ts` (`{ appName, mark, wordmark, favicon, defaultTheme, defaultFont }`)
+`frontend/src/config/branding.ts` (`{ appName, wordmark, mark?, favicon?, defaultTheme, defaultFont }`)
 — **never hardcoded** — so the whole identity *and* look changes in one place (commercial /
-white-label path). MVP: name "Financial Tracker" + a placeholder mark, *through* the config.
+white-label path). MVP: name "Financial Tracker" + wordmark *through* the config; `mark` and
+`favicon` are **optional and undefined in MVP** — when `mark` is unset the palette-reactive
+gradient placeholder (`BrandMark`) renders, and no `<link rel="icon">` is injected until `favicon`
+is set. Both are present in the config shape as the white-label provision (a one-value swap).
 Per-tenant white-label (and a server-driven config) is post-MVP.
 
 **Sidebar** (left):

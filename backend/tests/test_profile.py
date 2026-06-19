@@ -121,6 +121,7 @@ async def test_patch_profile_persists_each_field(monkeypatch):
                 "theme": "retro",
                 "font": "mono",
                 "density": "compact",
+                "displayFormat": "MM-DD-YYYY",
                 "reduceMotion": True,
                 "notificationPrefs": {"backups": True, "fxStale": False},
             },
@@ -132,6 +133,7 @@ async def test_patch_profile_persists_each_field(monkeypatch):
         assert body["theme"] == "retro"
         assert body["font"] == "mono"
         assert body["density"] == "compact"
+        assert body["displayFormat"] == "MM-DD-YYYY"
         assert body["reduceMotion"] is True
         # Partial notification update merges over defaults (others keep their default state).
         assert body["notificationPrefs"]["backups"] is True
@@ -152,6 +154,7 @@ async def test_patch_profile_persists_each_field(monkeypatch):
             assert person.theme == "retro"
             assert person.font == "mono"
             assert person.density == "compact"
+            assert person.display_format == "MM-DD-YYYY"
             assert person.reduce_motion is True
             assert json.loads(person.notification_prefs)["backups"] is True
     finally:
@@ -192,6 +195,7 @@ async def test_patch_profile_partial_leaves_others(monkeypatch):
         {"font": "comic-sans"},
         {"density": "roomy"},
         {"displayName": "   "},
+        {"displayFormat": "DD/MM/YYYY"},
         {"notificationPrefs": {"unknownKey": True}},
     ],
 )
@@ -224,7 +228,10 @@ async def test_patch_profile_does_not_touch_other_person(monkeypatch):
         client = _client_with_db(factory, monkeypatch)
         _auth(client, sid, csrf)
 
-        resp = client.patch("/api/profile", json={"theme": "brown", "displayName": "Edited"})
+        resp = client.patch(
+            "/api/profile",
+            json={"theme": "brown", "displayName": "Edited", "displayFormat": "YYYY-MM-DD"},
+        )
         assert resp.status_code == 200
 
         async with factory() as db:
@@ -232,8 +239,10 @@ async def test_patch_profile_does_not_touch_other_person(monkeypatch):
             other = await db.get(Person, other_id)
             assert editor.theme == "brown"
             assert editor.display_name == "Edited"
+            assert editor.display_format == "YYYY-MM-DD"
             assert other.theme == "base"  # untouched
             assert other.display_name == "Other"
+            assert other.display_format == "DD-MM-YYYY"  # untouched (default)
     finally:
         await engine.dispose()
 
@@ -254,6 +263,7 @@ async def test_auth_me_person_carries_appearance_defaults(monkeypatch):
         assert person["theme"] == "base"
         assert person["font"] == "base"
         assert person["density"] == "comfortable"
+        assert person["displayFormat"] == "DD-MM-YYYY"  # FR-P-009 default
         assert person["reduceMotion"] is False
         assert person["notificationPrefs"] == {
             "budgetWarnings": True,

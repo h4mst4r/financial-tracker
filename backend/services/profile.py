@@ -22,6 +22,8 @@ from backend.schemas.profile import ProfileUpdate
 THEME_IDS = frozenset({"base", "base-light", "retro", "brown", "gameboy"})
 FONT_IDS = frozenset({"base", "system", "mono"})
 DENSITY_IDS = frozenset({"comfortable", "compact"})
+# The three day/month orderings (FR-P-009, Story 2.11). Display/input only — storage stays ISO 8601.
+DISPLAY_FORMAT_IDS = frozenset({"DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD"})
 
 # The six alert types (UX §5.1 / bible §5.1), camelCase to match the wire (storage == wire — the
 # JSON object is surfaced verbatim as `notificationPrefs`). Defaults mirror the bible checked state:
@@ -67,6 +69,12 @@ async def update_profile(db: AsyncSession, person: Person, data: ProfileUpdate) 
         if fields["density"] not in DENSITY_IDS:
             errors.bad_request("Invalid density", f"'{fields['density']}' is not a valid density")
         person.density = fields["density"]
+    if fields.get("display_format") is not None:
+        if fields["display_format"] not in DISPLAY_FORMAT_IDS:
+            errors.bad_request(
+                "Invalid date format", f"'{fields['display_format']}' is not a valid date format"
+            )
+        person.display_format = fields["display_format"]
     if fields.get("reduce_motion") is not None:
         person.reduce_motion = fields["reduce_motion"]
     if fields.get("display_name") is not None:

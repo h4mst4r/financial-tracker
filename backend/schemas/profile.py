@@ -21,5 +21,6 @@ class ProfileUpdate(BaseModel):
     theme: str | None = None
     font: str | None = None
     density: str | None = None
+    display_format: str | None = None
     reduce_motion: bool | None = None
     notification_prefs: dict[str, bool] | None = None

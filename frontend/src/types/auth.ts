@@ -1,4 +1,5 @@
 import type { ThemeId, FontId, DensityId } from '../theme/palettes'
+import type { DisplayFormat } from '../lib/date'
 
 /** Per-person alert-delivery preferences (`Person.notification_prefs`, UX §5.1, Story 2.9). The six
  *  alert types are always present (the backend default-completes the set). */
@@ -25,6 +26,8 @@ export interface Person {
   theme: ThemeId
   font: FontId
   density: DensityId
+  // Per-person date-display preference (Story 2.11) — read by lib/date.ts; storage stays ISO 8601.
+  displayFormat: DisplayFormat
   reduceMotion: boolean
   notificationPrefs: NotificationPrefs
 }

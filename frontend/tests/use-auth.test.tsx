@@ -35,6 +35,7 @@ const PAYLOAD: AuthMe = {
     theme: 'base',
     font: 'base',
     density: 'comfortable',
+    displayFormat: 'DD-MM-YYYY',
     reduceMotion: false,
     notificationPrefs: {
       budgetWarnings: true, budgetOverruns: true, missedRecurring: true,

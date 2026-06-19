@@ -185,3 +185,30 @@ class DevBypassMiddleware(BaseHTTPMiddleware):
         set_session_cookie(response, session_id)
         response.headers[DEV_SESSION_ID_HEADER] = session_id
         return response
+
+
+class MaintenanceMiddleware(BaseHTTPMiddleware):
+    """503 short-circuit for the data + auth layer when MAINTENANCE_MODE is on (ARCH §5.4/§5.8).
+
+    When the flag is set, `/api/*` and `/auth/*` get a 7807 503. Everything else passes through:
+    the SPA document routes (so the shell boots and the React Maintenance page can render),
+    `/health`, the static/asset prefixes (§2.11), and `/jobs/*`. Sits just inside SecurityHeaders
+    and outside DevBypass/CSRF (§2.1), so the 503 still carries the §2.9 headers and no
+    session/DB work runs during maintenance. Reads the flag per-request (settings are lru_cached).
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if not get_settings().maintenance_mode:
+            return await call_next(request)
+        if request.url.path.startswith(("/api/", "/auth/")):
+            return JSONResponse(
+                status_code=503,
+                content=problem(
+                    type_="maintenance",
+                    title="Service unavailable",
+                    status=503,
+                    detail="The service is temporarily down for maintenance.",
+                    instance=request.url.path,
+                ),
+            )
+        return await call_next(request)

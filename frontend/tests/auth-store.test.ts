@@ -13,7 +13,7 @@ const ME: AuthMe = {
     defaultView: 'household',
     displayCurrency: 'SGD',
     canCreateHousehold: true,
-    theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false,
+    theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false,
     notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
   },
   household: HH,

@@ -16,7 +16,7 @@ const HH: Household = { householdId: 'h1', name: "Ben's Household", baseCurrency
 const OWNER: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: true,
-  theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false, notificationPrefs: PREFS,
+  theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false, notificationPrefs: PREFS,
 }
 
 function makeResponse(body: unknown, status = 200) {

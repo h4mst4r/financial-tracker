@@ -14,6 +14,8 @@ import { Settings } from './pages/Settings'
 import { JoinHousehold } from './pages/JoinHousehold'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
+import { ApiError } from './api/client'
+import { branding } from './config/branding'
 
 // Minimal in-shell dashboard placeholder until the real Dashboard lands (Epic 9). It mounts at
 // `/dashboard` (the canonical path the Sidebar nav + the "Back to dashboard" error actions target);
@@ -21,7 +23,7 @@ import { Spinner } from './components/primitives/Spinner'
 function DashboardHome() {
   return (
     <div className="p-lg text-text-primary">
-      <h1 className="text-2xl font-medium">Financial Tracker</h1>
+      <h1 className="text-2xl font-medium">{branding.appName}</h1>
     </div>
   )
 }
@@ -99,6 +101,18 @@ export default function App() {
   const currentPerson = useAuthStore((s) => s.currentPerson)
   const household = useAuthStore((s) => s.household)
   const pendingInvitation = useAuthStore((s) => s.pendingInvitation)
+
+  // Maintenance is global (ARCH §5.4/§5.8): a 503 on the bootstrap `GET /auth/me` short-circuits the
+  // whole app to the Maintenance page on every path — before <Routes>, so it pre-empts LoginRoute's
+  // `authError → refused_connection` branch (a 503 is Maintenance, not a refused connection). All
+  // hooks run above this point (rules-of-hooks).
+  if (authError instanceof ApiError && authError.status === 503) {
+    return (
+      <ErrorBoundary>
+        <PublicError state="maintenance" />
+      </ErrorBoundary>
+    )
+  }
 
   return (
     <ErrorBoundary>

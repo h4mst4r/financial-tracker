@@ -14,7 +14,8 @@ const PREFS: NotificationPrefs = {
 const PERSON: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'member',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: false,
-  theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false, notificationPrefs: PREFS,
+  theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY',
+  reduceMotion: false, notificationPrefs: PREFS,
 }
 
 function makeResponse(body: unknown, status = 200) {
@@ -60,11 +61,24 @@ describe('ProfileTab', () => {
     expect(screen.getByText('App')).toBeTruthy()
   })
 
-  test('display currency is read-only and there is no colour or date-format control (P0)', () => {
+  test('display currency is read-only and there is no colour control (P0)', () => {
     renderProfile()
     expect(screen.getByLabelText('Display currency').hasAttribute('readonly')).toBe(true)
     expect(screen.queryByLabelText(/colour/i)).toBeNull()
-    expect(screen.queryByLabelText(/date format/i)).toBeNull()
+  })
+
+  test('picking a date format persists it (no themeStore — read from currentPerson)', async () => {
+    const updated = { ...PERSON, displayFormat: 'MM-DD-YYYY' as const }
+    fetchMock.mockResolvedValue(makeResponse(updated))
+    renderProfile()
+    // The trigger's accessible name is its associated <Label> ("Date format").
+    fireEvent.click(screen.getByRole('button', { name: 'Date format' }))
+    fireEvent.click(screen.getByRole('option', { name: 'MM-DD-YYYY' }))
+
+    await waitFor(() => expect(lastPatchBody()).toEqual({ displayFormat: 'MM-DD-YYYY' }))
+    await waitFor(() =>
+      expect(useAuthStore.getState().currentPerson?.displayFormat).toBe('MM-DD-YYYY'),
+    )
   })
 
   test('display name Save sends PATCH and updates the store + toast', async () => {

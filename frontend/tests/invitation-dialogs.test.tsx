@@ -12,7 +12,7 @@ const HH: Household = { householdId: 'h1', name: "Ben's Household", baseCurrency
 const PERSON: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'member',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: false,
-  theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false,
+  theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false,
   notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
 }
 const INVITE: PendingInvitation = {

@@ -19,7 +19,12 @@ from slowapi.middleware import SlowAPIMiddleware
 from backend.config import get_settings
 from backend.database import async_session_factory
 from backend.errors import problem
-from backend.middleware import CSRFMiddleware, DevBypassMiddleware, SecurityHeadersMiddleware
+from backend.middleware import (
+    CSRFMiddleware,
+    DevBypassMiddleware,
+    MaintenanceMiddleware,
+    SecurityHeadersMiddleware,
+)
 from backend.rate_limit import limiter
 from backend.routers import auth as auth_router
 from backend.routers import household as household_router
@@ -70,10 +75,13 @@ def create_app() -> FastAPI:
 
     # ── Middleware stack (ARCH §2.1) — Starlette runs LIFO, so the LAST add_middleware
     # is the OUTERMOST. Add in reverse to get runtime order:
-    #   SecurityHeaders → DevBypass → CSRF → SlowAPI → handler.
+    #   SecurityHeaders → Maintenance → DevBypass → CSRF → SlowAPI → handler.
+    # Maintenance sits just inside SecurityHeaders (503s keep the §2.9 headers) and outside
+    # DevBypass/CSRF (no session/DB work runs while MAINTENANCE_MODE is on) — ARCH §5.4.
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(CSRFMiddleware)
     app.add_middleware(DevBypassMiddleware)
+    app.add_middleware(MaintenanceMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
 
     # ── Global exception handlers (RFC 7807, ARCH §4.6) ──

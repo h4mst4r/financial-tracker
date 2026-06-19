@@ -65,6 +65,7 @@ class Person(BaseEntity):
     colour: Mapped[str | None] = mapped_column(String(7), nullable=True)
     font: Mapped[str] = mapped_column(String(20), nullable=False, default="base")
     density: Mapped[str] = mapped_column(String(20), nullable=False, default="comfortable")
+    display_format: Mapped[str] = mapped_column(String(20), nullable=False, default="DD-MM-YYYY")
     reduce_motion: Mapped[bool] = mapped_column(nullable=False, default=False)
     notification_prefs: Mapped[str | None] = mapped_column(Text, nullable=True)
     dashboard_layout: Mapped[str | None] = mapped_column(Text, nullable=True)

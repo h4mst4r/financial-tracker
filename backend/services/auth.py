@@ -504,7 +504,8 @@ def person_payload(person: Person) -> dict:
     """The §2.14.C `person` object (camelCase). Shared by `build_auth_me` and `PATCH /api/profile`
     (Story 2.9) so the two never drift. Carries the appearance preferences the SPA bootstraps into
     the Epic-1 theming engine; `notificationPrefs` is the parsed, default-completed six-key object.
-    Stories 2.11 (`displayFormat`) and 3.9 (`displayCurrency` editability) extend this shape."""
+    `displayFormat` is the per-person date-format preference (Story 2.11). Story 3.9
+    (`displayCurrency` editability) extends this shape further."""
     return {
         "personId": person.id,
         "displayName": person.display_name,
@@ -517,6 +518,7 @@ def person_payload(person: Person) -> dict:
         "theme": person.theme,
         "font": person.font,
         "density": person.density,
+        "displayFormat": person.display_format,
         "reduceMotion": person.reduce_motion,
         "notificationPrefs": parse_notification_prefs(person.notification_prefs),
     }

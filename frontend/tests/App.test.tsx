@@ -23,7 +23,7 @@ const IN_HOUSEHOLD: AuthMe = {
     defaultView: 'household',
     displayCurrency: 'SGD',
     canCreateHousehold: true,
-    theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false,
+    theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false,
     notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
   },
   household: { householdId: 'h1', name: 'HH', baseCurrency: 'SGD', timezone: 'Asia/Singapore' },
@@ -146,4 +146,27 @@ test('renders Not Found for an unmatched in-household path', async () => {
   fetchMock.mockResolvedValue(makeResponse(IN_HOUSEHOLD))
   renderApp('/bogus')
   expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument()
+})
+
+test('renders the Maintenance page when the bootstrap returns 503 (Story 2.10)', async () => {
+  fetchMock.mockResolvedValue(
+    makeResponse(
+      { type: 'maintenance', title: 'Service unavailable', status: 503, detail: 'down' },
+      503,
+    ),
+  )
+  renderApp('/dashboard')
+  expect(await screen.findByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
+})
+
+test('a 503 at /login shows Maintenance, not Refused Connection (Story 2.10)', async () => {
+  fetchMock.mockResolvedValue(
+    makeResponse(
+      { type: 'maintenance', title: 'Service unavailable', status: 503, detail: 'down' },
+      503,
+    ),
+  )
+  renderApp('/login')
+  expect(await screen.findByRole('heading', { name: 'Maintenance' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Refused connection' })).not.toBeInTheDocument()
 })
