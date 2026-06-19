@@ -27,7 +27,12 @@ bg-surface-overlay — Elevated floating panels on top of raised panels
 text-text-primary    — All body text, selected values, labels
 text-text-secondary  — Inactive tabs, placeholder-adjacent labels, sub-labels
 text-text-muted      — Placeholder text, disabled labels ONLY (very low contrast — avoid for interactive text)
-text-accent          — Active picker tabs, accent interactive elements (cyan)
+text-accent          — Active picker tabs, accent interactive elements (cyan). The accent FOREGROUND:
+                       resolves to `var(--color-accent-fg, --color-accent-secondary)`. Standard themes
+                       use the fallback (accent-secondary); an immersive palette whose accent-secondary
+                       is a dark slot colliding with the surface (Game Boy: accent-secondary == surface)
+                       MUST set `--color-accent-fg` to a legible light slot, else text-accent is invisible.
+                       (Decouples accent-as-text from accent-as-fill — see §1.6.)
 text-primary         — Active nav/control tabs, selected check marks (indigo)
 ```
 

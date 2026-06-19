@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 
-export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'info' | 'error'
+export type BadgeVariant = 'neutral' | 'outline' | 'success' | 'warning' | 'info' | 'error'
 
 interface BadgeProps {
   variant?: BadgeVariant
@@ -10,6 +10,7 @@ interface BadgeProps {
 
 const variantClasses: Record<BadgeVariant, string> = {
   neutral: 'bg-surface-active text-text-secondary',
+  outline: 'bg-transparent border border-border-strong text-text-secondary',
   success: 'bg-success-fill text-success',
   warning: 'bg-warning-fill text-warning',
   info: 'bg-info-fill text-info',

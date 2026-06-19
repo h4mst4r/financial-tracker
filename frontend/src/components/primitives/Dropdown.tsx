@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { Icon } from './Icon'
 
 interface DropdownOption {
   value: string
-  label: string
+  /** String, or a node (e.g. a colour-tinted label) — rendered in the trigger and the option list. */
+  label: ReactNode
 }
 
 interface DropdownProps {

@@ -69,6 +69,9 @@ class Person(BaseEntity):
     reduce_motion: Mapped[bool] = mapped_column(nullable=False, default=False)
     notification_prefs: Mapped[str | None] = mapped_column(Text, nullable=True)
     dashboard_layout: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of the last-8 picked emoji/icon glyphs (most-recent first) backing the
+    # EmojiIconPicker Recent row — per-person, follows them across devices (ARCH §3.4, UX §8.3).
+    recent_glyphs: Mapped[str | None] = mapped_column(Text, nullable=True)
     detachment_reason: Mapped[str | None] = mapped_column(String(30), nullable=True)
     detached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

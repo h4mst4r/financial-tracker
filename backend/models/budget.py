@@ -70,6 +70,9 @@ class Category(BaseEntity):
         nullable=True,
     )
     depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Per-instance full-saturation fill opt-in (calm tint is the default). Cross-entity column
+    # (also on accounts/currencies) — ARCH §3.7, FR-SYS-016, Story 3.1.
+    vivid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         CheckConstraint("depth <= 1", name="ck_categories_depth_max_1"),

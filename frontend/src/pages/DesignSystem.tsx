@@ -23,6 +23,8 @@ import {
   Toggle,
   Dropdown,
   ThemePicker,
+  ColourPicker,
+  EmojiIconPicker,
   SegmentedControl,
   Icon,
   Badge,
@@ -44,6 +46,8 @@ import { PublicPage } from '../components/PublicPage'
 import { AppShell } from '../components/shell/AppShell'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
+import { CategoryTree } from '../components/category/CategoryTree'
+import type { Category } from '../types/category'
 import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useAlertStore } from '../stores/alertStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -146,6 +150,16 @@ export function DesignSystem() {
   // open → toggle-select (mirrors §0.8 long-press-to-enter-multi-select); the bar appears at ≥1.
   const bulkSelect = useMultiSelect()
   const [selectionMode, setSelectionMode] = useState(true)
+  // Picker demos (Story 3.1)
+  const [demoColour, setDemoColour] = useState('#8b5cf6')
+  const [demoVivid, setDemoVivid] = useState(false)
+  const [demoGlyph, setDemoGlyph] = useState<string | null>('🏠')
+  const demoCategories: Category[] = [
+    { id: 'c1', status: 'active', name: 'Food & Dining', color: '#f59e0b', icon: '🍔', category_type: 'expense', parent_id: null, depth: 0, vivid: false },
+    { id: 'c1a', status: 'active', name: 'Groceries', color: '#f59e0b', icon: '🛒', category_type: 'expense', parent_id: 'c1', depth: 1, vivid: false },
+    { id: 'c1b', status: 'active', name: 'Restaurants', color: '#f59e0b', icon: '🍷', category_type: 'expense', parent_id: 'c1', depth: 1, vivid: false },
+    { id: 'c2', status: 'active', name: 'Salary', color: '#16a34a', icon: '💰', category_type: 'income', parent_id: null, depth: 0, vivid: true },
+  ]
   const bulkCards = [
     { id: 'bk1', colour: '#6366f1', icon: '🏦', name: 'DBS Multiplier', hero: 'S$ 12,840', meta: 'bank · SGD' },
     { id: 'bk2', colour: '#22c55e', icon: '📈', name: 'VWRA Holdings', hero: 'S$ 48,200', meta: 'capital · SGD' },
@@ -684,6 +698,35 @@ export function DesignSystem() {
           <div className="flex flex-col gap-density max-w-input">
             <ThemePicker value={themeId} onChange={setTheme} />
             <ThemePicker value={themeId} onChange={() => {}} disabled />
+          </div>
+        </section>
+
+        {/* ColourPicker — Palette/Hex tabs + vivid toggle (UX §8.2, Story 3.1). */}
+        <section id="colour-picker" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">ColourPicker</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <ColourPicker value={demoColour} onChange={setDemoColour} vivid={demoVivid} onVividChange={setDemoVivid} />
+            <ColourPicker value={demoColour} onChange={() => {}} vivid={demoVivid} onVividChange={() => {}} disabled />
+          </div>
+        </section>
+
+        {/* EmojiIconPicker — Emojis/Icons tabs + search + Recent row (UX §8.3, Story 3.1). */}
+        <section id="emoji-icon-picker" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">EmojiIconPicker</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <EmojiIconPicker value={demoGlyph} onChange={setDemoGlyph} />
+            <EmojiIconPicker value={demoGlyph} onChange={() => {}} disabled />
+          </div>
+        </section>
+
+        {/* ─────────────────────── Category Components (UX §6) ─────────────────────── */}
+        <GroupHeading>Category Components</GroupHeading>
+
+        {/* CategoryTree — the one sanctioned EntityCard exception; flat-strip rows (UX §6, Story 3.1). */}
+        <section id="category-tree" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">CategoryTree</h2>
+          <div className="max-w-modal">
+            <CategoryTree items={demoCategories} onEdit={() => {}} onAddSubcategory={() => {}} />
           </div>
         </section>
 

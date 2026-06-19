@@ -25,6 +25,9 @@ DENSITY_IDS = frozenset({"comfortable", "compact"})
 # The three day/month orderings (FR-P-009, Story 2.11). Display/input only — storage stays ISO 8601.
 DISPLAY_FORMAT_IDS = frozenset({"DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD"})
 
+# The EmojiIconPicker Recent row keeps the last-8 picked glyphs (UX §8.3, Story 3.1).
+RECENT_GLYPHS_CAP = 8
+
 # The six alert types (UX §5.1 / bible §5.1), camelCase to match the wire (storage == wire — the
 # JSON object is surfaced verbatim as `notificationPrefs`). Defaults mirror the bible checked state:
 # upcoming payments + backups OFF, the rest ON.
@@ -97,3 +100,23 @@ async def update_profile(db: AsyncSession, person: Person, data: ProfileUpdate) 
 
     await db.flush()
     return person
+
+
+def get_recent_glyphs(person: Person) -> list[str]:
+    """The person's stored Recent glyphs (most-recent first); `[]` if never set (UX §8.3)."""
+    return json.loads(person.recent_glyphs) if person.recent_glyphs else []
+
+
+async def push_recent_glyph(db: AsyncSession, person: Person, glyph: str) -> list[str]:
+    """Push a picked glyph to the front of the person's Recent list — dedupe, cap at 8 (UX §8.3).
+
+    `person` is the live, route-session-attached object from `get_writable_person`, so the write
+    lands on the open transaction. Returns the updated list.
+    """
+    glyph = glyph.strip()
+    if not glyph:
+        errors.bad_request("Invalid glyph", "Glyph cannot be empty")
+    updated = [glyph, *(g for g in get_recent_glyphs(person) if g != glyph)][:RECENT_GLYPHS_CAP]
+    person.recent_glyphs = json.dumps(updated)
+    await db.flush()
+    return updated

@@ -24,3 +24,16 @@ class ProfileUpdate(BaseModel):
     display_format: str | None = None
     reduce_motion: bool | None = None
     notification_prefs: dict[str, bool] | None = None
+
+
+class RecentGlyphsOut(BaseModel):
+    """The person's last-8 picked glyphs (most-recent first) for the EmojiIconPicker Recent row
+    (UX §8.3, Story 3.1). Single-word keys — no camelCase aliasing needed."""
+
+    glyphs: list[str]
+
+
+class RecentGlyphPush(BaseModel):
+    """Body for `POST /api/profile/recent-glyphs` — one picked glyph to push to the front."""
+
+    glyph: str

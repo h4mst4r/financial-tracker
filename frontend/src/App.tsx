@@ -11,6 +11,7 @@ import { AppShell } from './components/shell/AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
+import { Categories } from './pages/Categories'
 import { JoinHousehold } from './pages/JoinHousehold'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
@@ -87,6 +88,7 @@ function GatedApp({
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardHome />} />
+          <Route path="/categories" element={<Categories />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<PublicError state="not_found" />} />
         </Routes>

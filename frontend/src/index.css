@@ -169,6 +169,8 @@
 /* ── Entity colour-fill identity (UX §0.1, frontend.md §2.5) — backgrounds only; text/contrast = 1.6 ── */
 @utility bg-entity-fill-calm  { background-color: color-mix(in oklab, var(--entity-colour) 14%, transparent); }
 @utility bg-entity-fill-vivid { background-color: var(--entity-colour); }
+/* Subcategory rows: a lighter tint of the parent's colour (CategoryTree, UX §6 / frontend.md §2.11). */
+@utility bg-entity-fill-sub   { background-color: color-mix(in oklab, var(--entity-colour) 7%, transparent); }
 /* Contrast-aware text for the vivid fill (calm keeps text-text-primary). --entity-on-colour is set
    inline per-instance from theme/colour.ts contrastText() (WCAG light/dark pick) — see EntityCard. */
 @utility text-on-entity { color: var(--entity-on-colour); }
@@ -247,7 +249,13 @@
 @utility text-on-primary { color: var(--color-on-primary); }
 @utility bg-on-primary  { background-color: var(--color-on-primary); }  /* toggle knob — contrasts both track states */
 @utility text-primary    { color: var(--color-accent-primary); }
-@utility text-accent     { color: var(--color-accent-secondary); }
+/* `text-accent` is the accent FOREGROUND (active picker tab, ContextMenu Open/Visualize, BulkActionBar
+   Visualize). It defaults to `accent-secondary` (the accent FILL colour), which works in the standard
+   themes where accent-secondary is a mid-tone. But an immersive palette may pin accent-secondary to a
+   dark slot that collides with the surface (Game Boy: accent-secondary == surface), making it illegible
+   as text. Such themes set `--color-accent-fg` to a readable (light) slot; the fallback keeps every
+   other theme unchanged. (Decouples accent-as-fill from accent-as-text — UX §0.2 immersive remap.) */
+@utility text-accent     { color: var(--color-accent-fg, var(--color-accent-secondary)); }
 
 /* ── Focus/selection glow rings. The class name must NOT be auto-generated from
    --color-ring-glow-*: Tailwind v4 derives that token's colour name as "ring-glow-*",
@@ -293,6 +301,11 @@
 
 /* ── Tooltip max-width (P4: no inline px) ── */
 @utility max-w-tooltip { max-width: 16rem; }
+
+/* ── Picker panel min-width — keeps the ColourPicker/EmojiIconPicker popovers a stable width
+   across tabs and independent of the (possibly narrow) trigger column (bible §7 fixed-width
+   panels; P4: no inline px). ── */
+@utility min-w-picker { min-width: 15rem; }
 
 /* ── ContextMenu / dropdown min-width (P4: no arbitrary [160px]) ── */
 @utility min-w-menu { min-width: 160px; }
@@ -543,14 +556,19 @@
   --color-text-secondary:  #8bac0f;
   --color-text-muted:      #6f8f2a;
   --color-accent-primary:   #8bac0f;   /* light ramp slot — focus/primary */
-  --color-accent-secondary: #306230;   /* dark ramp slot — selection/accent (two separated slots, §0.2) */
+  --color-accent-secondary: #306230;   /* dark ramp slot — selection/accent FILL (== surface, so unusable as text) */
+  --color-accent-fg:        #9bbc0f;   /* accent FOREGROUND (text-accent) — lightest slot, legible on the green surfaces */
   --color-border-accent:    #9bbc0f;   /* open-picker border — lightest, so it reads on green surface */
   --color-border-focus:     #8bac0f;
   --color-error:            #9bbc0f;   /* meaning via icon; lightest = attention */
   --color-border-error:     #9bbc0f;
   --color-accent-subtle:  color-mix(in oklab, #8bac0f 16%, transparent);
   --color-control-active: color-mix(in oklab, #8bac0f 22%, transparent);
-  --color-accent-active:  color-mix(in oklab, #306230 24%, transparent);
+  /* Active picker tab. The standard "subtle accent tint" reads as a *lighter glow* on a dark surface;
+     in Game Boy the accent-secondary tint is darker-than-surface and muddy, so the active tab is a
+     *recessed dark well* (blend toward the page bg) instead — clearly darker than the panel (~1.6:1)
+     with crisp accent-fg text on it (~4.6:1, AA). The fill metaphor flips per palette; legibility wins. */
+  --color-accent-active:  color-mix(in oklab, var(--color-bg) 65%, var(--color-surface-raised));
   --color-primary-muted:  color-mix(in oklab, #8bac0f 18%, transparent);
   --color-ring-glow-primary: color-mix(in oklab, #8bac0f 35%, transparent);
   --color-ring-glow-accent:  color-mix(in oklab, #9bbc0f 35%, transparent);

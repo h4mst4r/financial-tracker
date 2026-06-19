@@ -275,3 +275,36 @@ async def test_auth_me_person_carries_appearance_defaults(monkeypatch):
         }
     finally:
         await engine.dispose()
+
+
+# ── Recent glyphs (Story 3.1, UX §8.3) ──
+
+
+async def test_recent_glyphs_empty_then_push_dedupe_cap(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id = await _seed_person(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # Never picked → empty.
+        assert client.get("/api/profile/recent-glyphs").json()["glyphs"] == []
+
+        # Push four distinct → most-recent first.
+        for g in ["🍔", "🛒", "🚇", "🏠"]:
+            client.post("/api/profile/recent-glyphs", json={"glyph": g})
+        assert client.get("/api/profile/recent-glyphs").json()["glyphs"] == ["🏠", "🚇", "🛒", "🍔"]
+
+        # Re-pick an existing one → moves to front, no duplicate.
+        body = client.post("/api/profile/recent-glyphs", json={"glyph": "🛒"}).json()
+        assert body["glyphs"] == ["🛒", "🏠", "🚇", "🍔"]
+
+        # Cap at 8.
+        for g in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]:
+            client.post("/api/profile/recent-glyphs", json={"glyph": g})
+        glyphs = client.get("/api/profile/recent-glyphs").json()["glyphs"]
+        assert len(glyphs) == 8
+        assert glyphs[0] == "j"  # most-recent first
+    finally:
+        await engine.dispose()

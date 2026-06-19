@@ -691,12 +691,18 @@ tinted with the semantic income colour) alongside a secondary **New category**. 
 > entity surface exempt from `EntityCard`.
 
 - **Parent row:** calm colour-tint fill · drag handle (hover-reveal) · expand chevron (or `–`
-  if childless) · colour icon chip · name · sub-count · **right-aligned** type badge · ⋮ menu.
+  if childless) · colour icon chip · name · **sub-count pill** (`N subs`) · **right-aligned**
+  semantic-coloured **type badge** · ⋮ menu.
 - **Subcategory row:** a row **light-filled in the *parent's* colour** (a lighter tint than the
-  parent row — visually ties it to its parent; **no separate colour chip**). Reads as selectable
-  (multi-select, merge, promote-out) · slightly **offset/indented** · **no connector line** ·
-  drag handle · name · right-aligned badge · ⋮. An **"Add subcategory"** affordance sits at the
-  end of an expanded parent's children (not inline on every primary row).
+  parent row — visually ties it to its parent; **no separate colour chip**, **and no glyph — name
+  only**). Reads as selectable (multi-select, merge, promote-out) · slightly **offset/indented** ·
+  **no connector line** · drag handle · name · right-aligned type badge · ⋮. An **"Add subcategory"**
+  affordance sits at the end of an expanded parent's children (not inline on every primary row).
+- **Type badge colour (income / expense / both):** the type badge is **semantic-coloured** — **income
+  = green (`success`)**, **expense = red (`error`)**, **both = blue (`info`)** — tying the tag to the
+  app-wide **inflow/outflow semantics** (§0.1: inflow green, outflow red). All three are semantic
+  tokens, so they remap per theme (never raw hex). The **same colour drives the type-field label** in
+  the create/edit modal's Type **Dropdown** (§8.2).
 - **No left accent bar.** Category identity is the **colour-tint fill** (§0.1 / §5.5) — the 4px
   left-border accent bar is **not used** anywhere (parent or sub rows); neither is a colour chip or
   a connector line. (This prohibition is mirrored in CLAUDE.md §5.11.)
@@ -760,10 +766,18 @@ The single create/edit surface for every entity.
 - **Opens from a card via the flip-expand animation** (§0.7): tapping a card flips it and expands
   into this modal — the card's "detail" **is** the EntityModal.
 - **Subtype-adaptive:** changing the type swaps in that subtype's fields (FR-A-001).
-- **Controls:** name · type · **colour picker** (+ **vivid** per-instance toggle) ·
+- **Controls:** name · **type** *(a **Dropdown** for an enumerated type — e.g. category
+  income/expense/both, account subtype; **SegmentedControl is reserved for 2-option toggles**, §0.9.
+  For category type, the Dropdown labels are **semantic-coloured** to match the §6 type badge —
+  income green / expense red / both blue)* · **colour picker** (+ **vivid** per-instance toggle) ·
   **EmojiIconPicker** *(only where the entity has a custom glyph — categories;* **accounts use
   the type-default icon**, no custom glyph*)* · MonetaryValue input · DatePicker · multi-owner
   chips · notes.
+- **ColourPicker panel:** two tabs — **Palette** (the curated swatch grid) and **Hex**, the Hex tab
+  pairing a **native colour-input ("colour wheel" / gradient — the OS picker)** with a hex text field
+  for precise entry (both write the same value; no third-party colour library). A **vivid** toggle
+  sits at the foot of the panel (the per-instance calm↔vivid opt-in). The panel is a **fixed-/fit-width
+  popover** (≥ trigger, §0.10) — never constrained to a narrow field column.
 - **Validation:** §0.9 focus/error states; required fields; inline messages; Save disabled until valid.
 
 ### 8.2a Add value snapshot (account ⋮)
@@ -786,13 +800,17 @@ EntityModal.
 - **Trigger:** the icon field shows the current glyph (or a placeholder); clicking it opens the
   panel with the trigger in the open/accent state (picker-trigger pattern, §0.9).
 - **Panel anatomy:** **two tabs — Emojis | Icons** (picker-tab pattern, §0.9) · a **search**
-  field (filters the active tab by name/keyword; cyan picker-focus ring, §0.9) · a scrollable
-  **grid** of glyph cells. Emojis are native unicode; **Icons** are the Lucide set (so an icon
-  glyph inherits `currentColor` and reads on any entity fill). A small **Recent** row sits above
-  the grid once the household has picked glyphs before — the **last 8** picked glyphs (most-recent
-  first; mixed emojis + icons), persisted **per-person in `entity_preferences` (key
-  `recent_glyphs`)** so they follow the household across devices. The row is hidden until the
-  household has ever picked a glyph.
+  field (filters the active tab by name/keyword; cyan picker-focus ring, §0.9) · an **8-column
+  grid** of glyph cells (fixed-/fit-width popover ≥ trigger, §0.10 — never constrained to a narrow
+  field column). Emojis are native unicode (full-colour, theme-independent); **Icons** are the
+  Lucide set and render in the **themed text colour** (`currentColor` = `text-primary` by default —
+  white on dark, dark on light; contrast-aware on a vivid fill), so an icon glyph reads on any
+  surface. A small **Recent** row sits above the grid once a person has picked glyphs before — the
+  **last 8** picked glyphs (most-recent first; mixed emojis + icons; **no label**, separated from the
+  grid by a divider), persisted **per-person in `persons.recent_glyphs`** (a JSON column — NOT
+  `entity_preferences`, which is keyed per-entity and can't hold a per-person ordered list; SCP
+  2026-06-19) so they follow the person across devices. The row is hidden until the person has ever
+  picked a glyph.
 - **Selection:** the chosen cell is highlighted with the selection ring (§0.9); picking it sets
   the field and closes the panel. Grid cells hover with `surface-active` (small-button-in-panel
   rule). An entity may also have **no glyph** — a "clear / none" affordance falls back to the

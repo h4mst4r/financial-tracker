@@ -29,6 +29,10 @@ export interface EntityPageProps {
   showArchived: boolean
   onShowArchivedChange: (value: boolean) => void
   onSort?: () => void
+  /** Hide the grid/list view toggle — for surfaces with a single fixed layout (e.g. CategoryTree). */
+  hideViewToggle?: boolean
+  /** Hide the Sort button — for surfaces that don't support manual sort (e.g. CategoryTree). */
+  hideSort?: boolean
   /** Entity-specific filter controls (e.g. Accounts → bank/credit-card type). */
   filters?: ReactNode
 
@@ -61,6 +65,8 @@ export function EntityPage(props: EntityPageProps) {
     showArchived,
     onShowArchivedChange,
     onSort,
+    hideViewToggle,
+    hideSort,
     filters,
   } = props
   const archivedToggleId = useId()
@@ -87,16 +93,20 @@ export function EntityPage(props: EntityPageProps) {
               className="pl-xl max-w-input"
             />
           </div>
-          <Button variant="ghost" onClick={onSort} aria-label="Sort">
-            <span className="inline-flex items-center gap-xs">
-              <Icon icon={ArrowUpDown} size={16} /> Sort
-            </span>
-          </Button>
-          <SegmentedControl
-            value={view}
-            options={viewOptions}
-            onChange={(v) => onViewChange(v as EntityView)}
-          />
+          {!hideSort && (
+            <Button variant="ghost" onClick={onSort} aria-label="Sort">
+              <span className="inline-flex items-center gap-xs">
+                <Icon icon={ArrowUpDown} size={16} /> Sort
+              </span>
+            </Button>
+          )}
+          {!hideViewToggle && (
+            <SegmentedControl
+              value={view}
+              options={viewOptions}
+              onChange={(v) => onViewChange(v as EntityView)}
+            />
+          )}
           <label
             htmlFor={archivedToggleId}
             className="inline-flex items-center gap-xs text-sm text-text-secondary"

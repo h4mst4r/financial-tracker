@@ -921,7 +921,9 @@ and `colour` (hex; **fallback** initials-avatar background for payee identity �
 `comfortable`), `reduce_motion` (bool, def false), `display_format` (str(20), def `'DD-MM-YYYY'`;
 one of `DD-MM-YYYY | MM-DD-YYYY | YYYY-MM-DD` — per-person date display/input, FR-P-009 / Story 2.11),
 `notification_prefs` (JSON — per-alert-type opt-in map, FR-SYS-007), `dashboard_layout` (JSON —
-`{widget_type, span, order, scope?}[]`, FR-DB-003).
+`{widget_type, span, order, scope?}[]`, FR-DB-003), `recent_glyphs` (JSON, nullable — the last-8
+emoji/icon glyphs the person picked, most-recent first, backing the EmojiIconPicker **Recent** row;
+per-person so it follows them across devices. UX §8.3, Story 3.1).
 **Detachment tracking (§2.8a):** `detachment_reason` (enum `left | removed | household_deleted`,
 nullable — NULL while in a household) and `detached_at` (timestamp, nullable) record *why* a
 person's `household_id` went NULL, so re-login can route them to the correct §3 page
@@ -961,7 +963,8 @@ no single amount — its value is the `opening_balance`/`opening_balance_date` l
 the `account_snapshots` series (asset-like current value = latest snapshot, §3.11).
 
 *Shared columns:* `name, account_type, institution, notes`,
-`colour` (hex; per-instance brand/identity colour, default = entity-type colour).
+`colour` (hex; per-instance brand/identity colour, default = entity-type colour),
+`vivid` (bool, def false; per-instance full-saturation fill opt-in, FR-SYS-016 / UX §8.2 — added by Story 4.1).
 *Reserved, post-MVP:* `brand_image_ref` (logo / card art).
 Ledger-backed only: `opening_balance NUMERIC(15,4) NULL`,
 `opening_balance_date DATE NULL` — required for Bank/CreditCard (the anchor for the computed
@@ -1129,8 +1132,12 @@ unspent balance carries into the next period's *effective* limit. Like actuals, 
   Past periods are read-only, so historical carryover never changes retroactively.
 
 **`categories`** (BaseEntity) — `name, color(7), icon(50), category_type
-(income|expense|both, def expense), parent_id(FK self, ON DELETE SET NULL), depth(int)`.
-CHECK `depth <= 1` (max 2 levels). Index: `(household_id, parent_id)`.
+(income|expense|both, def expense), parent_id(FK self, ON DELETE SET NULL), depth(int),
+vivid(bool, def false)`. CHECK `depth <= 1` (max 2 levels). Index: `(household_id, parent_id)`.
+`vivid` is the **per-instance** (per-entity, not per-person) full-saturation fill opt-in that drives
+`EntityCard`/CategoryTree's `bg-entity-fill-vivid` vs the default calm tint (FR-SYS-016, UX §0.1/§8.2);
+it is set from the EntityModal colour-picker's vivid toggle. The same `vivid` column lives on every
+colour-bearing entity — `accounts` (§3.5) and `currencies` (§3.8) — added by each entity's CRUD story.
 
 **Category behaviour rules:**
 - **Max 2 levels** (parent → child, no grandchildren). A top-level category with children cannot
@@ -1212,7 +1219,8 @@ tag (no cascade to the transaction).
 **`currencies`** (Base) — `id, household_id, code(3), name, symbol(5), is_base(bool),
 is_display_active(bool), rate_to_base(10,6), fee_pct(6,4), last_rate_at, rate_source`,
 `colour` (hex, nullable — default derived deterministically from `code`;
-overridable). This same colour is the currency's series colour in raw-currency stacked charts
+overridable), `vivid` (bool, def false; per-instance full-saturation fill opt-in, FR-SYS-016 / UX §8.2 —
+added by Story 3.5). This same colour is the currency's series colour in raw-currency stacked charts
 (FR-CU-008), so currency identity is consistent across chips and visualizations.
 UNIQUE `(household_id, code)`. Exactly one `is_base=true` per household (app-enforced).
 **`rate_source` records the *winning provider* from the per-currency fallback chain** (§5.7) —

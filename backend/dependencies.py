@@ -10,16 +10,14 @@ consumers are Story 2.4c's `PATCH /api/household` (owner-scoped). Both depend on
 `get_current_person`.
 """
 
-from uuid import UUID
-
-from fastapi import Depends, HTTPException, Request, Response
+from fastapi import Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
 from backend.config import get_settings
 from backend.database import get_db
-from backend.errors import problem
+from backend.db_utils import get_or_404
 from backend.models.identity import Person
 from backend.services.auth import (
     SESSION_COOKIE_NAME,
@@ -28,32 +26,15 @@ from backend.services.auth import (
     validate_session,
 )
 
-
-async def get_or_404(
-    db: AsyncSession,
-    model: type,
-    id: UUID | str,
-    *,
-    household_id: UUID | str,
-) -> object:
-    """Fetch an entity by PK, scoped to `household_id`.
-
-    Raises 404 if entity is missing OR belongs to another household.
-    """
-    stmt = select(model).where(model.id == str(id), model.household_id == str(household_id))
-    result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise HTTPException(
-            status_code=404,
-            detail=problem(
-                type_="not_found",
-                title="Not found",
-                status=404,
-                detail="Resource not found or not accessible",
-            ),
-        )
-    return row
+# Re-exported for transport-layer callers that import it from here (the historical home). The
+# implementation now lives in `db_utils` so services can use it without an import cycle.
+__all__ = [
+    "get_or_404",
+    "get_current_person",
+    "get_writable_person",
+    "get_household_id",
+    "require_role",
+]
 
 
 async def get_current_person(
