@@ -33,6 +33,8 @@ export interface EntityPageProps {
   hideViewToggle?: boolean
   /** Hide the Sort button — for surfaces that don't support manual sort (e.g. CategoryTree). */
   hideSort?: boolean
+  /** Hide the Archived toggle — for surfaces with no archive lifecycle (e.g. Currencies). */
+  hideArchived?: boolean
   /** Entity-specific filter controls (e.g. Accounts → bank/credit-card type). */
   filters?: ReactNode
 
@@ -69,6 +71,7 @@ export function EntityPage(props: EntityPageProps) {
     onSort,
     hideViewToggle,
     hideSort,
+    hideArchived,
     filters,
   } = props
   const archivedToggleId = useId()
@@ -109,17 +112,19 @@ export function EntityPage(props: EntityPageProps) {
               onChange={(v) => onViewChange(v as EntityView)}
             />
           )}
-          <label
-            htmlFor={archivedToggleId}
-            className="inline-flex items-center gap-xs text-sm text-text-secondary"
-          >
-            <Toggle
-              id={archivedToggleId}
-              checked={showArchived}
-              onChange={onShowArchivedChange}
-            />
-            Archived
-          </label>
+          {!hideArchived && (
+            <label
+              htmlFor={archivedToggleId}
+              className="inline-flex items-center gap-xs text-sm text-text-secondary"
+            >
+              <Toggle
+                id={archivedToggleId}
+                checked={showArchived}
+                onChange={onShowArchivedChange}
+              />
+              Archived
+            </label>
+          )}
           {filters}
           <Button onClick={onNew} data-testid="entity-page-new">
             + New {newLabel}

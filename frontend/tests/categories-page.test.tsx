@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Categories } from '../src/pages/Categories'
@@ -30,6 +30,8 @@ const update = vi.fn(async (id: string, data: unknown) => {
   return cat({ id: 'p1' })
 })
 const deletePermanently = vi.fn(async () => {})
+const archive = vi.fn(async () => {})
+const restore = vi.fn(async () => {})
 const refetch = vi.fn()
 
 vi.mock('../src/hooks/useEntityManager', () => ({
@@ -44,8 +46,8 @@ vi.mock('../src/hooks/useEntityManager', () => ({
     setShowArchived: vi.fn(),
     create,
     update,
-    archive: vi.fn(),
-    restore: vi.fn(),
+    archive,
+    restore,
     deletePermanently,
     duplicate: vi.fn(),
     detectDuplicate: vi.fn(),
@@ -65,6 +67,8 @@ beforeEach(() => {
   create.mockClear()
   update.mockClear()
   deletePermanently.mockClear()
+  archive.mockClear()
+  restore.mockClear()
   refetch.mockClear()
   vi.spyOn(api, 'post').mockResolvedValue({ data: {}, status: 200 })
 })
@@ -126,5 +130,86 @@ describe('Categories page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create defaults' }))
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/categories/defaults'))
     expect(refetch).toHaveBeenCalled()
+  })
+
+  // ── Story 3.4: bulk multi-select + merge ──
+
+  const selectRow = (name: string) =>
+    fireEvent.click(screen.getByRole('checkbox', { name: `Select ${name}` }))
+
+  test('selecting a row reveals the categories BulkActionBar action set', () => {
+    renderPage()
+    expect(screen.queryByTestId('bulk-action-bar')).toBeNull()
+    selectRow('Food')
+    expect(screen.getByTestId('bulk-action-bar')).toBeTruthy()
+    for (const id of ['edit-type', 'promote', 'move', 'archive', 'merge']) {
+      expect(screen.getByTestId(`bulk-action-${id}`)).toBeTruthy()
+    }
+  })
+
+  test('Promote/Move are greyed unless every selected row is a subcategory', () => {
+    // Page items are two top-levels → Promote/Move disabled.
+    renderPage()
+    selectRow('Food')
+    expect((screen.getByTestId('bulk-action-promote') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId('bulk-action-move') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('Promote is enabled when only subcategories are selected', () => {
+    mockItems = [cat({ id: 'p1', name: 'Food' }), cat({ id: 'c1', name: 'Dining', parent_id: 'p1', depth: 1 })]
+    renderPage()
+    selectRow('Dining')
+    expect((screen.getByTestId('bulk-action-promote') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  test('Merge is greyed below 2 selected, then merges into the chosen target', async () => {
+    renderPage()
+    selectRow('Food')
+    expect((screen.getByTestId('bulk-action-merge') as HTMLButtonElement).disabled).toBe(true)
+
+    selectRow('Salary')
+    expect((screen.getByTestId('bulk-action-merge') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByTestId('bulk-action-merge'))
+
+    // Chooser modal: pick the surviving target (Salary), then confirm. The Dropdown trigger's
+    // accessible name comes from its associated <Label> ("Merge into").
+    expect(screen.getByRole('heading', { name: 'Merge categories' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Merge into' }))
+    fireEvent.click(screen.getByRole('option', { name: /Salary/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Merge 2 categories/ }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/api/categories/merge', {
+        source_ids: ['p1'],
+        target_id: 'p2',
+      }),
+    )
+  })
+
+  test('bulk Archive confirms once, then archives each selected category', async () => {
+    renderPage()
+    selectRow('Food')
+    selectRow('Salary')
+    fireEvent.click(screen.getByTestId('bulk-action-archive'))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/Archive 2 categories/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() => expect(archive).toHaveBeenCalledWith('p1'))
+    expect(archive).toHaveBeenCalledWith('p2')
+  })
+
+  test('bulk Edit type updates each selected category', async () => {
+    renderPage()
+    selectRow('Food')
+    fireEvent.click(screen.getByTestId('bulk-action-edit-type'))
+
+    expect(screen.getByRole('heading', { name: 'Edit type' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New type' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Income' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith('p1', { category_type: 'income' }))
   })
 })

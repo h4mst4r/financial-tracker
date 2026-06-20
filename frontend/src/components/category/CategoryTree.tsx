@@ -18,6 +18,7 @@ import { ContextMenu } from '../primitives/ContextMenu'
 import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { GlyphView } from '../primitives/EmojiIconPicker'
 import { Badge } from '../primitives/Badge'
+import { Checkbox } from '../primitives/Checkbox'
 import type { Category } from '../../types/category'
 import { CATEGORY_TYPE_META } from '../../types/category'
 import { resolveMove, ROOT_DROPPABLE, PARENT_PREFIX } from './resolveMove'
@@ -133,6 +134,8 @@ interface RowProps {
   draggable: boolean
   color: string
   menu: ContextMenuEntry[]
+  selected: boolean
+  onToggleSelect: () => void
 }
 
 function ParentRow({
@@ -140,6 +143,8 @@ function ParentRow({
   draggable,
   color,
   menu,
+  selected,
+  onToggleSelect,
   childCount,
   isOpen,
   onToggle,
@@ -153,11 +158,19 @@ function ParentRow({
     <div
       ref={setNodeRef}
       data-testid="category-tree-row"
-      className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md bg-entity-fill-calm transition-all duration-100 ${
+      data-selected={selected || undefined}
+      className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md transition-all duration-100 ${
+        selected ? 'bg-surface-active ring-2 ring-accent' : 'bg-entity-fill-calm'
+      } ${
         archived ? 'opacity-60 grayscale border border-dashed border-border-strong' : ''
       } ${isDragging ? 'opacity-40' : ''}`}
       style={fillVar(color)}
     >
+      <Checkbox
+        checked={selected}
+        onChange={onToggleSelect}
+        aria-label={`Select ${category.name}`}
+      />
       {draggable && (
         <DragHandle
           attributes={attributes}
@@ -195,7 +208,7 @@ function ParentRow({
   )
 }
 
-function SubRow({ category, draggable, color, menu }: RowProps) {
+function SubRow({ category, draggable, color, menu, selected, onToggleSelect }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: category.id,
     disabled: !draggable,
@@ -205,11 +218,19 @@ function SubRow({ category, draggable, color, menu }: RowProps) {
     <div
       ref={setNodeRef}
       data-testid="category-tree-row"
-      className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md bg-entity-fill-sub transition-all duration-100 ${
+      data-selected={selected || undefined}
+      className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md transition-all duration-100 ${
+        selected ? 'bg-surface-active ring-2 ring-accent' : 'bg-entity-fill-sub'
+      } ${
         archived ? 'opacity-60 grayscale border border-dashed border-border-strong' : ''
       } ${isDragging ? 'opacity-40' : ''}`}
       style={fillVar(color)}
     >
+      <Checkbox
+        checked={selected}
+        onChange={onToggleSelect}
+        aria-label={`Select ${category.name}`}
+      />
       {draggable && (
         <DragHandle
           attributes={attributes}
@@ -240,6 +261,8 @@ function ParentBlock({
   parentMenu,
   childMenu,
   onAddSubcategory,
+  selectedIds,
+  onToggleSelect,
 }: {
   parent: Category
   subcategories: Category[]
@@ -252,18 +275,22 @@ function ParentBlock({
   parentMenu: ContextMenuEntry[]
   childMenu: (c: Category) => ContextMenuEntry[]
   onAddSubcategory: (parent: Category) => void
+  selectedIds: ReadonlySet<string>
+  onToggleSelect: (id: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: PARENT_PREFIX + parent.id })
   return (
     <div
       ref={setNodeRef}
-      className={`rounded-md transition-all duration-100 ${isOver && validDrop ? 'ring-2 ring-glow-primary' : ''}`}
+      className={`rounded-md transition-all duration-100 ${isOver && validDrop ? 'ring-2 ring-primary' : ''}`}
     >
       <ParentRow
         category={parent}
         draggable={draggable}
         color={color}
         menu={parentMenu}
+        selected={selectedIds.has(parent.id)}
+        onToggleSelect={() => onToggleSelect(parent.id)}
         childCount={subcategories.length}
         isOpen={isOpen}
         onToggle={onToggle}
@@ -277,6 +304,8 @@ function ParentBlock({
               draggable={childDraggable(child)}
               color={color}
               menu={childMenu(child)}
+              selected={selectedIds.has(child.id)}
+              onToggleSelect={() => onToggleSelect(child.id)}
             />
           ))}
           <button
@@ -300,7 +329,7 @@ function RootDropZone() {
       data-testid="category-tree-root-dropzone"
       className={`flex items-center gap-2 h-9 pl-3 pr-3 rounded-md border border-dashed text-xs transition-all duration-100 ${
         isOver
-          ? 'ring-2 ring-glow-primary border-border-strong bg-primary-muted text-text-primary'
+          ? 'ring-2 ring-primary border-border-strong bg-primary-muted text-text-primary'
           : 'border-border text-text-secondary'
       }`}
     >
@@ -327,6 +356,10 @@ interface CategoryTreeProps {
   onDelete: (category: Category) => void
   /** Promote (parentId=null) or re-parent/nest (parentId=<top-level>). Shared by ⋮ and drag. */
   onMove: (id: string, parentId: string | null) => void
+  /** Multi-select (Story 3.4, FR-E-020) — owned by the page's useMultiSelect; the tree just renders
+   *  the per-row checkbox + selected fill. */
+  selectedIds: ReadonlySet<string>
+  onToggleSelect: (id: string) => void
 }
 
 export function CategoryTree({
@@ -337,6 +370,8 @@ export function CategoryTree({
   onRestore,
   onDelete,
   onMove,
+  selectedIds,
+  onToggleSelect,
 }: CategoryTreeProps) {
   const parents = items.filter((c) => c.depth === 0)
   const childrenOf = (parentId: string) =>
@@ -427,6 +462,8 @@ export function CategoryTree({
               parentMenu={parentMenu}
               childMenu={childMenu}
               onAddSubcategory={onAddSubcategory}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
             />
           )
         })}

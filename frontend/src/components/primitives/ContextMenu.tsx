@@ -127,6 +127,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
         ref={triggerRef}
         role="button"
         tabIndex={0}
+        className="cursor-pointer"
         onClick={handleOpen}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') handleOpen(e)

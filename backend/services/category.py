@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
@@ -389,6 +389,114 @@ async def delete_category(
         "hard_delete_category",
         extra={"household_id": str(household_id), "entity_id": str(category_id)},
     )
+
+
+# ─── Merge (Story 3.4, FR-C-003, ARCH §3.7) ───
+
+
+async def merge_categories(
+    db: AsyncSession,
+    household_id: str,
+    actor_id: str,
+    source_ids: list[str],
+    target_id: str,
+) -> Category:
+    """Fold `source_ids` into `target_id`, transactionally (AC 2, ARCH §3.7 "Merge"). The sources'
+    direct events reassign to the target, the sources' **active** subcategories re-parent to the
+    target (name clash with an existing active child of the target → append `" (2)"`), and the
+    sources are archived. One flush → one transaction (`get_db` commits, or rolls back on error).
+
+    Rejects (400): merging a category into itself, an archived target, or — when any source has
+    active subcategories — a non-top-level target (re-parenting those children under a depth-1
+    target would create a 3rd level; the DB CHECK `depth<=1` only guards a single row)."""
+    source_ids = list(dict.fromkeys(source_ids))  # dedupe, preserve order
+    if not source_ids:
+        errors.bad_request("Invalid merge", "Select at least one source category to merge")
+    if target_id in source_ids:
+        errors.bad_request("Invalid merge", "A category cannot be merged into itself")
+
+    target = await get_or_404(db, Category, target_id, household_id=household_id)
+    if target.archived:
+        errors.bad_request("Invalid merge", "Cannot merge into an archived category")
+    sources = [
+        await get_or_404(db, Category, sid, household_id=household_id) for sid in source_ids
+    ]
+
+    # The sources' active subcategories re-parent to the target (also drives the 2-level guard).
+    children_by_source = {
+        src.id: await _active_children(db, household_id, src.id) for src in sources
+    }
+    if target.depth != 0 and any(children_by_source[src.id] for src in sources):
+        errors.bad_request(
+            "Invalid merge",
+            "Merge target must be top-level when a source has subcategories (max 2 levels)",
+        )
+
+    now = datetime.now(UTC)
+
+    # (1) Reassign the sources' direct events to the target — one bulk UPDATE (empty until Epic 5).
+    await db.execute(
+        update(FinancialEvent)
+        .where(
+            FinancialEvent.household_id == household_id,
+            FinancialEvent.category_id.in_(source_ids),
+        )
+        .values(category_id=target_id)
+    )
+
+    # (2) Re-parent the sources' active subcategories to the target, suffixing name clashes.
+    existing = await db.execute(
+        select(func.lower(Category.name)).where(
+            Category.household_id == household_id,
+            Category.parent_id == target_id,
+            Category.archived.is_(False),
+        )
+    )
+    taken = {name for name in existing.scalars()}
+    for src in sources:
+        for child in children_by_source[src.id]:
+            before = _snapshot(child)
+            if child.name.lower() in taken:
+                # ponytail: " (2)" per spec; no (3) loop — category name has no DB unique constraint
+                child.name = f"{child.name} (2)"
+            child.parent_id = target_id
+            child.depth = 1
+            taken.add(child.name.lower())
+            await audit.log(
+                db,
+                household_id=household_id,
+                actor_id=actor_id,
+                action="update",
+                entity_type="category",
+                entity_id=str(child.id),
+                before=before,
+                after=_snapshot(child),
+            )
+
+    # (3) Archive each source (its active children moved out → it archives cleanly). Skip a source
+    # that is already archived — its events were still reassigned above; re-archiving would only
+    # clobber its original archived_at/by and emit a spurious audit row.
+    for src in sources:
+        if src.archived:
+            continue
+        before = _snapshot(src)
+        src.status = "archived"
+        src.archived = True
+        src.archived_at = now
+        src.archived_by = actor_id
+        await audit.log(
+            db,
+            household_id=household_id,
+            actor_id=actor_id,
+            action="merge",
+            entity_type="category",
+            entity_id=str(src.id),
+            before=before,
+            after=_snapshot(src),
+        )
+
+    await db.flush()
+    return target
 
 
 # ─── Delete-eligibility (powers can_delete / delete_blocked_reason, UX §8.1) ───

@@ -760,6 +760,282 @@ async def test_create_defaults_member_403(monkeypatch):
         await engine.dispose()
 
 
+# ── Story 3.4: Merge (FR-C-003, ARCH §3.7) ──
+
+
+async def _category_row(factory, category_id: str) -> Category:
+    async with factory() as db:
+        return await db.get(Category, category_id)
+
+
+async def test_merge_reassigns_events_reparents_subs_archives_sources(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        a = client.post("/api/categories", json=_new("Food")).json()
+        a1 = client.post("/api/categories", json=_new("Dining", parent_id=a["id"])).json()
+        b = client.post("/api/categories", json=_new("Snacks")).json()
+        target = client.post("/api/categories", json=_new("Groceries")).json()
+
+        # An event on each source — both must reassign to the target.
+        await _insert_event(factory, hh_id, person_id, a["id"])
+        await _insert_event(factory, hh_id, person_id, b["id"])
+
+        resp = client.post(
+            "/api/categories/merge",
+            json={"source_ids": [a["id"], b["id"]], "target_id": target["id"]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["id"] == target["id"]
+
+        # Sources archived; target still active.
+        assert await _archived_flag(factory, a["id"]) is True
+        assert await _archived_flag(factory, b["id"]) is True
+        assert await _archived_flag(factory, target["id"]) is False
+
+        # A's subcategory re-parented under the target (depth stays 1).
+        a1_row = await _category_row(factory, a1["id"])
+        assert a1_row.parent_id == target["id"]
+        assert a1_row.depth == 1
+
+        # Both source events now point at the target.
+        async with factory() as db:
+            from sqlalchemy import select as _select
+
+            rows = (
+                await db.execute(
+                    _select(FinancialEvent.category_id).where(
+                        FinancialEvent.household_id == hh_id
+                    )
+                )
+            ).scalars().all()
+        assert set(rows) == {target["id"]}
+    finally:
+        await engine.dispose()
+
+
+async def _seed_category(
+    factory, household_id: str, actor_id: str, name: str, *, parent_id: str | None, depth: int
+) -> str:
+    """Insert a Category directly (bypasses the household-wide name-uniqueness POST guard) so a
+    same-name clash across two parents can be set up — that collision is otherwise unreachable via
+    the API but ARCH §3.7 still requires the merge to suffix it."""
+    cid = str(uuid4())
+    async with factory() as db:
+        db.add(
+            Category(
+                id=cid,
+                household_id=household_id,
+                created_by=actor_id,
+                name=name,
+                color="#3b82f6",
+                category_type="expense",
+                parent_id=parent_id,
+                depth=depth,
+            )
+        )
+        await db.commit()
+    return cid
+
+
+async def test_merge_name_clash_appends_suffix(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        target = await _seed_category(
+            factory, hh_id, person_id, "Groceries", parent_id=None, depth=0
+        )
+        await _seed_category(factory, hh_id, person_id, "Coffee", parent_id=target, depth=1)
+        source = await _seed_category(
+            factory, hh_id, person_id, "Food", parent_id=None, depth=0
+        )
+        clash = await _seed_category(factory, hh_id, person_id, "Coffee", parent_id=source, depth=1)
+
+        resp = client.post(
+            "/api/categories/merge", json={"source_ids": [source], "target_id": target}
+        )
+        assert resp.status_code == 200
+
+        moved = await _category_row(factory, clash)
+        assert moved.parent_id == target
+        assert moved.name == "Coffee (2)"
+    finally:
+        await engine.dispose()
+
+
+async def test_merge_source_with_children_into_subcategory_400(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        parent = client.post("/api/categories", json=_new("Food")).json()
+        depth1_target = client.post(
+            "/api/categories", json=_new("Dining", parent_id=parent["id"])
+        ).json()
+        source = client.post("/api/categories", json=_new("Shopping")).json()
+        client.post("/api/categories", json=_new("Clothes", parent_id=source["id"]))  # source child
+
+        # Re-parenting the source's child under a depth-1 target = a 3rd level → 400.
+        resp = client.post(
+            "/api/categories/merge",
+            json={"source_ids": [source["id"]], "target_id": depth1_target["id"]},
+        )
+        assert resp.status_code == 400
+    finally:
+        await engine.dispose()
+
+
+async def test_merge_self_and_archived_target_400(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        a = client.post("/api/categories", json=_new("Food")).json()
+        b = client.post("/api/categories", json=_new("Shopping")).json()
+
+        # Self-merge (target in sources).
+        self_resp = client.post(
+            "/api/categories/merge", json={"source_ids": [a["id"]], "target_id": a["id"]}
+        )
+        assert self_resp.status_code == 400
+
+        # Archived target.
+        client.post(f"/api/categories/{b['id']}/archive")
+        arch_resp = client.post(
+            "/api/categories/merge", json={"source_ids": [a["id"]], "target_id": b["id"]}
+        )
+        assert arch_resp.status_code == 400
+    finally:
+        await engine.dispose()
+
+
+async def test_merge_cross_household_404_and_member_403(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        # Admin A owns the target + a source; B is a foreign household; M is a member of A.
+        a_person, a_hh = await _seed_household(factory)
+        b_person, _ = await _seed_household(factory)
+        member_id = str(uuid4())
+        async with factory() as db:
+            db.add(
+                Person(
+                    id=member_id,
+                    household_id=a_hh,
+                    email=f"{uuid4()}@example.com",
+                    display_name="Member Person",
+                    role="member",
+                    google_sub=f"sub-{uuid4()}",
+                )
+            )
+            await db.commit()
+
+        a_sid, a_csrf = await _seed_session(factory, a_person)
+        b_sid, b_csrf = await _seed_session(factory, b_person)
+        m_sid, m_csrf = await _seed_session(factory, member_id)
+
+        client_a = _client_with_db(factory, monkeypatch)
+        _auth(client_a, a_sid, a_csrf)
+        target = client_a.post("/api/categories", json=_new("Groceries")).json()
+        source = client_a.post("/api/categories", json=_new("Food")).json()
+
+        # Foreign household can't reach A's categories → 404 (source not in B's scope).
+        client_b = _client_with_db(factory, monkeypatch)
+        _auth(client_b, b_sid, b_csrf)
+        assert (
+            client_b.post(
+                "/api/categories/merge",
+                json={"source_ids": [source["id"]], "target_id": target["id"]},
+            ).status_code
+            == 404
+        )
+
+        # A member of A can't merge (admin-gated) → 403.
+        client_m = _client_with_db(factory, monkeypatch)
+        _auth(client_m, m_sid, m_csrf)
+        assert (
+            client_m.post(
+                "/api/categories/merge",
+                json={"source_ids": [source["id"]], "target_id": target["id"]},
+            ).status_code
+            == 403
+        )
+    finally:
+        await engine.dispose()
+
+
+async def test_merge_empty_sources_400(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        target = client.post("/api/categories", json=_new("Groceries")).json()
+        resp = client.post(
+            "/api/categories/merge", json={"source_ids": [], "target_id": target["id"]}
+        )
+        assert resp.status_code == 400  # degenerate input rejected at the API boundary
+    finally:
+        await engine.dispose()
+
+
+async def test_merge_skips_already_archived_source(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        target = client.post("/api/categories", json=_new("Groceries")).json()
+        source = client.post("/api/categories", json=_new("Food")).json()
+        client.post(f"/api/categories/{source['id']}/archive")
+        await _insert_event(factory, hh_id, person_id, source["id"])
+
+        async with factory() as db:
+            original_archived_at = (await db.get(Category, source["id"])).archived_at
+
+        resp = client.post(
+            "/api/categories/merge",
+            json={"source_ids": [source["id"]], "target_id": target["id"]},
+        )
+        assert resp.status_code == 200
+
+        async with factory() as db:
+            src_row = await db.get(Category, source["id"])
+            # Still archived, original archive metadata preserved (not clobbered by the merge).
+            assert src_row.archived is True
+            assert src_row.archived_at == original_archived_at
+            # The archived source's event was still reassigned to the target.
+            from sqlalchemy import select as _select
+
+            evt_cats = (
+                await db.execute(
+                    _select(FinancialEvent.category_id).where(
+                        FinancialEvent.household_id == hh_id
+                    )
+                )
+            ).scalars().all()
+        assert set(evt_cats) == {target["id"]}
+    finally:
+        await engine.dispose()
+
+
 # ── Story 3.3: Spending rollup (FR-C-008) ──
 
 

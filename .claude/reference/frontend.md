@@ -365,7 +365,7 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 
 **Archived rows:** `opacity-60 grayscale` + **dashed full border** (`border border-dashed border-border-strong`) + `[Archived]` Badge. (No left-border bar.)
 
-**Selected rows:** `bg-primary-muted` replaces `hover:bg-surface-hover` when selected (multi-select).
+**Selected rows (multi-select):** `bg-surface-active` (neutral) fill **plus** `ring-2 ring-accent` (the §0.9 selection colour, `accent-secondary` / cyan) — the ring is the load-bearing signal (a fill alone is too quiet over an entity tint). Keep the leading `Checkbox` too. The drag-over **drop-target** uses the *other* §0.9 accent — **`ring-2 ring-primary`** (a solid `accent-primary` / indigo ring; **not** the translucent `ring-glow-primary`, which is a 35%-alpha halo that reads muddy as a drop signal) on the hovered parent block + the promote zone. So selection (cyan) and drop-target (indigo) stay distinct. `ring-primary` is the `@utility` alias for solid `accent-primary` (sibling of `ring-accent`; the bare `ring-primary` would collide per §1.4a).
 
 **Design system reference:** `/design-system` → Category Components section — added when CategoryTree component ships (CAT-005).
 

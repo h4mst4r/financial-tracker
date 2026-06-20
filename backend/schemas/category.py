@@ -60,6 +60,14 @@ class CategoryMove(BaseModel):
     parent_id: str | None = None
 
 
+class CategoryMerge(BaseModel):
+    # Bulk merge (Story 3.4, FR-C-003, ARCH §3.7): fold one or more `source_ids` into `target_id` —
+    # the sources' events reassign to the target, their subcategories re-parent (clash → " (2)"),
+    # and the sources are archived, transactionally. Both required.
+    source_ids: list[str]
+    target_id: str
+
+
 class CategoryListOut(BaseModel):
     items: list[CategoryResponse]
     total: int

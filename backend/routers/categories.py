@@ -21,6 +21,7 @@ from backend.models.identity import Person
 from backend.schemas.category import (
     CategoryCreate,
     CategoryListOut,
+    CategoryMerge,
     CategoryMove,
     CategoryResponse,
     CategorySpendingOut,
@@ -97,6 +98,24 @@ async def create_default_categories(
     matches an active category is skipped, so it never duplicates. Returns the post-seed list."""
     await category_service.seed_default_categories(db, household_id, person.id)
     return await _list_response(db, household_id)
+
+
+@router.post("/categories/merge")
+async def merge_categories(
+    data: CategoryMerge,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryResponse:
+    """Merge `source_ids` into `target_id` (admin/owner; FR-C-003, ARCH §3.7). The sources' events
+    reassign to the target, their subcategories re-parent (name clash → `" (2)"`), and the sources
+    archive — transactionally. 400 on self-merge / archived target / a 3rd-level violation; 404
+    cross-household. Declared before `/{category_id}` so `merge` isn't captured as an id. Returns
+    the target."""
+    target = await category_service.merge_categories(
+        db, household_id, person.id, data.source_ids, data.target_id
+    )
+    return await _to_response(db, household_id, target)
 
 
 @router.post("/categories", status_code=201)

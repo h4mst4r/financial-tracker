@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { FolderTree } from 'lucide-react'
-import { EntityPage, EntityModal } from '../components/entity'
+import { FolderTree, Tag, ArrowUpToLine, FolderInput, Archive, Merge, RotateCcw } from 'lucide-react'
+import { EntityPage, EntityModal, BulkActionBar } from '../components/entity'
+import type { BulkAction } from '../components/entity'
 import { CategoryTree } from '../components/category/CategoryTree'
 import { CategoryDefaultsPrompt } from '../components/category/CategoryDefaultsPrompt'
 import { Label } from '../components/primitives/Label'
@@ -8,9 +9,10 @@ import { Input } from '../components/primitives/Input'
 import { SegmentedControl } from '../components/primitives/SegmentedControl'
 import { Dropdown } from '../components/primitives/Dropdown'
 import { ColourPicker } from '../components/primitives/ColourPicker'
-import { EmojiIconPicker } from '../components/primitives/EmojiIconPicker'
+import { EmojiIconPicker, GlyphView } from '../components/primitives/EmojiIconPicker'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { useEntityManager } from '../hooks/useEntityManager'
+import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useAlertStore } from '../stores/alertStore'
 import { api, ApiError } from '../api/client'
 import type { Category, CategoryType } from '../types/category'
@@ -35,6 +37,17 @@ const FILTER_OPTIONS = [
   { value: 'expense', label: 'Expense' },
   { value: 'income', label: 'Income' },
 ]
+
+// A Dropdown option label for a bulk chooser: the category's glyph (if any) + its name, so the
+// picked Move/Merge target is unambiguous.
+function glyphLabel(c: Category) {
+  return (
+    <span className="flex items-center gap-2">
+      {c.icon ? <GlyphView glyph={c.icon} size={16} /> : null}
+      {c.name}
+    </span>
+  )
+}
 
 interface FormState {
   id: string | null
@@ -61,12 +74,18 @@ export function Categories() {
     entityType: 'categories',
     basePath: '/api/categories',
   })
+  const select = useMultiSelect()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<Category | null>(null)
   const [isSeeding, setIsSeeding] = useState(false)
+  // The bulk type/move/merge chooser (one EntityModal + Dropdown; `value` is the picked option).
+  const [chooser, setChooser] = useState<{ kind: 'type' | 'move' | 'merge'; value: string } | null>(
+    null,
+  )
+  const [confirmArchive, setConfirmArchive] = useState(false)
   const pushToast = useAlertStore((s) => s.pushToast)
 
   // RFC 7807 `detail` is a string for our typed errors (an array only for 422 field errors);
@@ -120,6 +139,125 @@ export function Categories() {
       'Could not delete the category.',
       'Category deleted',
     )
+
+  // ── Bulk multi-select (Story 3.4, FR-E-020) ──
+  const selected = manager.items.filter((c) => select.isSelected(c.id))
+  const allSubs = selected.length > 0 && selected.every((c) => c.depth === 1)
+  const allArchived = selected.length > 0 && selected.every((c) => c.status === 'archived')
+
+  // Run a batch of single-row mutations, then clear the selection + refetch the tree. Each per-row
+  // endpoint audits its own item and the archive cascade/idempotency hold, so no bulk endpoint is
+  // needed (only Merge is server-side atomic).
+  const runBulk = (makeCalls: () => Promise<unknown>[], fallback: string, success: string) =>
+    runAction(
+      async () => {
+        await Promise.all(makeCalls())
+        select.clear()
+        manager.refetch()
+      },
+      fallback,
+      success,
+    )
+
+  const bulkPromote = () =>
+    runBulk(
+      () => selected.map((c) => api.post(`/api/categories/${c.id}/move`, { parent_id: null })),
+      'Could not promote the categories.',
+      'Categories promoted',
+    )
+  const bulkArchive = () =>
+    runBulk(
+      () => selected.map((c) => manager.archive(c.id)),
+      'Could not archive the categories.',
+      'Categories archived',
+    )
+  const bulkRestore = () =>
+    runBulk(
+      () => selected.map((c) => manager.restore(c.id)),
+      'Could not restore the categories.',
+      'Categories restored',
+    )
+
+  // The chooser confirm (Edit type / Move to / Merge) — dispatched by `chooser.kind`.
+  const onChooserConfirm = () => {
+    if (!chooser) return
+    const { kind, value } = chooser
+    if (kind === 'type') {
+      runBulk(
+        () => selected.map((c) => manager.update(c.id, { category_type: value })),
+        'Could not change the category type.',
+        'Category type updated',
+      )
+    } else if (kind === 'move') {
+      runBulk(
+        () => selected.map((c) => api.post(`/api/categories/${c.id}/move`, { parent_id: value })),
+        'Could not move the categories.',
+        'Categories moved',
+      )
+    } else {
+      const sourceIds = selected.filter((c) => c.id !== value).map((c) => c.id)
+      runAction(
+        async () => {
+          await api.post('/api/categories/merge', { source_ids: sourceIds, target_id: value })
+          select.clear()
+          manager.refetch()
+        },
+        'Could not merge the categories.',
+        'Categories merged',
+      )
+    }
+    setChooser(null)
+  }
+
+  // Options for the active chooser (top-level parents for Move; the selection itself for Merge).
+  const moveParentOptions = manager.items
+    .filter((c) => c.depth === 0 && c.status !== 'archived' && !select.isSelected(c.id))
+    .map((c) => ({ value: c.id, label: glyphLabel(c) }))
+  const mergeTargetOptions = selected.map((c) => ({ value: c.id, label: glyphLabel(c) }))
+  const chooserConfig = chooser
+    ? {
+        type: { title: 'Edit type', label: 'New type', options: TYPE_OPTIONS, save: 'Apply' },
+        move: { title: 'Move to…', label: 'Move under', options: moveParentOptions, save: 'Move' },
+        merge: {
+          title: 'Merge categories',
+          label: 'Merge into',
+          options: mergeTargetOptions,
+          save: `Merge ${selected.length} categories`,
+        },
+      }[chooser.kind]
+    : null
+
+  const bulkActions: BulkAction[] = [
+    { id: 'edit-type', label: 'Edit type', icon: Tag, onClick: () => setChooser({ kind: 'type', value: '' }) },
+    {
+      id: 'promote',
+      label: 'Promote',
+      icon: ArrowUpToLine,
+      disabled: !allSubs,
+      disabledReason: 'Only subcategories can be promoted',
+      onClick: bulkPromote,
+    },
+    {
+      id: 'move',
+      label: 'Move to…',
+      icon: FolderInput,
+      disabled: !allSubs,
+      disabledReason: 'Only subcategories can be moved',
+      onClick: () => setChooser({ kind: 'move', value: '' }),
+    },
+    allArchived
+      ? { id: 'restore', label: 'Restore', icon: RotateCcw, onClick: bulkRestore }
+      : { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => setConfirmArchive(true) },
+    {
+      id: 'merge',
+      label: 'Merge',
+      icon: Merge,
+      destructive: true,
+      disabled: selected.length < 2,
+      disabledReason: 'Select at least 2 categories to merge',
+      onClick: () => setChooser({ kind: 'merge', value: '' }),
+    },
+  ]
 
   const openCreate = () => {
     setForm(EMPTY_FORM)
@@ -216,8 +354,15 @@ export function Categories() {
           onRestore={onRestore}
           onDelete={onDelete}
           onMove={onMove}
+          selectedIds={select.selectedIds}
+          onToggleSelect={select.toggle}
         />
       </EntityPage>
+
+      {/* Bulk-action bar — pinned to the bottom of the list region; hidden at zero selection. */}
+      <div className="sticky bottom-lg mt-md flex justify-center">
+        <BulkActionBar count={selected.length} onClear={select.clear} actions={bulkActions} />
+      </div>
 
       <EntityModal
         open={modalOpen}
@@ -283,6 +428,37 @@ export function Categories() {
             : ''
         }
         confirmLabel="Delete"
+      />
+
+      {/* Bulk type/move/merge chooser — one EntityModal + Dropdown; the modal is the single
+          confirmation for the (destructive) Merge (§8.6). */}
+      <EntityModal
+        open={chooser !== null}
+        onClose={() => setChooser(null)}
+        title={chooserConfig?.title ?? ''}
+        onSave={onChooserConfirm}
+        saveLabel={chooserConfig?.save}
+        saveDisabled={!chooser?.value}
+      >
+        <div className="flex flex-col gap-xs md:col-span-2">
+          <Label htmlFor="bulk-chooser">{chooserConfig?.label}</Label>
+          <Dropdown
+            id="bulk-chooser"
+            value={chooser?.value ?? ''}
+            options={chooserConfig?.options ?? []}
+            placeholder="Select…"
+            onChange={(v) => setChooser((c) => (c ? { ...c, value: v } : c))}
+          />
+        </div>
+      </EntityModal>
+
+      <ConfirmationDialog
+        open={confirmArchive}
+        onClose={() => setConfirmArchive(false)}
+        onConfirm={bulkArchive}
+        title="Archive categories"
+        message={`Archive ${selected.length} ${selected.length === 1 ? 'category' : 'categories'}? Archiving a parent archives its subcategories too.`}
+        confirmLabel="Archive"
       />
     </div>
   )

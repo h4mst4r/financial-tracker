@@ -32,6 +32,8 @@ const noop = {
   onRestore: () => {},
   onDelete: () => {},
   onMove: () => {},
+  selectedIds: new Set<string>(),
+  onToggleSelect: () => {},
 }
 
 const rowOf = (text: string) =>
@@ -110,6 +112,21 @@ describe('CategoryTree', () => {
     expect(screen.getByText('Groceries')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Collapse Food'))
     expect(screen.queryByText('Groceries')).toBeNull()
+  })
+
+  test('each row renders a selection checkbox; toggling one calls onToggleSelect (3.4)', () => {
+    const onToggleSelect = vi.fn()
+    render(<CategoryTree items={items} {...noop} onToggleSelect={onToggleSelect} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Food' }))
+    expect(onToggleSelect).toHaveBeenCalledWith('p1')
+  })
+
+  test('a selected row takes the selected fill + accent ring (3.4)', () => {
+    render(<CategoryTree items={items} {...noop} selectedIds={new Set(['p1'])} />)
+    const row = rowOf('Food')
+    expect(row.getAttribute('data-selected')).toBe('true')
+    expect(row.className).toContain('bg-surface-active')
+    expect(row.className).toContain('ring-accent')
   })
 
   test('rows carry no 4px left accent bar element', () => {

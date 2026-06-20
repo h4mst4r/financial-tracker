@@ -28,6 +28,7 @@ from backend.middleware import (
 from backend.rate_limit import limiter
 from backend.routers import auth as auth_router
 from backend.routers import categories as categories_router
+from backend.routers import currencies as currencies_router
 from backend.routers import household as household_router
 from backend.routers import invitations as invitations_router
 from backend.routers import profile as profile_router
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(invitations_router.router)
     app.include_router(profile_router.router)
     app.include_router(categories_router.router)
+    app.include_router(currencies_router.router)
 
     # ── Static + SPA fallback LAST ──
     if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "assets").is_dir():

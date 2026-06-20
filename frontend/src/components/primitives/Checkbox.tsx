@@ -7,9 +7,11 @@ interface CheckboxProps {
   disabled?: boolean
   id?: string
   label?: string
+  /** Accessible name when there is no visible `label` text (e.g. a row-selection checkbox). */
+  'aria-label'?: string
 }
 
-export function Checkbox({ checked, onChange, disabled, id, label }: CheckboxProps) {
+export function Checkbox({ checked, onChange, disabled, id, label, 'aria-label': ariaLabel }: CheckboxProps) {
   return (
     <label className="flex items-center gap-2 cursor-pointer">
       <input
@@ -19,6 +21,7 @@ export function Checkbox({ checked, onChange, disabled, id, label }: CheckboxPro
         onChange={(e) => { if (!disabled) onChange(e.target.checked); }}
         disabled={disabled}
         id={id}
+        aria-label={ariaLabel}
       />
       <span
         className={`

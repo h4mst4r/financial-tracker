@@ -14,6 +14,10 @@ import {
   Mail,
   Lock,
   Wrench,
+  Tag,
+  ArrowUpToLine,
+  FolderInput,
+  Merge,
 } from 'lucide-react'
 import {
   Button,
@@ -150,6 +154,7 @@ export function DesignSystem() {
   // BulkActionBar / useMultiSelect demo (story 1.9c). Selection mode flips card onClick from
   // open → toggle-select (mirrors §0.8 long-press-to-enter-multi-select); the bar appears at ≥1.
   const bulkSelect = useMultiSelect()
+  const treeSelect = useMultiSelect()
   const [selectionMode, setSelectionMode] = useState(true)
   // Picker demos (Story 3.1)
   const [demoColour, setDemoColour] = useState('#8b5cf6')
@@ -175,6 +180,15 @@ export function DesignSystem() {
     { id: 'visualize', label: 'Visualize', icon: LineChart, tone: 'accent', onClick: () => {} },
     { id: 'delete', label: 'Delete', icon: Trash2, destructive: true, disabled: true, disabledReason: 'Only the owner can delete', onClick: () => {} },
     { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => bulkSelect.clear() },
+  ]
+  // The CategoryTree surface action set (§8.6, Story 3.4). Promote/Move grey when the selection
+  // isn't all-subcategories; Merge greys below 2 selected. Shown here as the surface's inventory.
+  const categoryBulkActions: BulkAction[] = [
+    { id: 'edit-type', label: 'Edit type', icon: Tag, onClick: () => {} },
+    { id: 'promote', label: 'Promote', icon: ArrowUpToLine, disabled: true, disabledReason: 'Only subcategories can be promoted', onClick: () => {} },
+    { id: 'move', label: 'Move to…', icon: FolderInput, disabled: true, disabledReason: 'Only subcategories can be moved', onClick: () => {} },
+    { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => {} },
+    { id: 'merge', label: 'Merge', icon: Merge, destructive: true, onClick: () => {} },
   ]
 
   const pushToast = useAlertStore((s) => s.pushToast)
@@ -415,6 +429,11 @@ export function DesignSystem() {
               actions={bulkActions}
             />
           </div>
+          {/* The CategoryTree surface action set (§8.6, Story 3.4) — shown statically so the bar's
+              categories inventory (Edit type · Promote · Move · Archive · Merge, Promote/Move greyed
+              for a non-sub selection) is visible alongside the ledger set above. */}
+          <p className="text-sm text-text-secondary mt-lg mb-sm">CategoryTree surface action set</p>
+          <BulkActionBar count={2} onClear={() => {}} actions={categoryBulkActions} />
         </section>
 
         {/* ─────────────────────────── Foundation (bible §0) ─────────────────────────── */}
@@ -738,6 +757,8 @@ export function DesignSystem() {
               onRestore={() => {}}
               onDelete={() => {}}
               onMove={() => {}}
+              selectedIds={treeSelect.selectedIds}
+              onToggleSelect={treeSelect.toggle}
             />
           </div>
         </section>

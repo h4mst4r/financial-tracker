@@ -43,6 +43,9 @@ class Currency(Base):
     last_rate_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rate_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
     colour: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    # Per-instance full-saturation fill opt-in (calm tint default; vivid = full-saturation fill).
+    # Cross-entity column (also on categories/accounts) — ARCH §3.8, FR-SYS-016, Story 3.5.
+    vivid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         UniqueConstraint("household_id", "code", name="uq_currencies_household_id_code"),

@@ -267,6 +267,10 @@
 /* Solid selection ring (swatch/card-selected, §0.9) — accent-secondary. Same collision dodge:
    `ring-accent` would resolve to the non-existent --color-accent, so pin it via @utility. */
 @utility ring-accent       { --tw-ring-color: var(--color-accent-secondary); }
+/* Solid focus/active ring (§0.9 accent-primary) — the CategoryTree drag drop-target (the soft
+   ring-glow-primary halo is too dim over a dark surface as a drop signal). `ring-primary` would
+   resolve to the non-existent --color-primary, so pin it via @utility (sibling of ring-accent). */
+@utility ring-primary      { --tw-ring-color: var(--color-accent-primary); }
 
 /* ── Duration utilities — inject --motion-factor (reduced-motion engine). cf. --z-* → @utility z-* ── */
 @utility duration-press    { --tw-duration: calc(var(--duration-press)    * var(--motion-factor)); transition-duration: calc(var(--duration-press)    * var(--motion-factor)); }

@@ -718,6 +718,19 @@ tinted with the semantic income colour) alongside a secondary **New category**. 
   drag (same pairing as the Dashboard widget board, §17). With `@dnd-kit`, drag itself is now
   keyboard-accessible, so the `⋮` items complement rather than substitute for it. Both routes go
   through the same move operation (FR-C-003).
+- **Multi-select (FR-E-020):** each row carries a leading **Checkbox**; selecting **≥1** row reveals
+  the generic **`BulkActionBar`** (§8.6) pinned to the bottom of the list region. A **selected** row
+  takes the **§0.9 selection treatment — an `accent-secondary` ring** (`ring-2 ring-accent`) plus a
+  neutral `surface-active` fill; the ring is the primary signal so selection reads even on a vivid
+  fill (a fill alone is too quiet). The categories action set is **Edit type · Promote · Move to… · Archive/Restore ·
+  Merge** (§8.6) — the whole surface is admin/owner-managed (ARCH §2.8), so there is no per-item
+  permission split here.
+- **Drag feedback (drop target):** while dragging, the **valid drop target** — the hovered parent
+  block (re-parent/nest) or the top-level promote zone — shows the **§0.9 focus/active accent,
+  `accent-primary`** as a **solid** ring (`ring-2 ring-primary` — not the translucent focus *glow*,
+  which reads muddy here), the *other* accent from selection so the two read apart (selection = cyan,
+  drop target = indigo). The dragged row dims; the drag overlay chip follows the pointer (§0.7
+  drag-follow).
 
 ---
 
@@ -895,7 +908,14 @@ Transactions ledger **and** the CategoryTree (§12.4, §6), extensible to any en
     / **Move to…** (selected subs → a chosen parent; the bulk twin of the single-row §6 move,
     FR-C-003) · **Archive/Restore** (archiving a parent archives its branch, FR-C-005) · **Merge**
     (fold selected into one). Promote/Move apply only to selected **subcategories**; a selected
-    parent-with-children is greyed with a reason (can't become a sub — 2-levels max).
+    parent-with-children is greyed with a reason (can't become a sub — 2-levels max). Merge greys
+    below 2 selected.
+- **Parameterised actions use a chooser (EntityModal + Dropdown).** Actions that need a target —
+  **Edit type** (pick Expense/Income/Both), **Move to…** (pick a top-level parent), **Merge** (pick
+  the surviving target among the selection) — open an **`EntityModal` (§8.2) with a single
+  `Dropdown`**; the modal's confirm **is** the single confirmation. **Archive** (no target) uses a
+  plain **`ConfirmationDialog`**. Promote (no target — always to top-level) acts directly. **Merge**
+  reassigns the sources' events + subcategories to the target and archives the sources (ARCH §3.7).
 - **Permission-adaptive:** actions a **Member** can't take on others' items are greyed with a reason
   (per-item rule — Member acts on own only; Admin/Owner on any).
 - **Safety & side-effects:** a **single confirmation** precedes destructive bulk actions; **each
@@ -1013,6 +1033,21 @@ stale at >48h**) · fee · **display-active** toggle (`is_display_active`) · **
 mini-chart** → expands to the Viewer (§9, FR-CU-009) · ⋮. Base currency: rate fixed, no toggle,
 not removable. **+ Add currency** → modal (any ISO 4217). Base-currency *change* lives in
 Settings (owner; recompute warning).
+
+**Add/Edit currency modal (EntityModal, §8.2).** Fields: **Code** (ISO 4217 — a type-ahead over the
+runtime's currency list; **read-only when editing**, since the code is the row's identity) · **Symbol**
+· **Name** · **Colour** (ColourPicker + the per-instance **vivid** toggle, §8.2) · **Display-active**
+toggle (defaults on). The code list, default **Name**, and default **Symbol** come from the browser's
+native `Intl` (`supportedValuesOf` / `DisplayNames` / `NumberFormat`) — there is **no maintained
+currency table**; picking a code auto-fills Name + Symbol + a deterministic default colour, all
+overridable. A freshly-added currency has **no rate yet** (the FX fetch is a later story) — its rate
+reads as the placeholder and its freshness shows **"never"** until the daily refresh runs.
+
+> **Scope notes (sequencing).** The **fee** value is *set* in a later story (FR-CU-007) — the column
+> is read-only here. The **FX-history mini-chart** + real rate freshness arrive with FX fetching
+> (FR-CU-009). The **topbar display-currency switcher** that consumes `is_display_active` is the
+> **ViewContextSwitcher** (§8.4), and **per-person display currency** is its own story (FR-CU-004) —
+> the Currencies page only *sets* `is_display_active`, it does not render the switcher.
 
 ## 11. Formula
 
