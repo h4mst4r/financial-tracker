@@ -1038,10 +1038,14 @@ currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows
 
 EntityPage scaffold; **rows** (FX data is tabular): per-currency colour chip · code (mono) ·
 name · **rate shown human-readably as "1 {base} = N {target}"** (the inverse of the stored
-`rate_to_base`; storage + math unchanged, architecture §3.8) · **freshness** (fresh / **amber
-stale at >48h**) · fee · **display-active** toggle (`is_display_active`) · **FX-history
-mini-chart** → expands to the Viewer (§9, FR-CU-009) · ⋮. Base currency: rate fixed, no toggle,
-not removable. **+ Add currency** → modal (any ISO 4217). Base-currency *change* lives in
+`rate_to_base`; storage + math unchanged, architecture §3.8) · **Status** — the freshness badge
+**with the last-updated time** (fresh · {relative, e.g. "2h ago"} / **amber stale at >48h** /
+never), absolute time on hover (the column header is **"Status"**, not "Fresh") · fee ·
+**display-active** toggle (`is_display_active`) · **FX-history mini-chart** → expands to the
+Viewer (§9, FR-CU-009) · ⋮. Base currency: rate fixed, no toggle, not removable.
+When the **daily FX refresh lands newer rates** than the session last saw — detected by the
+Currencies page's TanStack **refetch / window-focus** (FX refresh is the daily scheduled job;
+there is **no manual in-app trigger**) — a **toast** confirms *"Exchange rates updated."* **+ Add currency** → modal (any ISO 4217). Base-currency *change* lives in
 Settings (owner; recompute warning).
 
 **Add/Edit currency modal (EntityModal, §8.2).** Fields: **Code** (ISO 4217 — a type-ahead over the
@@ -1055,7 +1059,10 @@ reads as the placeholder and its freshness shows **"never"** until the daily ref
 
 > **Scope notes (sequencing).** The **fee** value is *set* in a later story (FR-CU-007) — the column
 > is read-only here. The **FX-history mini-chart** + real rate freshness arrive with FX fetching
-> (FR-CU-009). The **topbar display-currency switcher** that consumes `is_display_active` is the
+> (FR-CU-009). The **"Status" column rename** (from "Fresh"), the **last-updated time**, and the
+> **"Exchange rates updated" refetch toast** are built in **Story 3.8** alongside the real freshness
+> (Story 3.5 ships the basic badge with the "Fresh" header; the rename + time + toast land in 3.8).
+> *(SCP 2026-06-20 — Ben: surface when rates were last updated + confirm an update in-session.)* The **topbar display-currency switcher** that consumes `is_display_active` is the
 > **ViewContextSwitcher** (§8.4), and **per-person display currency** is its own story (FR-CU-004) —
 > the Currencies page only *sets* `is_display_active`, it does not render the switcher.
 

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Jobs
     service_account_key: str = ""  # secret; local/manual fallback only
     job_invoker_sa: str = ""
+    service_url: str = ""  # the service's own URL — OIDC audience verified by get_job_auth (§5.6)
 
     # Operational toggles
     maintenance_mode: bool = False

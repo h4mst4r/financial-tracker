@@ -10,7 +10,12 @@ consumers are Story 2.4c's `PATCH /api/household` (owner-scoped). Both depend on
 `get_current_person`.
 """
 
+import asyncio
+import hmac
+
 from fastapi import Depends, Request, Response
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +38,7 @@ __all__ = [
     "get_current_person",
     "get_writable_person",
     "get_household_id",
+    "get_job_auth",
     "require_role",
 ]
 
@@ -109,3 +115,54 @@ def require_role(min_role: str):
         return person
 
     return _require_role
+
+
+def _verify_job_oidc(token: str) -> str | None:
+    """Verify a Google-signed OIDC token for `/jobs/*`; return the `email` claim or None.
+
+    Audience is the service's own URL (`SERVICE_URL`); google-auth checks signature + `aud` +
+    expiry (10 s skew). Any failure (bad signature, wrong audience, expired, malformed) is a
+    fall-through to the shared-bearer path — never a 500. The caller checks the email claim.
+    """
+    settings = get_settings()
+    if not settings.service_url:
+        return None
+    try:
+        claims = google_id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            audience=settings.service_url,
+            clock_skew_in_seconds=10,
+        )
+    except Exception:  # noqa: BLE001 — any verification failure falls through to the bearer path
+        return None
+    return claims.get("email")
+
+
+async def get_job_auth(request: Request) -> None:
+    """Authorize a `/jobs/*` request — OIDC primary, shared-bearer fallback (ARCH §5.6).
+
+    Unlike every other auth path this touches **no** session/CSRF/cookie/Person/household: the
+    job invoker is Cloud Scheduler (OIDC) or a local/manual `curl` (shared bearer), not a member.
+    The CSRF middleware already skip-lists `/jobs/*` (§2.4). Raises 401 if neither path authorizes.
+    """
+    settings = get_settings()
+    header = request.headers.get("authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        errors.unauthorized(instance=request.url.path)
+
+    # OIDC (production): Google-signed token whose audience is SERVICE_URL and whose service
+    # account email is JOB_INVOKER_SA. Verification runs off the event loop (CPU-bound crypto).
+    email = await asyncio.to_thread(_verify_job_oidc, token)
+    if email is not None and settings.job_invoker_sa and email == settings.job_invoker_sa:
+        return
+
+    # Shared bearer (local / manual trigger): constant-time match against SERVICE_ACCOUNT_KEY.
+    # Compare as bytes — a non-ASCII header into hmac.compare_digest(str, str) raises TypeError.
+    if settings.service_account_key and hmac.compare_digest(
+        token.encode("utf-8"), settings.service_account_key.encode("utf-8")
+    ):
+        return
+
+    errors.unauthorized(instance=request.url.path)

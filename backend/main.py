@@ -32,6 +32,7 @@ from backend.routers import currencies as currencies_router
 from backend.routers import fx_providers as fx_providers_router
 from backend.routers import household as household_router
 from backend.routers import invitations as invitations_router
+from backend.routers import jobs as jobs_router
 from backend.routers import profile as profile_router
 from backend.services.auth import seed_bootstrap_owners
 
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
     app.include_router(categories_router.router)
     app.include_router(currencies_router.router)
     app.include_router(fx_providers_router.router)
+    app.include_router(jobs_router.router)
 
     # ── Static + SPA fallback LAST ──
     if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "assets").is_dir():
