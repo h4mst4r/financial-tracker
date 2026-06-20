@@ -47,6 +47,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
 import { CategoryTree } from '../components/category/CategoryTree'
+import { CategoryDefaultsPrompt } from '../components/category/CategoryDefaultsPrompt'
 import type { Category } from '../types/category'
 import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useAlertStore } from '../stores/alertStore'
@@ -738,6 +739,14 @@ export function DesignSystem() {
               onDelete={() => {}}
               onMove={() => {}}
             />
+          </div>
+        </section>
+
+        {/* CategoryDefaultsPrompt — the zero-active-categories empty state (UX §6, FR-C-007). */}
+        <section id="category-defaults" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Create defaults (empty state)</h2>
+          <div className="max-w-modal">
+            <CategoryDefaultsPrompt onCreateDefaults={() => {}} onNewCategory={() => {}} />
           </div>
         </section>
 

@@ -88,6 +88,23 @@ describe('EntityPage — data states', () => {
     expect(props.onNew).toHaveBeenCalled()
   })
 
+  test('emptyAction overrides the default "+ New" empty-state action', () => {
+    const props = baseProps()
+    render(
+      <EntityPage
+        {...props}
+        isEmpty
+        emptyTitle="No accounts yet"
+        emptyAction={<button type="button">Create defaults</button>}
+      >
+        <div>child-content</div>
+      </EntityPage>,
+    )
+    expect(screen.getByRole('button', { name: 'Create defaults' })).toBeInTheDocument()
+    // Only the toolbar New remains (the EmptyState's default New is replaced by emptyAction).
+    expect(screen.getAllByRole('button', { name: /new account/i })).toHaveLength(1)
+  })
+
   test('populated → renders children and a ghost "+ New" tile that calls onNew', () => {
     const props = baseProps()
     render(

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Categories } from '../src/pages/Categories'
 import type { Category } from '../src/types/category'
+import { api } from '../src/api/client'
 
 const cat = (over: Partial<Category>): Category => ({
   id: 'x', status: 'active', name: 'X', color: '#3b82f6', icon: null,
@@ -16,6 +17,9 @@ const items: Category[] = [
   cat({ id: 'p2', name: 'Salary', category_type: 'income' }),
 ]
 
+// Mutable so a test can drive the empty (zero-active) state.
+let mockItems: Category[] = items
+
 const create = vi.fn(async (data: unknown) => {
   void data
   return cat({ id: 'new' })
@@ -26,15 +30,16 @@ const update = vi.fn(async (id: string, data: unknown) => {
   return cat({ id: 'p1' })
 })
 const deletePermanently = vi.fn(async () => {})
+const refetch = vi.fn()
 
 vi.mock('../src/hooks/useEntityManager', () => ({
   useEntityManager: () => ({
-    items,
-    total: items.length,
+    items: mockItems,
+    total: mockItems.length,
     isLoading: false,
     isError: false,
     error: null,
-    refetch: vi.fn(),
+    refetch,
     showArchived: false,
     setShowArchived: vi.fn(),
     create,
@@ -56,9 +61,12 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  mockItems = items
   create.mockClear()
   update.mockClear()
   deletePermanently.mockClear()
+  refetch.mockClear()
+  vi.spyOn(api, 'post').mockResolvedValue({ data: {}, status: 200 })
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -97,5 +105,26 @@ describe('Categories page', () => {
     expect(screen.getByText(/Permanently delete "Salary"/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deletePermanently).toHaveBeenCalledWith('p2'))
+  })
+
+  // ── Story 3.3: Create-defaults empty state (FR-C-007) ──
+
+  test('empty state shows the Create defaults prompt + a chip preview', () => {
+    mockItems = []
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Create defaults' })).toBeTruthy()
+    // The secondary New-category action also appears (exact name — the toolbar's is "+ New category").
+    expect(screen.getByRole('button', { name: 'New category' })).toBeTruthy()
+    // Chip preview mirrors the seed (income chip present).
+    expect(screen.getByText('Salary')).toBeTruthy()
+    expect(screen.getByText('Food & Dining')).toBeTruthy()
+  })
+
+  test('Create defaults posts to the defaults endpoint then refetches', async () => {
+    mockItems = []
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Create defaults' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/categories/defaults'))
+    expect(refetch).toHaveBeenCalled()
   })
 })

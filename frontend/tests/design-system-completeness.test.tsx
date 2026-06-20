@@ -61,6 +61,7 @@ const SECTION_MARKER: Record<string, string> = {
   'emoji-icon-picker': 'button[aria-haspopup="dialog"]',
   // Category Components
   'category-tree': '[data-testid="category-tree-row"]',
+  'category-defaults': '[data-testid="category-defaults-prompt"]',
   // Feedback & overlay (the demos render real trigger Buttons; the overlays portal on interaction)
   toast: 'button',
   'confirmation-dialog': 'button',

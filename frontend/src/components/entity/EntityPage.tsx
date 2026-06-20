@@ -43,6 +43,8 @@ export interface EntityPageProps {
   emptyIcon?: LucideIcon
   emptyTitle: string
   emptyDescription?: ReactNode
+  /** Override the empty-state action(s). Defaults to a single "+ New" button. */
+  emptyAction?: ReactNode
 
   children: ReactNode
 }
@@ -142,6 +144,7 @@ function EntityPageContent({
   emptyIcon,
   emptyTitle,
   emptyDescription,
+  emptyAction,
   children,
 }: EntityPageProps) {
   if (isLoading) {
@@ -175,7 +178,7 @@ function EntityPageContent({
         icon={emptyIcon}
         title={emptyTitle}
         description={emptyDescription}
-        action={<Button onClick={onNew}>+ New {newLabel}</Button>}
+        action={emptyAction ?? <Button onClick={onNew}>+ New {newLabel}</Button>}
       />
     )
   }

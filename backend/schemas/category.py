@@ -10,6 +10,8 @@ Three schemas per the services/base.py template: `CategoryCreate` (required), `C
 derived by the service from `parent_id`, so it is read-only (response only, never in the body).
 """
 
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -61,3 +63,10 @@ class CategoryMove(BaseModel):
 class CategoryListOut(BaseModel):
     items: list[CategoryResponse]
     total: int
+
+
+class CategorySpendingOut(BaseModel):
+    # Rolled-up base-currency spend per category (FR-C-008): a parent's figure includes all its
+    # children's spend. Map of category-id → amount_base. Consumers: budget actuals (Story 8.2),
+    # dashboard spending pie (Epic 9). Built ahead of those so they are pure wiring.
+    spending: dict[str, Decimal]

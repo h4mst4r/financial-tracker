@@ -27,6 +27,8 @@ from backend.models.event import FinancialEvent
 from backend.models.identity import Household, Person
 from backend.rate_limit import limiter
 from backend.services import auth
+from backend.services import category as category_service
+from backend.services.category import DEFAULT_CATEGORIES
 
 
 @pytest.fixture(autouse=True)
@@ -684,5 +686,198 @@ async def test_member_role_cannot_mutate_403(monkeypatch):
             == 403
         )
         assert member.delete(f"/api/categories/{cat['id']}").status_code == 403
+    finally:
+        await engine.dispose()
+
+
+# ── Story 3.3: Create defaults (FR-C-007) ──
+
+
+def _active_names(client: TestClient) -> set[str]:
+    return {c["name"] for c in client.get("/api/categories").json()["items"]}
+
+
+async def test_create_defaults_seeds_13(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.post("/api/categories/defaults")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 13
+        assert _active_names(client) == {name for name, *_ in DEFAULT_CATEGORIES}
+    finally:
+        await engine.dispose()
+
+
+async def test_create_defaults_idempotent(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        assert client.post("/api/categories/defaults").json()["total"] == 13
+        # Second call adds nothing (case-insensitive active-name skip).
+        assert client.post("/api/categories/defaults").json()["total"] == 13
+    finally:
+        await engine.dispose()
+
+
+async def test_create_defaults_partial_skips_existing(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # Pre-existing "Salary" (different case) — must not be duplicated.
+        client.post("/api/categories", json=_new("salary", category_type="income"))
+        body = client.post("/api/categories/defaults").json()
+        assert body["total"] == 13
+        names = [c["name"].lower() for c in body["items"]]
+        assert names.count("salary") == 1
+    finally:
+        await engine.dispose()
+
+
+async def test_create_defaults_member_403(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory, role="member")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        assert client.post("/api/categories/defaults").status_code == 403
+    finally:
+        await engine.dispose()
+
+
+# ── Story 3.3: Spending rollup (FR-C-008) ──
+
+
+async def _insert_spend(
+    factory,
+    household_id: str,
+    actor_id: str,
+    category_id: str,
+    amount: str,
+    *,
+    transaction_type: str = "outflow",
+    transaction_status: str = "completed",
+) -> None:
+    async with factory() as db:
+        db.add(
+            FinancialEvent(
+                household_id=household_id,
+                created_by=actor_id,
+                event_type="transaction",
+                event_date=date(2026, 1, 1),
+                category_id=category_id,
+                transaction_type=transaction_type,
+                transaction_status=transaction_status,
+                currency="SGD",
+                amount=Decimal(amount),
+                fx_rate=Decimal("1.000000"),
+                amount_base_calculated=Decimal(amount),
+                amount_base=Decimal(amount),
+            )
+        )
+        await db.commit()
+
+
+async def test_spending_rollup_parent_includes_children(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        parent = client.post("/api/categories", json=_new("Food")).json()
+        child = client.post("/api/categories", json=_new("Dining", parent_id=parent["id"])).json()
+        leaf = client.post("/api/categories", json=_new("Transport")).json()
+
+        await _insert_spend(factory, hh_id, person_id, parent["id"], "10.00")
+        await _insert_spend(factory, hh_id, person_id, child["id"], "25.00")
+
+        async with factory() as db:
+            rollup = await category_service.spending_rollup(db, hh_id)
+
+        # Parent = own 10 + child 25; child = its own 25; leaf with no events = 0.
+        assert rollup[parent["id"]] == Decimal("35.00")
+        assert rollup[child["id"]] == Decimal("25.00")
+        assert rollup[leaf["id"]] == Decimal("0")
+    finally:
+        await engine.dispose()
+
+
+async def test_spending_rollup_excludes_inflow_and_cancelled(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        cat = client.post("/api/categories", json=_new("Food")).json()
+        await _insert_spend(factory, hh_id, person_id, cat["id"], "40.00")  # counts
+        await _insert_spend(
+            factory, hh_id, person_id, cat["id"], "999.00", transaction_type="inflow"
+        )
+        await _insert_spend(
+            factory, hh_id, person_id, cat["id"], "999.00", transaction_status="cancelled"
+        )
+
+        async with factory() as db:
+            rollup = await category_service.spending_rollup(db, hh_id)
+        assert rollup[cat["id"]] == Decimal("40.00")
+    finally:
+        await engine.dispose()
+
+
+async def test_spending_rollup_endpoint_scoped_any_member(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        # Household A (member role — proves it's not admin-gated) with spend.
+        a_person, a_hh = await _seed_household(factory, role="member")
+        a_sid, a_csrf = await _seed_session(factory, a_person)
+        client_a = _client_with_db(factory, monkeypatch)
+        _auth(client_a, a_sid, a_csrf)
+        # Member can't POST categories, so seed the category directly.
+        a_cat_id = str(uuid4())
+        async with factory() as db:
+            db.add(
+                Category(
+                    id=a_cat_id,
+                    household_id=a_hh,
+                    created_by=a_person,
+                    name="Food",
+                    color="#3b82f6",
+                    category_type="expense",
+                    depth=0,
+                )
+            )
+            await db.commit()
+        await _insert_spend(factory, a_hh, a_person, a_cat_id, "50.00")
+
+        resp = client_a.get("/api/categories/spending")
+        assert resp.status_code == 200
+        # Money serializes as a 4-dp string (Numeric(15,4), the codebase money convention).
+        assert resp.json()["spending"][a_cat_id] == "50.0000"
+
+        # Household B sees only its own (empty) rollup — A's spend doesn't leak.
+        b_person, _ = await _seed_household(factory)
+        b_sid, b_csrf = await _seed_session(factory, b_person)
+        client_b = _client_with_db(factory, monkeypatch)
+        _auth(client_b, b_sid, b_csrf)
+        assert client_b.get("/api/categories/spending").json()["spending"] == {}
     finally:
         await engine.dispose()

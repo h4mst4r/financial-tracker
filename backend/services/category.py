@@ -9,6 +9,7 @@ button (Story 3.3). The full Category CRUD / tree / merge logic lands in Epic 3.
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -435,3 +436,40 @@ async def single_delete_blocker(
     if await _referenced(Budget, "category_id"):
         return _BLOCKER_BUDGETS
     return None
+
+
+# ─── Spending rollup (Story 3.3, FR-C-008) ───
+
+
+async def spending_rollup(db: AsyncSession, household_id: str) -> dict[str, Decimal]:
+    """Base-currency spend per category, with each parent's figure including all its children's
+    spend (FR-C-008, ARCH §3.7). Spend = `amount_base` of `financial_events` that are
+    `transaction_type='outflow'` and `transaction_status != 'cancelled'` — the same authoritative
+    predicate as Story 8.2 budget actuals (ARCH §3.7 / FR-B-003), minus that path's budget-period
+    and owner narrowing. Always base currency (never sum `amount` across mixed currencies).
+
+    Built ahead of its consumers (budget actuals 8.2, dashboard pie 9.x) so they are pure wiring.
+    """
+    # Raw spend per category — one grouped query.
+    raw_rows = await db.execute(
+        select(FinancialEvent.category_id, func.sum(FinancialEvent.amount_base))
+        .where(
+            FinancialEvent.household_id == household_id,
+            FinancialEvent.category_id.is_not(None),
+            FinancialEvent.transaction_type == "outflow",
+            FinancialEvent.transaction_status != "cancelled",
+        )
+        .group_by(FinancialEvent.category_id)
+    )
+    raw: dict[str, Decimal] = {cid: total for cid, total in raw_rows.all()}
+
+    # Fold children into parents. Max 2 levels (DB CHECK depth<=1) → a single pass is exact.
+    cats = await db.execute(
+        select(Category.id, Category.parent_id).where(Category.household_id == household_id)
+    )
+    rows = cats.all()
+    out: dict[str, Decimal] = {cid: raw.get(cid, Decimal("0")) for cid, _ in rows}
+    for cid, parent_id in rows:
+        if parent_id is not None and parent_id in out:
+            out[parent_id] += raw.get(cid, Decimal("0"))
+    return out

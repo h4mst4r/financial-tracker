@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FolderTree } from 'lucide-react'
 import { EntityPage, EntityModal } from '../components/entity'
 import { CategoryTree } from '../components/category/CategoryTree'
+import { CategoryDefaultsPrompt } from '../components/category/CategoryDefaultsPrompt'
 import { Label } from '../components/primitives/Label'
 import { Input } from '../components/primitives/Input'
 import { SegmentedControl } from '../components/primitives/SegmentedControl'
@@ -65,6 +66,7 @@ export function Categories() {
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<Category | null>(null)
+  const [isSeeding, setIsSeeding] = useState(false)
   const pushToast = useAlertStore((s) => s.pushToast)
 
   // RFC 7807 `detail` is a string for our typed errors (an array only for 422 field errors);
@@ -95,6 +97,22 @@ export function Categories() {
       await api.post(`/api/categories/${id}/move`, { parent_id: parentId })
       manager.refetch()
     }, 'Could not move the category.')
+  // Create-defaults recovery (FR-C-007) — seeds the 13 starters idempotently, then refetches the
+  // tree. useEntityManager has no seed method, so call the endpoint directly (the onMove precedent).
+  const onCreateDefaults = () =>
+    runAction(
+      async () => {
+        setIsSeeding(true)
+        try {
+          await api.post('/api/categories/defaults')
+          manager.refetch()
+        } finally {
+          setIsSeeding(false)
+        }
+      },
+      'Could not create the default categories.',
+      'Default categories created',
+    )
   const onDelete = (c: Category) => setConfirmDelete(c)
   const doDelete = (c: Category) =>
     runAction(
@@ -181,7 +199,14 @@ export function Categories() {
         isEmpty={manager.items.length === 0}
         emptyIcon={FolderTree}
         emptyTitle="No categories yet"
-        emptyDescription="Create your first category to start classifying activity."
+        emptyDescription="Start with our defaults or add your own."
+        emptyAction={
+          <CategoryDefaultsPrompt
+            onCreateDefaults={onCreateDefaults}
+            onNewCategory={openCreate}
+            isCreating={isSeeding}
+          />
+        }
       >
         <CategoryTree
           items={visible}

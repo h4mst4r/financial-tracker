@@ -23,6 +23,7 @@ from backend.schemas.category import (
     CategoryListOut,
     CategoryMove,
     CategoryResponse,
+    CategorySpendingOut,
     CategoryUpdate,
 )
 from backend.services import category as category_service
@@ -41,15 +42,11 @@ async def _to_response(db: AsyncSession, household_id: str, cat: Category) -> Ca
     )
 
 
-@router.get("/categories")
-async def list_categories(
-    include_archived: bool = False,
-    household_id: str = Depends(get_household_id),
-    db: AsyncSession = Depends(get_db),
+async def _list_response(
+    db: AsyncSession, household_id: str, *, include_archived: bool = False
 ) -> CategoryListOut:
-    """The household's categories as a flat list (any member). Pass `?include_archived=true` to
-    include archived rows; the frontend assembles the 2-level tree by `parent_id`. `can_delete` is
-    computed from a single batched dependency scan (no per-row counts)."""
+    """The flat category list with each row's `can_delete`/reason from a single batched scan. Shared
+    by `GET /categories` and `POST /categories/defaults` so the list shape stays identical."""
     categories = await category_service.list_categories(
         db, household_id, include_archived=include_archived
     )
@@ -64,6 +61,42 @@ async def list_categories(
         for c in categories
     ]
     return CategoryListOut(items=items, total=len(items))
+
+
+@router.get("/categories")
+async def list_categories(
+    include_archived: bool = False,
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryListOut:
+    """The household's categories as a flat list (any member). Pass `?include_archived=true` to
+    include archived rows; the frontend assembles the 2-level tree by `parent_id`. `can_delete` is
+    computed from a single batched dependency scan (no per-row counts)."""
+    return await _list_response(db, household_id, include_archived=include_archived)
+
+
+@router.get("/categories/spending")
+async def get_spending_rollup(
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> CategorySpendingOut:
+    """Base-currency spend per category, parents including their children's spend (any member;
+    FR-C-008). Declared before `/{category_id}` so `spending` isn't captured as an id. Built ahead
+    of its consumers (budget actuals 8.2, dashboard pie 9.x)."""
+    return CategorySpendingOut(spending=await category_service.spending_rollup(db, household_id))
+
+
+@router.post("/categories/defaults")
+async def create_default_categories(
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryListOut:
+    """Create the 13 authoritative starter categories idempotently (admin/owner; FR-C-007). The
+    zero-active-categories recovery path (UX §6 "Create defaults"); a starter whose name already
+    matches an active category is skipped, so it never duplicates. Returns the post-seed list."""
+    await category_service.seed_default_categories(db, household_id, person.id)
+    return await _list_response(db, household_id)
 
 
 @router.post("/categories", status_code=201)
