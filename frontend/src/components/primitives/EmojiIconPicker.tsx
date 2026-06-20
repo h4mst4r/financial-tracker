@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   House, Car, ShoppingCart, Utensils, Plane, Heart, Gift, Briefcase,
   GraduationCap, Zap, PiggyBank, TrendingUp, X, type LucideIcon,
+  Phone, Wifi, Fuel, Bus, TrainFront, HeartPulse, Dumbbell, Book, Tv, Music,
+  Gamepad2, Shirt, PawPrint, Wrench, Receipt, Landmark, CreditCard, Banknote,
+  Baby, Palette, Coffee, Stethoscope, Plug, Sprout, Hammer, Scissors,
 } from 'lucide-react'
 import { Icon } from './Icon'
 import { api } from '../../api/client'
@@ -18,34 +21,101 @@ import { api } from '../../api/client'
 const LUCIDE_GLYPHS: Record<string, LucideIcon> = {
   house: House, car: Car, cart: ShoppingCart, food: Utensils, plane: Plane,
   heart: Heart, gift: Gift, work: Briefcase, school: GraduationCap, power: Zap,
-  savings: PiggyBank, growth: TrendingUp,
+  savings: PiggyBank, growth: TrendingUp, phone: Phone, wifi: Wifi, fuel: Fuel,
+  bus: Bus, train: TrainFront, health: HeartPulse, fitness: Dumbbell, book: Book,
+  tv: Tv, music: Music, games: Gamepad2, clothes: Shirt, pets: PawPrint,
+  repair: Wrench, receipt: Receipt, bank: Landmark, card: CreditCard,
+  cash: Banknote, kids: Baby, hobbies: Palette, coffee: Coffee,
+  medical: Stethoscope, plug: Plug, garden: Sprout, tools: Hammer, beauty: Scissors,
 }
 
 const EMOJI_GLYPHS: { char: string; keywords: string }[] = [
+  // Food & drink
   { char: '🍔', keywords: 'food burger dining' },
+  { char: '🍕', keywords: 'food pizza dining' },
+  { char: '🍜', keywords: 'food noodles ramen dining' },
+  { char: '🍣', keywords: 'food sushi dining restaurant' },
+  { char: '🥗', keywords: 'food salad healthy' },
+  { char: '🍞', keywords: 'food bread bakery' },
   { char: '🛒', keywords: 'groceries cart shopping' },
-  { char: '🚇', keywords: 'transport train metro' },
-  { char: '🏠', keywords: 'house home housing' },
-  { char: '💡', keywords: 'utilities power light' },
-  { char: '🏥', keywords: 'health hospital medical' },
-  { char: '🛍', keywords: 'shopping bags retail' },
-  { char: '🎬', keywords: 'entertainment movie film' },
-  { char: '🛡', keywords: 'insurance shield protection' },
-  { char: '🎓', keywords: 'education school graduation' },
-  { char: '💰', keywords: 'salary money income' },
-  { char: '📈', keywords: 'investment growth chart' },
-  { char: '📦', keywords: 'misc box package' },
-  { char: '✈', keywords: 'travel plane flight' },
-  { char: '🍷', keywords: 'drink wine alcohol' },
+  { char: '🍰', keywords: 'snacks cake dessert sweets' },
+  { char: '🍫', keywords: 'snacks chocolate sweets' },
   { char: '☕', keywords: 'coffee cafe drink' },
-  { char: '🚗', keywords: 'car vehicle auto' },
-  { char: '⛽', keywords: 'fuel petrol gas' },
+  { char: '🥤', keywords: 'drink soda beverage' },
+  { char: '🍷', keywords: 'drink wine alcohol' },
+  { char: '🍺', keywords: 'drink beer alcohol' },
+  // Shopping
+  { char: '🛍', keywords: 'shopping bags retail' },
+  { char: '👕', keywords: 'clothes shirt apparel fashion' },
+  { char: '👟', keywords: 'shoes sneakers footwear' },
+  { char: '👜', keywords: 'accessories bag handbag' },
+  { char: '💄', keywords: 'beauty cosmetics makeup' },
+  { char: '🧴', keywords: 'health beauty toiletries skincare' },
+  { char: '🧸', keywords: 'kids toys children' },
+  { char: '🛋', keywords: 'home decor furniture interior' },
+  { char: '🪴', keywords: 'garden plant equipment outdoor' },
+  { char: '🧹', keywords: 'cleaning equipment household chores' },
+  { char: '🔧', keywords: 'diy tools hardware repair' },
   { char: '🐶', keywords: 'pet dog animal' },
+  { char: '🐱', keywords: 'pet cat animal' },
+  { char: '💻', keywords: 'electronics laptop computer tech' },
+  { char: '📱', keywords: 'electronics phone mobile tech' },
+  { char: '🍳', keywords: 'kitchen homeware cookware' },
   { char: '🎁', keywords: 'gift present birthday' },
-  { char: '💳', keywords: 'card credit payment' },
-  { char: '📱', keywords: 'phone mobile tech' },
-  { char: '🏋', keywords: 'gym fitness sport' },
-  { char: '✂', keywords: 'haircut grooming barber' },
+  { char: '✏', keywords: 'stationery pen tools office' },
+  { char: '💊', keywords: 'medical medicine pharmacy' },
+  { char: '🎮', keywords: 'games hardware software gaming' },
+  // Housing
+  { char: '🏠', keywords: 'house home housing' },
+  { char: '🏢', keywords: 'rent apartment building' },
+  { char: '🏦', keywords: 'mortgage bank loan' },
+  { char: '💡', keywords: 'utilities power light electricity' },
+  { char: '🌐', keywords: 'internet wifi broadband network' },
+  { char: '🛠', keywords: 'maintenance repair services handyman' },
+  { char: '🚰', keywords: 'water utilities plumbing' },
+  // Transport & vehicle
+  { char: '🚇', keywords: 'transport train metro subway public' },
+  { char: '🚌', keywords: 'bus public transport' },
+  { char: '🚕', keywords: 'taxi cab ride' },
+  { char: '✈', keywords: 'travel plane flight holiday long distance' },
+  { char: '🚗', keywords: 'car vehicle auto' },
+  { char: '⛽', keywords: 'fuel petrol gas diesel' },
+  { char: '🅿', keywords: 'parking car park' },
+  { char: '🚲', keywords: 'bike bicycle cycling' },
+  // Life & entertainment
+  { char: '🏥', keywords: 'healthcare hospital gp medical doctor' },
+  { char: '💆', keywords: 'wellness beauty spa relax' },
+  { char: '🏋', keywords: 'fitness gym sport workout' },
+  { char: '⚽', keywords: 'sports football soccer fitness' },
+  { char: '🎬', keywords: 'movies film cinema entertainment' },
+  { char: '🎭', keywords: 'culture events theatre arts' },
+  { char: '🎨', keywords: 'hobbies art craft painting' },
+  { char: '🎓', keywords: 'education school development learning' },
+  { char: '📚', keywords: 'books reading library' },
+  { char: '🔔', keywords: 'subscription membership recurring' },
+  { char: '📺', keywords: 'tv streaming television media' },
+  { char: '🏖', keywords: 'holiday vacation beach travel' },
+  { char: '🎵', keywords: 'music audio entertainment' },
+  // Communication
+  { char: '📞', keywords: 'phone call communication' },
+  { char: '📮', keywords: 'postal mail post letter' },
+  // Financial
+  { char: '🧾', keywords: 'taxes receipt bill financial' },
+  { char: '🛡', keywords: 'insurance shield protection' },
+  { char: '🏛', keywords: 'loan interest bank legal financial' },
+  { char: '⚖', keywords: 'fines legal penalty law' },
+  { char: '💸', keywords: 'fees charges expenses' },
+  { char: '👶', keywords: 'child support kids family' },
+  { char: '💰', keywords: 'salary money income financial' },
+  { char: '📈', keywords: 'investment growth chart dividends' },
+  { char: '🏘', keywords: 'rental income property' },
+  { char: '💵', keywords: 'wages cash salary pay' },
+  { char: '💹', keywords: 'interest dividends returns financial' },
+  { char: '🎗', keywords: 'dues grants donation' },
+  { char: '↩', keywords: 'refunds returns reimbursement' },
+  // Misc
+  { char: '📦', keywords: 'misc box package other relocation moving' },
+  { char: '⭐', keywords: 'favourite star important' },
 ]
 
 const LUCIDE_PREFIX = 'lucide:'
@@ -68,7 +138,11 @@ export function GlyphView({
     const lucide = LUCIDE_GLYPHS[glyph.slice(LUCIDE_PREFIX.length)]
     return lucide ? <Icon icon={lucide} size={size} className={className ?? 'text-text-primary'} /> : null
   }
-  return <span style={{ fontSize: size }}>{glyph}</span>
+  return (
+    <span className="font-emoji" style={{ fontSize: size, lineHeight: 1 }}>
+      {glyph}
+    </span>
+  )
 }
 
 interface EmojiIconPickerProps {
@@ -218,7 +292,7 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
             </div>
           )}
 
-          <div className="grid grid-cols-8 gap-1">
+          <div className="grid grid-cols-8 gap-1 max-h-glyph-grid overflow-y-auto pr-1">
             {cells.map((glyph) => (
               <button
                 key={glyph}

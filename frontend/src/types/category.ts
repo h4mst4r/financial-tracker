@@ -12,6 +12,10 @@ export interface Category extends BaseEntity {
   parent_id: string | null
   depth: number
   vivid: boolean
+  // Story 3.2: computed server-side from the dependency scan — drives the ⋮ Delete-disabled-with-
+  // reason (UX §8.1). `can_delete=false` ⇒ `delete_blocked_reason` is the human reason.
+  can_delete: boolean
+  delete_blocked_reason: string | null
 }
 
 export type CategoryType = Category['category_type']

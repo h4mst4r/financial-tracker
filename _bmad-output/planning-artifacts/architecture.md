@@ -193,7 +193,11 @@ From the brief and PRD, non-negotiable:
 ### 1.11 Supporting libraries (decided, low-controversy)
 
 `react-router-dom` (routing + guards) · `lucide-react` (icons) · `date-fns` (per-person
-date display/input ⇄ ISO storage, FR-V-010 / FR-P-009) · `httpx` (server HTTP) ·
+date display/input ⇄ ISO storage, FR-V-010 / FR-P-009) · `@dnd-kit/core` (drag-and-drop:
+CategoryTree re-parent/promote, and the future Dashboard widget board §17 — chosen after native
+HTML5 DnD proved unreliable for nested rows; gives pointer **and keyboard** dragging. Install with
+`--legacy-peer-deps` per the repo's standing `@eslint/js`↔`eslint` peer resolution. SCP
+2026-06-20 has the post-mortem) · `httpx` (server HTTP) ·
 `slowapi` (per-IP rate limiting). Test/quality: `pytest`/`pytest-asyncio`,
 `vitest` + Testing Library, `playwright` (E2E), `ruff` (lint/format), `eslint`
 (JS/TS correctness — flat config: no-`any`, import order, rules-of-hooks), `stylelint`

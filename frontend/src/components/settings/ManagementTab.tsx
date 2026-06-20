@@ -555,7 +555,7 @@ function DangerZone() {
     <section className="flex flex-col gap-md">
       {/* Bible §5.2: an error-tinted callout box (error-fill bg + error border) with the heading
           inside it, not a plain bordered panel. */}
-      <div className="flex flex-col gap-sm rounded-md border border-border-error bg-error-fill p-md">
+      <div className="flex flex-col gap-sm rounded-md border border-dashed border-border-error bg-error-fill p-md">
         <h2 className="text-lg font-medium text-error">Danger zone</h2>
         {isOwner ? <DeleteHousehold /> : <LeaveHousehold />}
       </div>

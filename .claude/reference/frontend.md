@@ -324,6 +324,8 @@ Stat and chart skeleton shapes need a `bg-surface` container frame or they appea
 
 Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so the drag handle can appear on hover.
 
+> **Drag-and-drop = `@dnd-kit/core`, NOT native HTML5 DnD.** Native `draggable`/`onDragStart` was tried and hardened repeatedly on CategoryTree and stayed unreliable in real browsers (rows that were DOM-identical behaved differently); synthetic `fireEvent.dragStart/drop` tests passed but proved nothing (they bypass real drag initiation). Use dnd-kit for **any** drag surface (CategoryTree now, the Dashboard board §17 later): handle-based `useDraggable`, `useDroppable` targets, Pointer **+ Keyboard** sensors, and keep the drop *outcome* a **pure unit-tested function** (`resolveMove(active, over, items)` is the model). Install needs `--legacy-peer-deps`. Full post-mortem: SCP 2026-06-20; rationale in ARCH §1.11.
+
 **Row interaction rules (non-negotiable):**
 - **Selection is clearable:** state machine is `none → selected → none`. Never a sticky selected state with no escape.
 - **onClick → lift + shadow:** clicking a row applies `shadow-md -translate-y-px` (or equivalent lift token) to signal interactivity. Use `transition-all duration-100`.

@@ -8,9 +8,10 @@ import { SegmentedControl } from '../components/primitives/SegmentedControl'
 import { Dropdown } from '../components/primitives/Dropdown'
 import { ColourPicker } from '../components/primitives/ColourPicker'
 import { EmojiIconPicker } from '../components/primitives/EmojiIconPicker'
+import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { useEntityManager } from '../hooks/useEntityManager'
 import { useAlertStore } from '../stores/alertStore'
-import { ApiError } from '../api/client'
+import { api, ApiError } from '../api/client'
 import type { Category, CategoryType } from '../types/category'
 import { CATEGORY_TYPE_META } from '../types/category'
 
@@ -63,7 +64,44 @@ export function Categories() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [confirmDelete, setConfirmDelete] = useState<Category | null>(null)
   const pushToast = useAlertStore((s) => s.pushToast)
+
+  // RFC 7807 `detail` is a string for our typed errors (an array only for 422 field errors);
+  // 401 short-circuits to /login upstream.
+  const toastError = (err: unknown, fallback: string) => {
+    const detail = err instanceof ApiError ? err.details?.detail : undefined
+    const message =
+      typeof detail === 'string' ? detail : err instanceof ApiError ? err.message : fallback
+    pushToast({ variant: 'error', message })
+  }
+  const runAction = async (fn: () => Promise<unknown>, fallback: string, success?: string) => {
+    try {
+      await fn()
+      if (success) pushToast({ variant: 'success', message: success })
+    } catch (err) {
+      toastError(err, fallback)
+    }
+  }
+
+  const onArchive = (c: Category) =>
+    runAction(() => manager.archive(c.id), 'Could not archive the category.', 'Category archived')
+  const onRestore = (c: Category) =>
+    runAction(() => manager.restore(c.id), 'Could not restore the category.', 'Category restored')
+  // Promote (parentId=null) / re-parent — the single move behind both ⋮ and drag. useEntityManager
+  // has no `move`, so call the category-specific endpoint and refetch the tree.
+  const onMove = (id: string, parentId: string | null) =>
+    runAction(async () => {
+      await api.post(`/api/categories/${id}/move`, { parent_id: parentId })
+      manager.refetch()
+    }, 'Could not move the category.')
+  const onDelete = (c: Category) => setConfirmDelete(c)
+  const doDelete = (c: Category) =>
+    runAction(
+      () => manager.deletePermanently(c.id),
+      'Could not delete the category.',
+      'Category deleted',
+    )
 
   const openCreate = () => {
     setForm(EMPTY_FORM)
@@ -100,16 +138,8 @@ export function Categories() {
       else await manager.create(payload)
       setModalOpen(false)
     } catch (err) {
-      // 409 (duplicate name) / 400 (bad type) etc. surface here; 401 short-circuits to /login upstream.
-      // RFC 7807 `detail` is a string for our typed errors (an array only for 422 field errors).
-      const detail = err instanceof ApiError ? err.details?.detail : undefined
-      const message =
-        typeof detail === 'string'
-          ? detail
-          : err instanceof ApiError
-            ? err.message
-            : 'Could not save the category.'
-      pushToast({ variant: 'error', message })
+      // 409 (duplicate name) / 400 (bad type) etc. surface here, keeping the modal open.
+      toastError(err, 'Could not save the category.')
     }
   }
 
@@ -153,7 +183,15 @@ export function Categories() {
         emptyTitle="No categories yet"
         emptyDescription="Create your first category to start classifying activity."
       >
-        <CategoryTree items={visible} onEdit={openEdit} onAddSubcategory={openAddSub} />
+        <CategoryTree
+          items={visible}
+          onEdit={openEdit}
+          onAddSubcategory={openAddSub}
+          onArchive={onArchive}
+          onRestore={onRestore}
+          onDelete={onDelete}
+          onMove={onMove}
+        />
       </EntityPage>
 
       <EntityModal
@@ -206,6 +244,21 @@ export function Categories() {
           />
         </div>
       </EntityModal>
+
+      <ConfirmationDialog
+        open={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (confirmDelete) doDelete(confirmDelete)
+        }}
+        title="Delete category"
+        message={
+          confirmDelete
+            ? `Permanently delete "${confirmDelete.name}"? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+      />
     </div>
   )
 }

@@ -45,6 +45,17 @@ class CategoryResponse(BaseModel):
     depth: int
     vivid: bool
     status: str
+    # Computed by the router (Story 3.2), not ORM columns: drives the ⋮ Delete-disabled-with-reason
+    # (UX §8.1). Defaults make `model_validate(cat)` safe; the router overrides them from the
+    # dependency scan. `can_delete=False` ⇒ `delete_blocked_reason` explains why.
+    can_delete: bool = True
+    delete_blocked_reason: str | None = None
+
+
+class CategoryMove(BaseModel):
+    # Promote (parent_id=None → depth 0) or re-parent (parent_id=<top-level> → depth 1). The single
+    # move operation behind both the ⋮ Promote/Move items and drag (Story 3.2, UX §6/§8.1).
+    parent_id: str | None = None
 
 
 class CategoryListOut(BaseModel):

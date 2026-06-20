@@ -40,14 +40,14 @@ function ToastItem({ toast }: { toast: ToastModel }) {
 
   return (
     <div
-      className="grid transition-toast duration-base ease-spring"
+      className="grid transition-toast duration-base ease-out"
       style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
     >
       {/* Clip the body while the row collapses so siblings bump against a clean edge. */}
       <div className="overflow-hidden">
         {/* pb-xs (not container gap) so the inter-toast spacing collapses with the row on exit. */}
         <div
-          className={`pb-xs transition-toast duration-base ease-spring ${
+          className={`pb-xs transition-toast duration-base ease-out ${
             open ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
           }`}
         >

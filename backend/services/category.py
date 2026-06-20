@@ -8,15 +8,18 @@ button (Story 3.3). The full Category CRUD / tree / merge logic lands in Epic 3.
 
 import logging
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
 from backend.db_utils import get_or_404
-from backend.models.budget import Category
+from backend.models.budget import Budget, Category
+from backend.models.event import FinancialEvent
 from backend.schemas.category import CategoryCreate, CategoryUpdate
 from backend.services.audit import audit
+from backend.services.base import assert_no_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -216,3 +219,219 @@ async def list_categories(
 async def get_category(db: AsyncSession, household_id: str, category_id: str) -> Category:
     """A single household-scoped category (404 incl. cross-household)."""
     return await get_or_404(db, Category, category_id, household_id=household_id)
+
+
+# ─── Archive / restore / move / delete (Story 3.2) ───
+
+
+async def _active_children(db: AsyncSession, household_id: str, parent_id: str) -> list[Category]:
+    stmt = select(Category).where(
+        Category.household_id == household_id,
+        Category.parent_id == parent_id,
+        Category.archived.is_(False),
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def _archived_children(db: AsyncSession, household_id: str, parent_id: str) -> list[Category]:
+    stmt = select(Category).where(
+        Category.household_id == household_id,
+        Category.parent_id == parent_id,
+        Category.archived.is_(True),
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def _has_children(db: AsyncSession, household_id: str, parent_id: str) -> bool:
+    stmt = select(
+        exists().where(Category.household_id == household_id, Category.parent_id == parent_id)
+    )
+    return bool((await db.execute(stmt)).scalar_one())
+
+
+async def archive_category(
+    db: AsyncSession, household_id: str, actor_id: str, category_id: str
+) -> Category:
+    """Archive a category, cascading the whole branch (AC 1, FR-C-005). Archiving a parent archives
+    its **active children together** (not auto-promoted); archiving a sub archives only it. Returns
+    **200, never 409**. Idempotent: a row already archived is skipped (no second audit row). Refs on
+    `financial_events` are untouched (history preserved). Flush only; `get_db` commits."""
+    target = await get_or_404(db, Category, category_id, household_id=household_id)
+    branch = [target]
+    if target.depth == 0:
+        branch += await _active_children(db, household_id, target.id)
+
+    now = datetime.now(UTC)
+    for row in branch:
+        if row.archived:
+            continue  # idempotent no-op
+        before = _snapshot(row)
+        row.status = "archived"
+        row.archived = True
+        row.archived_at = now
+        row.archived_by = actor_id
+        await audit.log(
+            db,
+            household_id=household_id,
+            actor_id=actor_id,
+            action="archive",
+            entity_type="category",
+            entity_id=str(row.id),
+            before=before,
+            after=_snapshot(row),
+        )
+    await db.flush()
+    return target
+
+
+async def restore_category(
+    db: AsyncSession, household_id: str, actor_id: str, category_id: str
+) -> Category:
+    """Restore an archived category (AC 1). Restoring a parent restores its archived children too
+    (the branch comes back together, ARCH §3.7); restoring a sub restores only it. Idempotent: an
+    already-active row is skipped."""
+    target = await get_or_404(db, Category, category_id, household_id=household_id)
+    branch = [target]
+    if target.depth == 0:
+        branch += await _archived_children(db, household_id, target.id)
+
+    for row in branch:
+        if not row.archived:
+            continue  # idempotent no-op
+        before = _snapshot(row)
+        row.status = "active"
+        row.archived = False
+        row.archived_at = None
+        row.archived_by = None
+        await audit.log(
+            db,
+            household_id=household_id,
+            actor_id=actor_id,
+            action="restore",
+            entity_type="category",
+            entity_id=str(row.id),
+            before=before,
+            after=_snapshot(row),
+        )
+    await db.flush()
+    return target
+
+
+async def move_category(
+    db: AsyncSession, household_id: str, actor_id: str, category_id: str, parent_id: str | None
+) -> Category:
+    """Promote or re-parent a category (AC 2, FR-C-003). `parent_id=None` promotes to top-level
+    (`depth 0`); a top-level `parent_id` re-parents (`depth 1`). Rejects (400) anything that would
+    create a 3rd level: the target must itself be top-level, and a category that **has its own
+    children** can't be demoted into a subcategory. The DB CHECK `depth<=1` only guards a single
+    row, so the has-children guard here is what actually keeps the tree 2 levels deep."""
+    obj = await get_or_404(db, Category, category_id, household_id=household_id)
+    if parent_id == category_id:
+        errors.bad_request("Invalid move", "A category cannot be its own parent")
+
+    if parent_id is None:
+        new_depth = 0
+    else:
+        parent = await get_or_404(db, Category, parent_id, household_id=household_id)
+        if parent.archived:
+            errors.bad_request(
+                "Invalid move", "Cannot move a category under an archived parent"
+            )
+        if parent.depth != 0:
+            errors.bad_request(
+                "Invalid move", "The target must be a top-level category (max 2 levels)"
+            )
+        if await _has_children(db, household_id, obj.id):
+            errors.bad_request(
+                "Invalid move", "A category with subcategories cannot become a subcategory"
+            )
+        new_depth = 1
+
+    before = _snapshot(obj)
+    obj.parent_id = parent_id
+    obj.depth = new_depth
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="update",
+        entity_type="category",
+        entity_id=str(obj.id),
+        before=before,
+        after=_snapshot(obj),
+    )
+    return obj
+
+
+async def delete_category(
+    db: AsyncSession, household_id: str, actor_id: str, category_id: str
+) -> None:
+    """Hard-delete a category if it has zero downstream references (AC 3, FR-C-006). The dependency
+    scan covers `financial_events`, `budgets`, and **child categories**; any hit → 409
+    `has_dependencies` (the UI offers archive instead). On success the row is gone — a hard delete
+    leaves an INFO log, never an audit row (services/base.py template)."""
+    obj = await get_or_404(db, Category, category_id, household_id=household_id)  # 404 scope guard
+    await assert_no_dependencies(
+        db,
+        [
+            (FinancialEvent, "category_id"),
+            (Budget, "category_id"),
+            (Category, "parent_id"),
+        ],
+        str(category_id),
+        entity_type="category",
+    )
+    await db.delete(obj)
+    await db.flush()
+    logger.info(
+        "hard_delete_category",
+        extra={"household_id": str(household_id), "entity_id": str(category_id)},
+    )
+
+
+# ─── Delete-eligibility (powers can_delete / delete_blocked_reason, UX §8.1) ───
+
+# Precedence for the human reason when a category has multiple blockers.
+_BLOCKER_SUBCATEGORIES = "has subcategories"
+_BLOCKER_TRANSACTIONS = "has transactions"
+_BLOCKER_BUDGETS = "has budgets"
+
+
+async def delete_blockers(db: AsyncSession, household_id: str) -> dict[str, str]:
+    """Map every household category that **cannot** be hard-deleted to its reason, via three batched
+    queries (never per-row counts). Precedence: subcategories → transactions → budgets."""
+    blockers: dict[str, str] = {}
+
+    async def _ids(model: type, column: str) -> set[str]:
+        col = getattr(model, column)
+        stmt = select(col).where(model.household_id == household_id, col.is_not(None)).distinct()
+        return {row for row in (await db.execute(stmt)).scalars().all()}
+
+    # Lowest precedence first; later writes win for the chosen reason.
+    for cid in await _ids(Budget, "category_id"):
+        blockers[cid] = _BLOCKER_BUDGETS
+    for cid in await _ids(FinancialEvent, "category_id"):
+        blockers[cid] = _BLOCKER_TRANSACTIONS
+    for cid in await _ids(Category, "parent_id"):
+        blockers[cid] = _BLOCKER_SUBCATEGORIES
+    return blockers
+
+
+async def single_delete_blocker(
+    db: AsyncSession, household_id: str, category_id: str
+) -> str | None:
+    """The hard-delete blocker reason for one category, or None if it is deletable. Same checks +
+    precedence as `delete_blockers`, for single-row responses."""
+
+    async def _referenced(model: type, column: str) -> bool:
+        stmt = select(exists().where(getattr(model, column) == category_id))
+        return bool((await db.execute(stmt)).scalar_one())
+
+    if await _referenced(Category, "parent_id"):
+        return _BLOCKER_SUBCATEGORIES
+    if await _referenced(FinancialEvent, "category_id"):
+        return _BLOCKER_TRANSACTIONS
+    if await _referenced(Budget, "category_id"):
+        return _BLOCKER_BUDGETS
+    return None

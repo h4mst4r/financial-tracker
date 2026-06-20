@@ -167,10 +167,10 @@
 @utility z-tooltip  { z-index: var(--z-tooltip); }
 
 /* ── Entity colour-fill identity (UX §0.1, frontend.md §2.5) — backgrounds only; text/contrast = 1.6 ── */
-@utility bg-entity-fill-calm  { background-color: color-mix(in oklab, var(--entity-colour) 14%, transparent); }
+@utility bg-entity-fill-calm  { background-color: color-mix(in oklab, var(--entity-colour) 18%, transparent); }
 @utility bg-entity-fill-vivid { background-color: var(--entity-colour); }
 /* Subcategory rows: a lighter tint of the parent's colour (CategoryTree, UX §6 / frontend.md §2.11). */
-@utility bg-entity-fill-sub   { background-color: color-mix(in oklab, var(--entity-colour) 7%, transparent); }
+@utility bg-entity-fill-sub   { background-color: color-mix(in oklab, var(--entity-colour) 9%, transparent); }
 /* Contrast-aware text for the vivid fill (calm keeps text-text-primary). --entity-on-colour is set
    inline per-instance from theme/colour.ts contrastText() (WCAG light/dark pick) — see EntityCard. */
 @utility text-on-entity { color: var(--entity-on-colour); }
@@ -306,6 +306,13 @@
    across tabs and independent of the (possibly narrow) trigger column (bible §7 fixed-width
    panels; P4: no inline px). ── */
 @utility min-w-picker { min-width: 15rem; }
+/* EmojiIconPicker glyph grid: caps the scroll area at ~6 rows of size-9 cells so a large curated
+   set scrolls inside the panel instead of growing it past the modal (UX §8.3). P4. */
+@utility max-h-glyph-grid { max-height: 15rem; }
+/* Force the colour-emoji font for emoji glyphs (UX §8.3). Without it, text-presentation symbols
+   (✏ ✂ ✈ 🛡 …) fall back to the sans body font as monochrome glyphs that inherit `color` (so they
+   pick up the theme/text colour). The emoji font renders them full-colour. */
+@utility font-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 
 /* ── ContextMenu / dropdown min-width (P4: no arbitrary [160px]) ── */
 @utility min-w-menu { min-width: 160px; }
@@ -368,11 +375,14 @@
    (translate-x-full→0, opacity 0→1) while its row height animates 0fr→1fr, so a new toast at the bottom
    of the bottom-right stack BUMPS the older ones up; dismiss reverses every property. `transition-toast`
    is the shared property set — paired in TSX with the motion-aware `duration-base` (folds to 0s under
-   reduce-motion) + `ease-spring` (the slight overshoot is the "bump"). Removal is timer-driven in
+   reduce-motion) + `ease-out` (a plain decelerate — no spring overshoot; the slide must not follow
+   through / read cartoony). Removal is timer-driven in
    ToastContainer, never a transitionend, because a 0s reduce-motion transition emits none. (§1.1 places
    the stack via bottom-toast.) ── */
 @utility bottom-toast { bottom: var(--toast-inset-bottom); }
-@utility transition-toast { transition-property: grid-template-rows, opacity, transform; }
+/* Slide uses `translate-x-*`, which compiles to the `translate` property in Tailwind v4 (NOT
+   `transform`) — so the property list must name `translate`, or the slide snaps while only the fade runs. */
+@utility transition-toast { transition-property: grid-template-rows, opacity, translate; }
 
 /* ── MiniSparkline (UX §9.2, Bible #entitycard `.spark`). The spark-* colour utilities are full @utility
    blocks setting fill/stroke directly — NOT the derived colour utilities (which collide with the

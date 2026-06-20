@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
-import { Divider } from './Divider'
 
 export interface ContextMenuItem {
   label: string
@@ -145,7 +144,15 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
         >
           {items.map((entry, idx) => {
             if ('divider' in entry) {
-              return <Divider key={`div-${idx}`} className="my-2xs" />
+              // border-strong (not the default border-border) — on the surface-overlay menu the
+              // plain border token is near-invisible (≈ the overlay colour).
+              return (
+                <div
+                  key={`div-${idx}`}
+                  role="separator"
+                  className="my-2xs border-t border-border-strong"
+                />
+              )
             }
             const item = entry as ContextMenuItem
             return (

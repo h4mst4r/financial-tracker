@@ -79,7 +79,9 @@ test('renders the app inside the AppShell for an in-household session', async ()
   fetchMock.mockResolvedValue(makeResponse(IN_HOUSEHOLD))
   renderApp()
   expect(await screen.findByTestId('app-shell')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Financial Tracker' })).toBeInTheDocument()
+  // The Topbar branding wordmark resolves asynchronously — await it (a sync getByRole here races the
+  // Topbar's branding-config update; harmless in isolation, flaky under full-suite load).
+  expect(await screen.findByRole('heading', { name: 'Financial Tracker' })).toBeInTheDocument()
 })
 
 test('shows the HouseholdConflictDialog over the shell for an in-household cross-household invite', async () => {
@@ -101,7 +103,9 @@ test('shows the HouseholdConflictDialog over the shell for an in-household cross
   renderApp()
   // The shell still renders; the conflict dialog (owner variant) overlays it at the app root.
   expect(await screen.findByTestId('app-shell')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Already own a household' })).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Already own a household' }),
+  ).toBeInTheDocument()
 })
 
 test('renders the neutral shell (no AppShell) for a NULL-household session', async () => {

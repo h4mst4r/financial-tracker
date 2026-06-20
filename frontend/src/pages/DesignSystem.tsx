@@ -155,10 +155,13 @@ export function DesignSystem() {
   const [demoVivid, setDemoVivid] = useState(false)
   const [demoGlyph, setDemoGlyph] = useState<string | null>('🏠')
   const demoCategories: Category[] = [
-    { id: 'c1', status: 'active', name: 'Food & Dining', color: '#f59e0b', icon: '🍔', category_type: 'expense', parent_id: null, depth: 0, vivid: false },
-    { id: 'c1a', status: 'active', name: 'Groceries', color: '#f59e0b', icon: '🛒', category_type: 'expense', parent_id: 'c1', depth: 1, vivid: false },
-    { id: 'c1b', status: 'active', name: 'Restaurants', color: '#f59e0b', icon: '🍷', category_type: 'expense', parent_id: 'c1', depth: 1, vivid: false },
-    { id: 'c2', status: 'active', name: 'Salary', color: '#16a34a', icon: '💰', category_type: 'income', parent_id: null, depth: 0, vivid: true },
+    // Parent has children → can_delete:false demonstrates the ⋮ Delete-disabled-with-reason (UX §8.1).
+    { id: 'c1', status: 'active', name: 'Food & Dining', color: '#f59e0b', icon: '🍔', category_type: 'expense', parent_id: null, depth: 0, vivid: false, can_delete: false, delete_blocked_reason: 'has subcategories' },
+    { id: 'c1a', status: 'active', name: 'Groceries', color: '#f59e0b', icon: '🛒', category_type: 'expense', parent_id: 'c1', depth: 1, vivid: false, can_delete: true, delete_blocked_reason: null },
+    { id: 'c1b', status: 'active', name: 'Restaurants', color: '#f59e0b', icon: '🍷', category_type: 'expense', parent_id: 'c1', depth: 1, vivid: false, can_delete: true, delete_blocked_reason: null },
+    { id: 'c2', status: 'active', name: 'Salary', color: '#16a34a', icon: '💰', category_type: 'income', parent_id: null, depth: 0, vivid: true, can_delete: true, delete_blocked_reason: null },
+    // Archived row treatment (Story 3.2): grayscale + dashed border + [Archived] badge, Restore in ⋮.
+    { id: 'c3', status: 'archived', name: 'Old Subscriptions', color: '#8b5cf6', icon: '📺', category_type: 'expense', parent_id: null, depth: 0, vivid: false, can_delete: true, delete_blocked_reason: null },
   ]
   const bulkCards = [
     { id: 'bk1', colour: '#6366f1', icon: '🏦', name: 'DBS Multiplier', hero: 'S$ 12,840', meta: 'bank · SGD' },
@@ -726,7 +729,15 @@ export function DesignSystem() {
         <section id="category-tree" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">CategoryTree</h2>
           <div className="max-w-modal">
-            <CategoryTree items={demoCategories} onEdit={() => {}} onAddSubcategory={() => {}} />
+            <CategoryTree
+              items={demoCategories}
+              onEdit={() => {}}
+              onAddSubcategory={() => {}}
+              onArchive={() => {}}
+              onRestore={() => {}}
+              onDelete={() => {}}
+              onMove={() => {}}
+            />
           </div>
         </section>
 

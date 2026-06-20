@@ -707,8 +707,17 @@ tinted with the semantic income colour) alongside a secondary **New category**. 
   left-border accent bar is **not used** anywhere (parent or sub rows); neither is a colour chip or
   a connector line. (This prohibition is mirrored in CLAUDE.md §5.11.)
 - **Behaviours:** archiving a parent **archives the whole branch** (no auto-promote, FR-C-005) ·
-  **drag** reorders within a level and **onto another parent re-parents** a sub · **2 levels max**
-  · expand/collapse animates (§0.7).
+  **drag** (pointer **or keyboard**, via `@dnd-kit` — ARCH §1.11) **re-parents / promotes**: drop a
+  **subcategory** onto another parent to re-parent, or onto the **top-level drop zone** to promote;
+  drop a **childless top-level** onto a parent to **nest** it. A top-level **with children** has no
+  valid move (would exceed 2 levels) so it isn't draggable and carries no grip. **2 levels max** ·
+  expand/collapse animates (§0.7). *(Reorder **within** a level is not yet supported — it needs
+  per-person sort persistence, `entity_preferences` / FR-E-021; deferred to its own story.)*
+- **Promote / Move are also in the `⋮` menu** — **"Promote to top level"** (subcategories only) and
+  **"Move to…"** (one item per other top-level parent) — the explicit, discoverable path alongside
+  drag (same pairing as the Dashboard widget board, §17). With `@dnd-kit`, drag itself is now
+  keyboard-accessible, so the `⋮` items complement rather than substitute for it. Both routes go
+  through the same move operation (FR-C-003).
 
 ---
 
@@ -750,8 +759,9 @@ Open · — · Archive/Restore · Delete**.
   visible, so the user never hits a dead end.
 - **Adaptive per permission:** members see only permitted actions (no Archive/Delete on others'
   entities); destructive actions sit **below a divider**.
-- **Entity-specific extras** slot in (category: "Add subcategory", "Merge"; account: "Add value
-  snapshot").
+- **Entity-specific extras** slot in (category: "Add subcategory", **"Promote to top level"** /
+  **"Move to…"** *(the accessible twin of CategoryTree drag, §6)*, "Merge"; account: "Add value
+  snapshot"). Promote/Move sit **above** the destructive divider (they are non-destructive moves).
 - **Item colour treatment (resolved in the design bible):** Edit / Duplicate are **neutral**
   (`text` colour); **Favourite/Unfavourite** uses the **star colour** and **Open / Visualize** uses
   **`accent-secondary`** — the two non-mutating "special" actions are tinted so they read apart from
@@ -881,8 +891,11 @@ Transactions ledger **and** the CategoryTree (§12.4, §6), extensible to any en
     payee · is_shared_expense) · **Duplicate** · **Archive/Restore** · **Delete-if-empty** ·
     **Visualize** (→ Viewer, §9.1) — **Visualize is tinted `accent-secondary`** (same treatment as
     the ContextMenu "Open / Visualize", §8.1).
-  - **Categories (tree):** **Edit type** (Expense/Income) · **Archive/Restore** (archiving a parent
-    archives its branch, FR-C-005) · **Merge** (fold selected into one).
+  - **Categories (tree):** **Edit type** (Expense/Income) · **Promote** (selected subs → top-level)
+    / **Move to…** (selected subs → a chosen parent; the bulk twin of the single-row §6 move,
+    FR-C-003) · **Archive/Restore** (archiving a parent archives its branch, FR-C-005) · **Merge**
+    (fold selected into one). Promote/Move apply only to selected **subcategories**; a selected
+    parent-with-children is greyed with a reason (can't become a sub — 2-levels max).
 - **Permission-adaptive:** actions a **Member** can't take on others' items are greyed with a reason
   (per-item rule — Member acts on own only; Admin/Owner on any).
 - **Safety & side-effects:** a **single confirmation** precedes destructive bulk actions; **each

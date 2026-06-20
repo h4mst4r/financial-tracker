@@ -7,7 +7,8 @@ import type { Category } from '../src/types/category'
 
 const cat = (over: Partial<Category>): Category => ({
   id: 'x', status: 'active', name: 'X', color: '#3b82f6', icon: null,
-  category_type: 'expense', parent_id: null, depth: 0, vivid: false, ...over,
+  category_type: 'expense', parent_id: null, depth: 0, vivid: false,
+  can_delete: true, delete_blocked_reason: null, ...over,
 })
 
 const items: Category[] = [
@@ -24,6 +25,7 @@ const update = vi.fn(async (id: string, data: unknown) => {
   void data
   return cat({ id: 'p1' })
 })
+const deletePermanently = vi.fn(async () => {})
 
 vi.mock('../src/hooks/useEntityManager', () => ({
   useEntityManager: () => ({
@@ -39,7 +41,7 @@ vi.mock('../src/hooks/useEntityManager', () => ({
     update,
     archive: vi.fn(),
     restore: vi.fn(),
-    deletePermanently: vi.fn(),
+    deletePermanently,
     duplicate: vi.fn(),
     detectDuplicate: vi.fn(),
   }),
@@ -56,6 +58,7 @@ function renderPage() {
 beforeEach(() => {
   create.mockClear()
   update.mockClear()
+  deletePermanently.mockClear()
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -83,5 +86,16 @@ describe('Categories page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
     expect(create.mock.calls[0][0]).toMatchObject({ name: 'Travel', category_type: 'expense' })
+  })
+
+  test('Delete from ⋮ opens the confirm dialog, then calls deletePermanently', async () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Actions for Salary'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+
+    // Confirm dialog now open (menu closed) — confirm the destructive action.
+    expect(screen.getByText(/Permanently delete "Salary"/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(deletePermanently).toHaveBeenCalledWith('p2'))
   })
 })
