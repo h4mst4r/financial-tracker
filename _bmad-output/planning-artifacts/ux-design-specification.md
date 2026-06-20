@@ -612,9 +612,19 @@ Single column of personal preferences:
 - **Integrations** (owner-editable; read-only for others):
   - **FX rate providers** — an **ordered list** (priority = fallback chain, §arch 5.7). Each row:
     provider name · type (e.g. Open Exchange Rates) · **enabled** toggle · status chip
-    (ok / stale / down) · ⋮ (reorder, edit, remove). **+ Add provider** → modal: type · base URL ·
-    **API key** (write-only — masked `••••`, stored in Secret Manager, never echoed back, §arch 5.7).
-    The first enabled provider is primary; on failure the fetcher falls through to the next.
+    (ok / stale / down, or **unknown** until the first Story 3.7 fetch runs) · ⋮ (move up/down to
+    reorder, edit, remove). **+ Add provider** → modal: **type** (a fixed registry: Open Exchange
+    Rates · ExchangeRate-API · Frankfurter/ECB — keyless) · **base URL** · **API-key secret
+    reference** (only for key-requiring types — the **name** of the environment/Secret-Manager
+    secret holding the key, e.g. `EXCHANGERATE_API_KEY`; the **raw key value is never entered,
+    stored, or echoed** — only the reference name is persisted and the value is resolved from the
+    environment at fetch time, §arch 5.4/5.7) · **enabled** toggle. The first enabled provider is
+    primary; on failure the fetcher falls through to the next. **Seeded default chain:** Open
+    Exchange Rates (primary, seeded *disabled* until its key reference resolves) + Frankfurter
+    (keyless ECB, always-on fallback), so FX works out of the box with zero secrets.
+    *(Reference-only secret handling and the keyless-fallback chain were locked in Story 3.6; the
+    earlier "API key → Secret Manager, masked ••••" wording is superseded — there is no
+    Secret-Manager write path, keys are provisioned out-of-band as env secrets.)*
   - **Bank connections** — section present but **greyed-out / "Coming soon"** (post-MVP): a
     **dashed-border, dimmed** card with a "Coming soon" badge and a **disabled** Connect control —
     no functional controls, just the placeholder so the surface exists.

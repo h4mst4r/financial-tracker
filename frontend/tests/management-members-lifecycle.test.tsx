@@ -66,6 +66,8 @@ function routeFetch() {
     if (u === '/api/household/members') return makeResponse(MEMBERS)
     if (u === '/api/household/invitations/manage') return makeResponse({ items: [], total: 0 })
     if (u === '/api/household/invitations') return makeResponse({ items: [], total: 0 })
+    if (u === '/api/fx-providers/types') return makeResponse([])
+    if (u === '/api/fx-providers') return makeResponse({ items: [], total: 0 })
     throw new Error(`unexpected fetch ${u}`)
   })
 }

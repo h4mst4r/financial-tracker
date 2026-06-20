@@ -1248,12 +1248,21 @@ here nor returned by any endpoint** — only the secret reference; GET masks it.
 seeding is owned by Story 3.6 (FX Provider Configuration), NOT by `_create_and_seed_household`
 (§2.6).** The household-creation seed in Story 2.3 deliberately seeds only the base currency + default
 categories (the `base_url` literal and the openexchangerates-vs-exchangerate-api provider identity are
-unresolved at that point, and FX config is 3.6's subject). 3.6 ensures a single `openexchangerates`
-row, `priority=0`, `api_key_secret_ref` pointing at the `EXCHANGERATE_API_KEY` secret; `is_enabled=true`
-when that env/secret is set, else `is_enabled=false` (no usable chain → FX uses last-known/seed rates
-and raises `FX_API_DOWN` per §5.7) rather than being skipped — so the Integrations UI (UX §5.2) always
-has a row to configure. Seeding is idempotent (keyed on `(household_id, provider_type)`), so 3.6 can
-seed-on-first-need and backfill any 2.3-created household with no migration.
+unresolved at that point, and FX config is 3.6's subject). 3.6 seeds a **default fallback chain** of
+two rows (a small fixed registry of provider *types* — `openexchangerates`, `exchangerate_api`,
+`frankfurter` — carries each type's display name, default `base_url`, and a `requires_key` flag):
+**`openexchangerates`** at `priority=0` (the primary; `api_key_secret_ref` pointing at the
+`EXCHANGERATE_API_KEY` secret, `is_enabled=true` when that env/secret is set, else `is_enabled=false`),
+and **`frankfurter`** at `priority=1` — a **keyless** ECB provider (`api_key_secret_ref=NULL`,
+`is_enabled=true` always) — so every household has an always-on fallback and FX works out of the box
+with **zero secrets** (OXR auto-promotes once a key is configured). When no provider yields a rate, FX
+uses last-known/seed rates and raises `FX_API_DOWN` per §5.7. The API key value is never entered,
+stored, or echoed — only the secret *reference name* is persisted; the value is resolved from the
+environment at fetch time (§5.4 — no Secret-Manager write SDK; keys are provisioned out-of-band).
+Seeding is idempotent (keyed on `(household_id, provider_type)`) and seed-on-first-need, so 3.6
+backfills any 2.3-created household with no migration. *(The two-provider keyless-fallback chain +
+reference-only key handling were locked in Story 3.6, refining the earlier "single openexchangerates
+row" plan.)*
 
 **`formulas`** (BaseEntity) — `name, formula_key(str, machine key e.g.
 `depreciation_straight_line`), expression(text), applies_to(str), variables(JSON — variable

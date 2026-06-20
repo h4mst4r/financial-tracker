@@ -8,6 +8,7 @@ import {
   Lock,
   MailX,
   MoreVertical,
+  Pencil,
   Plus,
   Trash2,
   UserMinus,
@@ -15,6 +16,7 @@ import {
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
 import { Dropdown } from '../primitives/Dropdown'
+import { Toggle } from '../primitives/Toggle'
 import { Button } from '../primitives/Button'
 import { Badge, type BadgeVariant } from '../primitives/Badge'
 import { Avatar } from '../primitives/Avatar'
@@ -33,6 +35,8 @@ import { COMMON_TIMEZONES } from '../../lib/timezones'
 import { formatDateDisplay } from '../../lib/date'
 import type { Household } from '../../types/auth'
 import type { Invitation, InvitationManage, ListResponse, Member } from '../../types/household'
+import type { EntityListResponse } from '../../types/entity'
+import type { FxProvider, FxProviderType } from '../../types/fxProvider'
 
 const TZ_OPTIONS = COMMON_TIMEZONES.map((tz) => ({ value: tz, label: tz }))
 
@@ -54,9 +58,9 @@ const INVITATION_BADGE: Record<string, BadgeVariant> = {
  * Settings → Management tab (UX §5.2, FR-HH-002, Stories 2.5/2.6b/2.7/2.8). Household config
  * (name/timezone editable by the owner via the Story 2.4c `PATCH /api/household`; base currency
  * read-only — Epic 3), the Members roster (with the adaptive ⋮ — role/archive/remove/delete, Story
- * 2.8), the Invitations roster (admin/owner Invite + per-row actions, 2.6b), and the Danger Zone
- * (2.7). Integrations remain absent (Epic 3, P0 / D-DEFER). The lists are bespoke token-styled
- * layouts pending the Epic-5 Table primitive (D-TABLE).
+ * 2.8), the Invitations roster (admin/owner Invite + per-row actions, 2.6b), the Integrations panel
+ * (FX rate providers — owner-editable, read-only for others, Story 3.6), and the Danger Zone (2.7).
+ * The lists are bespoke token-styled layouts pending the Epic-5 Table primitive (D-TABLE).
  */
 export function ManagementTab() {
   return (
@@ -64,6 +68,7 @@ export function ManagementTab() {
       <HouseholdConfig />
       <MembersSection />
       <InvitationsSection />
+      <IntegrationsSection />
       <DangerZone />
     </div>
   )
@@ -541,6 +546,350 @@ function AdminInvitationsSection() {
       )}
 
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
+    </section>
+  )
+}
+
+const FX_STATUS_BADGE: Record<string, BadgeVariant> = {
+  ok: 'success',
+  stale: 'warning',
+  down: 'error',
+}
+
+interface FxFormState {
+  id: string | null
+  providerType: string
+  name: string
+  baseUrl: string
+  apiKeySecretRef: string
+  isEnabled: boolean
+}
+
+const EMPTY_FX_FORM: FxFormState = {
+  id: null,
+  providerType: '',
+  name: '',
+  baseUrl: '',
+  apiKeySecretRef: '',
+  isEnabled: true,
+}
+
+/** Integrations panel (UX §5.2, Story 3.6) — FX rate providers as an ordered fallback chain, plus a
+ *  greyed-out "Coming soon" Bank connections placeholder. **Owner-editable, read-only for others:**
+ *  the owner gets Add / ⋮ (reorder/edit/remove) / enable toggle; everyone else sees a static roster
+ *  (mutations are owner-only server-side too — a 403). Secrets stay secret: the modal collects an API
+ *  key *secret reference* (the env/secret name), never a raw key (AC2). */
+function IntegrationsSection() {
+  const isOwner = useAuthStore((s) => s.currentPerson?.role) === 'owner'
+  const pushToast = useAlertStore((s) => s.pushToast)
+  const queryClient = useQueryClient()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form, setForm] = useState<FxFormState>(EMPTY_FX_FORM)
+  const [confirmRemove, setConfirmRemove] = useState<FxProvider | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['fx-providers'],
+    queryFn: async () =>
+      (await api.get<EntityListResponse<FxProvider>>('/api/fx-providers')).data,
+  })
+  const { data: types } = useQuery({
+    queryKey: ['fx-providers', 'types'],
+    queryFn: async () => (await api.get<FxProviderType[]>('/api/fx-providers/types')).data,
+  })
+
+  const providers = data?.items ?? []
+  const typeLabel = (pt: string) => types?.find((t) => t.provider_type === pt)?.display_name ?? pt
+  const selectedTypeRequiresKey =
+    types?.find((t) => t.provider_type === form.providerType)?.requires_key ?? false
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['fx-providers'] })
+  const toastError = (err: unknown, fallback: string) => {
+    const detail = err instanceof ApiError ? err.details?.detail : undefined
+    const message =
+      typeof detail === 'string' ? detail : err instanceof ApiError ? err.message : fallback
+    pushToast({ variant: 'error', message })
+  }
+
+  const toggleEnabled = useMutation({
+    mutationFn: async (p: FxProvider) =>
+      api.patch(`/api/fx-providers/${p.id}`, { is_enabled: !p.is_enabled }),
+    onSuccess: invalidate,
+    onError: (err) => toastError(err, 'Could not update the provider.'),
+  })
+  const reorder = useMutation({
+    mutationFn: async (orderedIds: string[]) =>
+      api.post('/api/fx-providers/reorder', { ordered_ids: orderedIds }),
+    onSuccess: invalidate,
+    onError: (err) => toastError(err, 'Could not reorder providers.'),
+  })
+  const remove = useMutation({
+    mutationFn: async (id: string) => api.delete(`/api/fx-providers/${id}`),
+    onSuccess: () => {
+      invalidate()
+      pushToast({ message: 'Provider removed', variant: 'success' })
+    },
+    onError: (err) => toastError(err, 'Could not remove the provider.'),
+  })
+
+  const openCreate = () => {
+    setForm(EMPTY_FX_FORM)
+    setModalOpen(true)
+  }
+  const openEdit = (p: FxProvider) => {
+    setForm({
+      id: p.id,
+      providerType: p.provider_type,
+      name: p.name,
+      baseUrl: p.base_url,
+      apiKeySecretRef: p.api_key_secret_ref ?? '',
+      isEnabled: p.is_enabled,
+    })
+    setModalOpen(true)
+  }
+
+  // Picking a type on add pre-fills name + base URL from the registry (overridable).
+  const onTypeChange = (providerType: string) => {
+    const meta = types?.find((t) => t.provider_type === providerType)
+    setForm((f) => ({
+      ...f,
+      providerType,
+      name: f.name.trim() === '' ? (meta?.display_name ?? '') : f.name,
+      baseUrl: f.baseUrl.trim() === '' ? (meta?.base_url ?? '') : f.baseUrl,
+    }))
+  }
+
+  const move = (index: number, delta: number) => {
+    const ids = providers.map((p) => p.id)
+    const target = index + delta
+    if (target < 0 || target >= ids.length) return
+    ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    reorder.mutate(ids)
+  }
+
+  const handleSave = async () => {
+    try {
+      if (form.id) {
+        await api.patch(`/api/fx-providers/${form.id}`, {
+          name: form.name.trim(),
+          base_url: form.baseUrl.trim(),
+          api_key_secret_ref: form.apiKeySecretRef.trim() || null,
+          is_enabled: form.isEnabled,
+        })
+      } else {
+        await api.post('/api/fx-providers', {
+          provider_type: form.providerType,
+          name: form.name.trim(),
+          base_url: form.baseUrl.trim(),
+          api_key_secret_ref: selectedTypeRequiresKey
+            ? form.apiKeySecretRef.trim() || null
+            : null,
+          is_enabled: form.isEnabled,
+        })
+      }
+      invalidate()
+      setModalOpen(false)
+    } catch (err) {
+      toastError(err, 'Could not save the provider.')
+    }
+  }
+
+  const saveDisabled = form.providerType === '' || form.name.trim() === '' || form.baseUrl.trim() === ''
+
+  function rowMenu(p: FxProvider, index: number): ContextMenuEntry[] {
+    return [
+      {
+        label: 'Move up',
+        icon: ArrowUp,
+        disabled: index === 0,
+        onClick: () => move(index, -1),
+      },
+      {
+        label: 'Move down',
+        icon: ArrowDown,
+        disabled: index === providers.length - 1,
+        onClick: () => move(index, 1),
+      },
+      { label: 'Edit', icon: Pencil, onClick: () => openEdit(p) },
+      { divider: true },
+      { label: 'Remove', icon: Trash2, destructive: true, onClick: () => setConfirmRemove(p) },
+    ]
+  }
+
+  return (
+    <section className="flex flex-col gap-md">
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-medium text-text-primary">Integrations</h2>
+        {!isOwner && (
+          <span className="flex items-center gap-1 text-xs text-text-muted">
+            <Icon icon={Lock} size={12} /> Owner only
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-text-secondary">FX rate providers</h3>
+        {isOwner && (
+          <Button variant="secondary" onClick={openCreate}>
+            <span className="flex items-center gap-2xs">
+              <Icon icon={Plus} size={16} /> Add provider
+            </span>
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-control" />
+      ) : (
+        <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+          {providers.map((p, index) => (
+            <li key={p.id} className="flex items-center gap-sm px-sm py-sm">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium text-text-primary">{p.name}</span>
+                <span className="truncate text-xs text-text-secondary">{typeLabel(p.provider_type)}</span>
+              </div>
+              {p.requires_key && (
+                <Badge variant={p.key_configured ? 'success' : 'warning'}>
+                  {p.key_configured ? 'key set' : 'key not set'}
+                </Badge>
+              )}
+              {/* No live status until the Story 3.7 fetch job runs — null renders "unknown". */}
+              <Badge variant={p.last_status ? FX_STATUS_BADGE[p.last_status] : 'neutral'}>
+                {p.last_status ?? 'unknown'}
+              </Badge>
+              {isOwner ? (
+                <Toggle
+                  checked={p.is_enabled}
+                  onChange={() => toggleEnabled.mutate(p)}
+                  aria-label={`Enable ${p.name}`}
+                />
+              ) : (
+                <Badge variant={p.is_enabled ? 'success' : 'neutral'}>
+                  {p.is_enabled ? 'enabled' : 'disabled'}
+                </Badge>
+              )}
+              {isOwner && (
+                <ContextMenu
+                  trigger={
+                    <span
+                      className="flex items-center text-text-secondary hover:text-text-primary"
+                      aria-label={`Actions for ${p.name}`}
+                    >
+                      <Icon icon={MoreVertical} size={16} />
+                    </span>
+                  }
+                  items={rowMenu(p, index)}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Bank connections — post-MVP placeholder (UX §5.2): dashed, dimmed, no functional control. */}
+      <div className="flex items-center justify-between gap-md rounded-md border border-dashed border-border bg-surface p-md opacity-60">
+        <div className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+            Bank connections <Badge variant="neutral">Coming soon</Badge>
+          </span>
+          <span className="text-xs text-text-muted">
+            Automatic account syncing will arrive in a future release.
+          </span>
+        </div>
+        <Button variant="secondary" disabled>
+          Connect
+        </Button>
+      </div>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={form.id ? 'Edit provider' : 'Add FX provider'}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saveDisabled}>
+              {form.id ? 'Save' : 'Add'}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-md">
+          <div className="flex flex-col gap-2xs">
+            <Label htmlFor="fx-type">Provider type</Label>
+            {form.id ? (
+              <Input id="fx-type" value={typeLabel(form.providerType)} disabled readOnly />
+            ) : (
+              <Dropdown
+                id="fx-type"
+                value={form.providerType}
+                placeholder="Select a provider"
+                options={(types ?? []).map((t) => ({ value: t.provider_type, label: t.display_name }))}
+                onChange={onTypeChange}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2xs">
+            <Label htmlFor="fx-name">Name</Label>
+            <Input
+              id="fx-name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2xs">
+            <Label htmlFor="fx-base-url">Base URL</Label>
+            <Input
+              id="fx-base-url"
+              value={form.baseUrl}
+              onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+            />
+          </div>
+
+          {selectedTypeRequiresKey && (
+            <div className="flex flex-col gap-2xs">
+              <Label htmlFor="fx-secret-ref">API key secret reference</Label>
+              <Input
+                id="fx-secret-ref"
+                value={form.apiKeySecretRef}
+                onChange={(e) => setForm((f) => ({ ...f, apiKeySecretRef: e.target.value }))}
+                placeholder="e.g. EXCHANGERATE_API_KEY"
+              />
+              <span className="text-xs text-text-muted">
+                Name of the environment secret holding the key — the key value is never stored here.
+              </span>
+            </div>
+          )}
+
+          <label className="flex items-center gap-sm">
+            <Toggle
+              checked={form.isEnabled}
+              onChange={(isEnabled) => setForm((f) => ({ ...f, isEnabled }))}
+              aria-label="Enabled"
+            />
+            <span className="text-sm text-text-secondary">Enabled</span>
+          </label>
+        </div>
+      </Modal>
+
+      <ConfirmationDialog
+        open={confirmRemove !== null}
+        onClose={() => setConfirmRemove(null)}
+        onConfirm={() => {
+          if (confirmRemove) remove.mutate(confirmRemove.id)
+        }}
+        title="Remove provider"
+        message={
+          confirmRemove
+            ? `Remove "${confirmRemove.name}" from the fallback chain? This can't be undone.`
+            : ''
+        }
+        confirmLabel="Remove"
+        destructive
+      />
     </section>
   )
 }

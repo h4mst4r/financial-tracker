@@ -49,6 +49,8 @@ function routeFetch() {
     }
     if (u.endsWith('/resend')) return makeResponse(MANAGE.items[0])
     if (u.endsWith('/revoke')) return noContent()
+    if (u === '/api/fx-providers/types') return makeResponse([])
+    if (u === '/api/fx-providers') return makeResponse({ items: [], total: 0 })
     if (opts?.method === 'DELETE') return noContent()
     throw new Error(`unexpected fetch ${u}`)
   })

@@ -43,6 +43,8 @@ function routeFetch(overrides: { members?: ListResponse<Member>; invitations?: L
     if (u === '/api/household/members') return makeResponse(members)
     if (u === '/api/household/invitations/manage') return makeResponse(manage)
     if (u === '/api/household/invitations') return makeResponse(invitations)
+    if (u === '/api/fx-providers/types') return makeResponse([])
+    if (u === '/api/fx-providers') return makeResponse({ items: [], total: 0 })
     throw new Error(`unexpected fetch ${u}`)
   })
 }
@@ -94,7 +96,8 @@ describe('ManagementTab — household config', () => {
     renderTab()
     expect((screen.getByLabelText('Household name') as HTMLInputElement).disabled).toBe(true)
     expect(screen.queryByText('Save')).toBeNull()
-    expect(screen.getByText('Owner only')).toBeTruthy()
+    // Both the household config and the Integrations panel show an "Owner only" indicator now.
+    expect(screen.getAllByText('Owner only').length).toBeGreaterThan(0)
   })
 
   test('base currency is read-only; no base-currency selector or date-format field (P0)', () => {
