@@ -1057,6 +1057,10 @@ The three **user-selectable** values (`manual | reconciliation | appraisal`, UX 
 difference; the distinct label is a **provenance tag** for audit/reporting (typed by hand /
 checked against a statement / professional valuation). `formula | import | computed` are
 system-written and never user-selectable. Index: `(account_id, snapshot_date)`.
+Snapshots are **mutable corrections** (FR-A-018): Admin/Owner may `PATCH`/`DELETE` a row to fix
+mistaken entries. Unlike `fx_rate_history`, snapshot **edits and deletes are audited** (creation
+stays unaudited — a plain history fact). A `reconciliation`-source snapshot on a ledger-backed
+account triggers the §3.11 #3 reconciliation-adjustment entry (Epic 5).
 
 Account-linked recurring is modelled as a `FinancialEvent` (§3.6), not a separate config
 table: the `financial_events` columns `source_entity_type` + `source_entity_id` model the
@@ -1457,8 +1461,13 @@ underlying Transfers/events, never on these routes.
    everywhere; any inverse is a bug. (§3.8)
 3. **Materialized monthly snapshots.** The scheduler writes one `source=computed`
    `account_snapshot` per Bank/CreditCard account each month (FR-SYS-006); ledger-backed
-   current balance = opening balance + ledger, anchored/corrected by manual snapshots;
-   asset-like current value = latest snapshot. (§3.5, §3.6)
+   current balance = opening balance + ledger, anchored by manual snapshots; asset-like
+   current value = latest snapshot. A **`reconciliation`-source snapshot does not silently
+   re-anchor**: the drift δ between the reconciled value and (opening + ledger to that date) is
+   written as an explicit adjusting `FinancialEvent` (category "FX loss / reconciliation
+   adjustment"), so the ledger *equals* the reconciled balance **and** δ stays visible and
+   aggregable (the realized FX/rounding loss — the YNAB/GnuCash reconciliation pattern;
+   FR-A-019, Epic 5). δ = 0 writes no entry. (§3.5, §3.6)
 4. **Account native currency (canonical-native, display-only conversion).** Accounts carry a
    native `currency` (ISO 4217, NOT NULL). `opening_balance` and `account_snapshots.value` are
    stored in it. Conversion to the household base or a person's `display_currency` is computed

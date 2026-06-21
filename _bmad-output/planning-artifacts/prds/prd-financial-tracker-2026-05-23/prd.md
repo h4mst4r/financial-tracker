@@ -386,6 +386,24 @@ natively in the Recurring Payments module like any other recurring payment.
 the single recurring path (FR-SYS-006) — no separate account-source scanning. Disabling the
 account's recurring payment archives the linked RecurringPayment.
 
+**FR-A-018 — Edit / Delete Value Snapshot**
+Any Admin or Owner may edit or delete an existing `AccountSnapshot` to correct mistaken entries.
+Snapshots are **mutable corrections** (not append-only); unlike `fx_rate_history`, edits and
+deletes are **audited**. Current value and the value-history chart recompute immediately.
+*Acceptance:* PATCH updates value/date/currency/source/note (re-deriving `value_base`); DELETE
+removes the row; both write an audit entry; the accounts grid + sparkline refresh.
+
+**FR-A-019 — Account Reconciliation Adjustment**
+When a `reconciliation`-source snapshot is added to a ledger-backed account and the ledger has
+drifted, the system records the drift δ (reconciled value − (opening + ledger to that date)) as an
+explicit adjusting `FinancialEvent`, categorizable as "FX loss / reconciliation adjustment", so the
+ledger equals the reconciled balance **and** δ is a visible, sum-able figure — never silently
+absorbed (the YNAB/GnuCash reconciliation pattern). This powers the realized-FX-loss insight
+("FX fees this year / is this card worth it"). Implemented in Epic 5 (needs the transaction write
+path + FX model).
+*Acceptance:* reconciling produces an adjusting entry = δ; net worth is unchanged by the
+reconciliation; δ appears in spending / FX-loss aggregations.
+
 ---
 
 ### FR-E — EntityEvents

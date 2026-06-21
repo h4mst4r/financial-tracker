@@ -92,10 +92,12 @@ class FinancialEvent(BaseEntity, MonetaryValueMixin):
     is_debt_repayment: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     debt_cleared_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
 
-    __mapper_args__ = {
-        "polymorphic_on": event_type,
-        "polymorphic_identity": "financial_event",
-    }
+    # ponytail: single-class STI per ARCH §4.5 — the Pydantic schema union (Epic 5), NOT an ORM
+    # polymorphic map, carries the subtype split. A `polymorphic_on` mapper with no registered
+    # subclass makes `select(FinancialEvent)` of a row whose `event_type` is
+    # `transaction`/`transfer`/`recurring_payment` raise `AssertionError: No such
+    # polymorphic_identity`. Story 4.6 is the first to select event entities + seed real
+    # `event_type`s, so it strips the mapper the model shipped with.
 
     __table_args__ = (
         CheckConstraint(

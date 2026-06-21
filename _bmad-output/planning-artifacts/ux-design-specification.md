@@ -818,10 +818,12 @@ The single create/edit surface for every entity.
   popover** (≥ trigger, §0.10) — never constrained to a narrow field column.
 - **Validation:** §0.9 focus/error states; required fields; inline messages; Save disabled until valid.
 
-### 8.2a Add value snapshot (account ⋮)
+### 8.2a Value snapshots (account ⋮)
 
 From an account's **⋮ → Add value snapshot** (§8.1). An **`EntityModal<AccountSnapshot>`**
-(two-column, §8.2): **Date** (DatePicker, defaults today) · **Value** (MonetaryValueInput; currency
+(two-column, §8.2) with two regions — an **Add form** and, below it, the **snapshot history list**.
+
+**Add form:** **Date** (DatePicker, defaults today) · **Value** (MonetaryValueInput; currency
 defaults to the account's) · **Source** (Dropdown — user options **Manual · Appraisal ·
 Reconciliation** only; `formula` / `computed` / `import` are system-written). The three user
 options are **functionally identical** — all write a user-entered snapshot, processed the same way;
@@ -829,6 +831,13 @@ the choice is only a **provenance label** for audit/history (typed by hand / pro
 / checked against a statement; ARCH §3.5) · **Notes** (optional).
 The header shows the account's latest snapshot for reference; **Cancel** left / **Save snapshot**
 right (§4.2). Writes an `account_snapshots` row (architecture §3.6).
+
+**Snapshot history list (FR-A-018):** below the form, the account's snapshots render **newest-first**
+as rows — `date · value · source` (+ a note affordance when present). Each row carries **Edit**
+(re-opens the Add form populated with that snapshot's values, saving via `PATCH`) and **Delete**
+(confirm, then `DELETE`) actions — **Admin/Owner only** (members see a read-only list). Editing or
+deleting recomputes the account's current value + sparkline and writes an **audit** row (snapshots
+are **mutable corrections**, not append-only; ARCH §3.5). Empty state: a muted "No snapshots yet".
 
 ### 8.3 EmojiIconPicker
 

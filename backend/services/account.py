@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
@@ -397,6 +397,39 @@ async def list_snapshots(
         .order_by(AccountSnapshot.snapshot_date.desc(), AccountSnapshot.created_at.desc())
     )
     return (await db.execute(stmt)).scalars().all()
+
+
+async def list_account_events(
+    db: AsyncSession,
+    household_id: str,
+    account_id: str,
+    *,
+    order: str,
+    limit: int,
+    offset: int,
+) -> tuple[Sequence[FinancialEvent], int]:
+    """An account's linked events for the transaction-history endpoint (FR-A-007, ARCH §3.6). Events
+    where the account is the originating (`source_account_id`) **or** incoming-transfer
+    (`destination_account_id`) leg — the exact filter §3.6 prescribes. `order` ('asc'|'desc') sorts
+    by `event_date` with `created_at` as the stable tiebreak; `total` is the full match count
+    (before `limit`/`offset`) so the caller can page. 404-guards the account for scope.
+    # ponytail: empty until Epic 5 writes events — this is the read contract Epic 5's ledger
+    # / Epic 9's Viewer consume; no event-write path exists yet."""
+    await get_or_404(db, Account, account_id, household_id=household_id)  # scope guard
+    where = (
+        FinancialEvent.household_id == household_id,
+        or_(
+            FinancialEvent.source_account_id == account_id,
+            FinancialEvent.destination_account_id == account_id,
+        ),
+    )
+    count_stmt = select(func.count()).select_from(FinancialEvent).where(*where)
+    total = (await db.execute(count_stmt)).scalar_one()
+    keys = (FinancialEvent.event_date, FinancialEvent.created_at)
+    ordering = [k.asc() for k in keys] if order == "asc" else [k.desc() for k in keys]
+    stmt = select(FinancialEvent).where(*where).order_by(*ordering).limit(limit).offset(offset)
+    rows = (await db.execute(stmt)).scalars().all()
+    return rows, total
 
 
 # Asset-like subtypes resolve current value from snapshots only; ledger-backed fall back to the

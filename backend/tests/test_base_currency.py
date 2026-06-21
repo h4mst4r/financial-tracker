@@ -198,8 +198,8 @@ async def test_change_base_currency_recomputes_events(monkeypatch):
 
             def _ev(code, amount, ev_date):
                 amt = Decimal(amount)
-                # STI subtypes ("transaction" etc.) arrive in Epic 5; use the registered base
-                # polymorphic_identity so `select(FinancialEvent)` can load the rows here.
+                # STI subtypes ("transaction" etc.) arrive in Epic 5; these re-base rows just need a
+                # non-null `event_type` (single-class STI, ARCH §4.5 — no ORM polymorphic map).
                 return FinancialEvent(
                     household_id=hh_id, created_by=person_id, event_type="financial_event",
                     name=f"{code} txn", event_date=ev_date, currency=code, amount=amt,

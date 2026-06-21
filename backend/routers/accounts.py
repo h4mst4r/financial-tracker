@@ -7,9 +7,12 @@ household-scoped reads, any member. `POST` / `PATCH` and the lifecycle routes
 household, never the body). Snake_case wire. Responses are the §4.5 **discriminated union** (each
 subtype's columns only) + the computed `can_delete`/`delete_blocked_reason` (UX §8.1).
 
-`PUT /{id}/owners` replaces an account's owner set (Story 4.3). NOT here: value snapshots
-(Story 4.4), the value-history chart (Story 4.5), transaction history (Story 4.6).
+`PUT /{id}/owners` replaces an account's owner set (Story 4.3). `GET /{id}/events` lists the
+account's linked financial events (Story 4.6, FR-A-007 — empty until Epic 5 writes events). NOT
+here: value snapshots (Story 4.4), the value-history chart (Story 4.5).
 """
+
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +23,8 @@ from backend.models.account import Account
 from backend.models.identity import Person
 from backend.schemas.account import (
     AccountCreate,
+    AccountEventListOut,
+    AccountEventResponse,
     AccountListOut,
     AccountOwnersUpdate,
     AccountResponse,
@@ -192,6 +197,26 @@ async def list_snapshots(
     snaps = await account_service.list_snapshots(db, household_id, account_id)
     items = [AccountSnapshotResponse.model_validate(s) for s in snaps]
     return AccountSnapshotListOut(items=items, total=len(items))
+
+
+@router.get("/accounts/{account_id}/events")
+async def list_account_events(
+    account_id: str,
+    order: Literal["asc", "desc"] = "desc",
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> AccountEventListOut:
+    """An account's linked transaction history (any member; FR-A-007). Events where the account is
+    the source **or** destination (transfer) leg (ARCH §3.6), sortable by `event_date`
+    (`order=desc` default, newest-first), `limit`/`offset` paginated; `total` is the full match
+    count. **Empty until Epic 5 writes events.** 404 cross-household."""
+    rows, total = await account_service.list_account_events(
+        db, household_id, account_id, order=order, limit=limit, offset=offset
+    )
+    items = [AccountEventResponse.model_validate(r) for r in rows]
+    return AccountEventListOut(items=items, total=total)
 
 
 @router.post("/accounts/{account_id}/duplicate", status_code=201)

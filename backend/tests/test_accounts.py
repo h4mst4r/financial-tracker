@@ -11,7 +11,7 @@ vivid round-trip, member 403, cross-household 404, and ledger-backed-missing-ope
 
 import json
 import tempfile
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -172,6 +172,47 @@ def _snap(
 ) -> dict:
     """An `account_snapshots` POST body (Story 4.4)."""
     return {"snapshot_date": on, "value": value, "currency": currency, "source": source}
+
+
+async def _add_event(
+    factory,
+    hh_id: str,
+    person_id: str,
+    *,
+    event_type: str = "transaction",
+    on: str = "2026-06-10",
+    source_account_id: str | None = None,
+    destination_account_id: str | None = None,
+    amount: str = "50.00",
+    created_at: datetime | None = None,
+) -> str:
+    """Seed a `financial_events` row directly — no event-write router exists until Epic 5. Sets the
+    required `MonetaryValueMixin` block; uses a real subtype `event_type` ('transaction'/'transfer')
+    to exercise the single-class STI (the polymorphic-mapper strip, Story 4.6 Task 1). `created_at`
+    overridable for deterministic same-date tiebreaks."""
+    eid = str(uuid4())
+    amt = Decimal(amount)
+    y, m, d = (int(p) for p in on.split("-"))
+    async with factory() as db:
+        ev = FinancialEvent(
+            id=eid,
+            household_id=hh_id,
+            created_by=person_id,
+            event_type=event_type,
+            event_date=date(y, m, d),
+            source_account_id=source_account_id,
+            destination_account_id=destination_account_id,
+            currency="SGD",
+            amount=amt,
+            fx_rate=Decimal("1.000000"),
+            amount_base_calculated=amt,
+            amount_base=amt,
+        )
+        if created_at is not None:
+            ev.created_at = created_at
+        db.add(ev)
+        await db.commit()
+    return eid
 
 
 # ── Create per subtype ──
@@ -1239,5 +1280,153 @@ async def test_value_series_same_date_in_write_order(monkeypatch):
 
         item = next(a for a in client.get("/api/accounts").json()["items"] if a["id"] == acct_id)
         assert [Decimal(v) for v in item["value_series"]] == [Decimal("100"), Decimal("200")]
+    finally:
+        await engine.dispose()
+
+
+# ── Transaction history (Story 4.6, FR-A-007) ──
+
+
+async def test_account_events_empty_until_epic5(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+        resp = client.get(f"/api/accounts/{acct_id}/events")
+        assert resp.status_code == 200
+        assert resp.json() == {"items": [], "total": 0}
+    finally:
+        await engine.dispose()
+
+
+async def test_account_events_both_legs_and_lean_shape(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+        other_id = client.post("/api/accounts", json=_bank(name="Other")).json()["id"]
+
+        # source leg (transaction) + destination leg (incoming transfer) → both included.
+        src_ev = await _add_event(
+            factory, hh_id, person_id, event_type="transaction",
+            source_account_id=acct_id, on="2026-06-01",
+        )
+        dst_ev = await _add_event(
+            factory, hh_id, person_id, event_type="transfer",
+            destination_account_id=acct_id, on="2026-06-02",
+        )
+        # touches neither leg of acct → excluded (proves the filter, not just household scope).
+        await _add_event(
+            factory, hh_id, person_id, event_type="transaction",
+            source_account_id=other_id, on="2026-06-03",
+        )
+
+        body = client.get(f"/api/accounts/{acct_id}/events").json()
+        # Selecting transaction/transfer *entities* here also proves the polymorphic-mapper strip
+        # (Task 1) — with the mapper present this would raise "No such polymorphic_identity".
+        assert body["total"] == 2
+        assert {e["id"] for e in body["items"]} == {src_ev, dst_ev}
+
+        # Lean base-event projection (Epic-5 seam — flat, not the §4.5 union).
+        row = next(e for e in body["items"] if e["id"] == src_ev)
+        assert row.keys() == {
+            "id", "event_type", "name", "event_date", "transaction_status",
+            "transaction_type", "currency", "amount", "amount_base",
+            "source_account_id", "destination_account_id", "category_id", "notes", "created_at",
+        }
+        assert row["event_type"] == "transaction"
+        assert row["source_account_id"] == acct_id
+    finally:
+        await engine.dispose()
+
+
+async def test_account_events_scope_cross_household_404(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+
+        # A different household's member must not read this account's history (scope guard → 404).
+        p2, _ = await _seed_household(factory)
+        sid2, csrf2 = await _seed_session(factory, p2)
+        client2 = _client_with_db(factory, monkeypatch)
+        _auth(client2, sid2, csrf2)
+        assert client2.get(f"/api/accounts/{acct_id}/events").status_code == 404
+    finally:
+        await engine.dispose()
+
+
+async def test_account_events_sort_by_date(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+
+        e1 = await _add_event(factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-01")
+        e2 = await _add_event(factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-02")
+        e3 = await _add_event(factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-03")
+
+        desc = [e["id"] for e in client.get(f"/api/accounts/{acct_id}/events").json()["items"]]
+        assert desc == [e3, e2, e1]  # default order=desc, newest-first
+        asc = [
+            e["id"]
+            for e in client.get(f"/api/accounts/{acct_id}/events?order=asc").json()["items"]
+        ]
+        assert asc == [e1, e2, e3]
+
+        # Same-date rows tiebreak on created_at (asc → write order by timestamp).
+        a = await _add_event(
+            factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-05",
+            created_at=datetime(2026, 6, 5, 10, 0, tzinfo=UTC),
+        )
+        b = await _add_event(
+            factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-05",
+            created_at=datetime(2026, 6, 5, 11, 0, tzinfo=UTC),
+        )
+        items = client.get(f"/api/accounts/{acct_id}/events?order=asc").json()["items"]
+        same = [e["id"] for e in items if e["event_date"] == "2026-06-05"]
+        assert same == [a, b]
+    finally:
+        await engine.dispose()
+
+
+async def test_account_events_pagination(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+
+        for i in range(1, 6):  # 5 events on distinct dates
+            await _add_event(
+                factory, hh_id, person_id, source_account_id=acct_id, on=f"2026-06-0{i}"
+            )
+
+        page = client.get(f"/api/accounts/{acct_id}/events?limit=2&order=asc").json()
+        assert page["total"] == 5  # full match count, not the page size
+        assert [e["event_date"] for e in page["items"]] == ["2026-06-01", "2026-06-02"]
+        nxt = client.get(f"/api/accounts/{acct_id}/events?limit=2&offset=2&order=asc").json()
+        assert [e["event_date"] for e in nxt["items"]] == ["2026-06-03", "2026-06-04"]
+
+        # Out-of-range params → 422.
+        assert client.get(f"/api/accounts/{acct_id}/events?limit=0").status_code == 422
+        assert client.get(f"/api/accounts/{acct_id}/events?limit=201").status_code == 422
+        assert client.get(f"/api/accounts/{acct_id}/events?offset=-1").status_code == 422
     finally:
         await engine.dispose()

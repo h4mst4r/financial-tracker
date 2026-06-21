@@ -367,3 +367,37 @@ class AccountSnapshotResponse(BaseModel):
 class AccountSnapshotListOut(BaseModel):
     items: list[AccountSnapshotResponse]
     total: int
+
+
+# ─── Transaction history (Story 4.6, FR-A-007, ARCH §3.6) ───
+
+
+class AccountEventResponse(BaseModel):
+    """One row of `GET /api/accounts/{id}/events` — the lean **base-event** projection an
+    account-history row needs. This is intentionally **one flat schema, NOT** the §4.5 per-subtype
+    discriminated union: the real `Transaction`/`Transfer`/`RecurringPayment` response shapes (FX
+    legs, tags, reconciliation, recurring frequency) are **Epic 5's** to build when those features
+    land. Story 4.6 ships the stable endpoint *contract*; Epic 5 swaps this flat schema for the
+    union and enriches the columns ([[backend-first-build-ahead]])."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    event_type: str
+    name: str | None
+    event_date: date
+    transaction_status: str
+    transaction_type: str | None
+    currency: str
+    amount: Decimal
+    amount_base: Decimal
+    source_account_id: str | None
+    destination_account_id: str | None
+    category_id: str | None
+    notes: str | None
+    created_at: datetime
+
+
+class AccountEventListOut(BaseModel):
+    items: list[AccountEventResponse]
+    total: int
