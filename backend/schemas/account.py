@@ -198,6 +198,10 @@ class _AccountResponseShared(BaseModel):
     # column — attached by the router from a batched `owner_ids_for`. Defaults `[]` so
     # `model_validate(obj)` is safe before the router fills it.
     owner_ids: list[str] = []
+    # Hard-delete eligibility (UX §8.1, Story 4.2). Not ORM columns — the router computes them from
+    # a batched dependency scan and attaches them. Default deletable so `model_validate(obj)` is ok.
+    can_delete: bool = True
+    delete_blocked_reason: str | None = None
 
 
 class BankAccountResponse(_AccountResponseShared):
@@ -274,10 +278,19 @@ _RESPONSE_BY_TYPE: dict[str, type[_AccountResponseShared]] = {
 }
 
 
-def response_for(account, owner_ids: list[str]) -> _AccountResponseShared:
-    """Serialize one ORM `Account` to its subtype Response (ARCH §4.5), attaching `owner_ids`."""
+def response_for(
+    account,
+    owner_ids: list[str],
+    *,
+    can_delete: bool = True,
+    delete_blocked_reason: str | None = None,
+) -> _AccountResponseShared:
+    """Serialize one ORM `Account` to its subtype Response (ARCH §4.5), attaching `owner_ids` + the
+    computed hard-delete eligibility (UX §8.1, Story 4.2)."""
     resp = _RESPONSE_BY_TYPE[account.account_type].model_validate(account)
     resp.owner_ids = owner_ids
+    resp.can_delete = can_delete
+    resp.delete_blocked_reason = delete_blocked_reason
     return resp
 
 

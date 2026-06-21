@@ -14,14 +14,16 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
 from backend.db_utils import get_or_404
-from backend.models.account import Account, AccountOwner
+from backend.models.account import Account, AccountOwner, AccountSnapshot
+from backend.models.event import FinancialEvent
 from backend.schemas.account import AccountCreate, AccountUpdate
 from backend.services.audit import audit
+from backend.services.base import assert_no_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +104,19 @@ def _snapshot(account: Account) -> dict:
     }
 
 
+def _add_primary_owner(db: AsyncSession, account_id: str, person_id: str) -> None:
+    """Attach one primary `account_owners` row (the sole owner on create/duplicate; Story 4.3 adds
+    more). Caller flushes."""
+    db.add(
+        AccountOwner(
+            account_id=account_id,
+            person_id=person_id,
+            is_primary=True,
+            added_at=datetime.now(UTC),
+        )
+    )
+
+
 async def create_account(
     db: AsyncSession, household_id: str, actor_id: str, data: AccountCreate
 ) -> Account:
@@ -117,14 +132,7 @@ async def create_account(
     db.add(obj)
     await db.flush()
 
-    db.add(
-        AccountOwner(
-            account_id=obj.id,
-            person_id=actor_id,
-            is_primary=True,
-            added_at=datetime.now(UTC),
-        )
-    )
+    _add_primary_owner(db, obj.id, actor_id)
     await db.flush()
 
     await audit.log(
@@ -212,3 +220,174 @@ async def owner_ids_for(
     for account_id, person_id in rows.all():
         out.setdefault(account_id, []).append(person_id)
     return out
+
+
+# ─── Archive / restore / delete / duplicate (Story 4.2) ───
+
+
+async def archive_account(
+    db: AsyncSession, household_id: str, actor_id: str, account_id: str
+) -> Account:
+    """Archive an account (AC1, FR-A-003) — a flat single-row flip (accounts have no parent/child
+    tree, so no branch cascade unlike categories). Returns **200, never 409**. Idempotent: an
+    already-archived row is a no-op (no second audit row). History (events/snapshots) is untouched;
+    `list_accounts` already hides archived rows from default lists + totals."""
+    obj = await get_or_404(db, Account, account_id, household_id=household_id)
+    if obj.archived:
+        return obj  # idempotent no-op
+    before = _snapshot(obj)
+    obj.status = "archived"
+    obj.archived = True
+    obj.archived_at = datetime.now(UTC)
+    obj.archived_by = actor_id
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="archive",
+        entity_type="account",
+        entity_id=str(obj.id),
+        before=before,
+        after=_snapshot(obj),
+    )
+    return obj
+
+
+async def restore_account(
+    db: AsyncSession, household_id: str, actor_id: str, account_id: str
+) -> Account:
+    """Restore an archived account (AC1, FR-A-003) — the inverse of `archive_account`. Idempotent:
+    an already-active row is a no-op."""
+    obj = await get_or_404(db, Account, account_id, household_id=household_id)
+    if not obj.archived:
+        return obj  # idempotent no-op
+    before = _snapshot(obj)
+    obj.status = "active"
+    obj.archived = False
+    obj.archived_at = None
+    obj.archived_by = None
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="restore",
+        entity_type="account",
+        entity_id=str(obj.id),
+        before=before,
+        after=_snapshot(obj),
+    )
+    return obj
+
+
+# FK referrers that BLOCK a hard delete (history that must be preserved). `account_owners` is the
+# account's own ownership junction (≥1 row, always) — it is removed *with* the account in
+# `delete_account`, never a blocker (FR-A-004 / Story 4.2 scope fence).
+_DELETE_REFERRERS = [
+    (FinancialEvent, "source_account_id"),
+    (FinancialEvent, "destination_account_id"),
+    (AccountSnapshot, "account_id"),
+]
+
+
+async def delete_account(
+    db: AsyncSession, household_id: str, actor_id: str, account_id: str
+) -> None:
+    """Hard-delete an account if it has zero history (AC2, FR-A-004). The dependency scan covers
+    `financial_events` (both legs) + `account_snapshots`; any hit → 409 `has_dependencies` (the UI
+    offers archive instead). On success the account's own `account_owners` rows are removed (the FK
+    would otherwise block the delete), then the row is gone — a hard delete leaves an INFO log,
+    never an audit row (services/base.py template). `actor_id` is unused (no audit) but kept for
+    signature symmetry with the other lifecycle services."""
+    obj = await get_or_404(db, Account, account_id, household_id=household_id)  # 404 scope guard
+    await assert_no_dependencies(db, _DELETE_REFERRERS, str(account_id), entity_type="account")
+    await db.execute(delete(AccountOwner).where(AccountOwner.account_id == account_id))
+    await db.delete(obj)
+    await db.flush()
+    logger.info(
+        "hard_delete_account",
+        extra={"household_id": str(household_id), "entity_id": str(account_id)},
+    )
+
+
+async def duplicate_account(
+    db: AsyncSession, household_id: str, actor_id: str, account_id: str
+) -> Account:
+    """Clone an account (AC3, FR-A-005). A new-UUID row copies every business column (`account_type`
+    + all subtype values + the shared fields + opening balance/date + vivid) — the `_SNAPSHOT_SKIP`
+    identity/audit/lifecycle columns are NOT copied. The clone starts `status='active'` (even if the
+    source is archived), with the duplicator as sole owner, and writes a `create` audit row (it is a
+    new entity). The name is copied verbatim — accounts are intentionally non-unique (shared
+    household accounts differ by owner/values). `account_snapshots` are NOT cloned (Story 4.4)."""
+    src = await get_or_404(db, Account, account_id, household_id=household_id)
+    cols = {
+        col.key: getattr(src, col.key)
+        for col in src.__table__.columns
+        if col.key not in _SNAPSHOT_SKIP
+    }
+    cols["status"] = "active"  # a clone is active even if the source was archived
+    clone = Account(household_id=household_id, created_by=actor_id, **cols)
+    db.add(clone)
+    await db.flush()
+
+    _add_primary_owner(db, clone.id, actor_id)
+    await db.flush()
+
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="create",
+        entity_type="account",
+        entity_id=str(clone.id),
+        before=None,
+        after=_snapshot(clone),
+    )
+    return clone
+
+
+# ─── Delete-eligibility (powers can_delete / delete_blocked_reason, UX §8.1) ───
+
+# Precedence for the human reason when an account has multiple blockers.
+_BLOCKER_TRANSACTIONS = "has transactions"
+_BLOCKER_VALUE_HISTORY = "has value history"
+
+
+async def delete_blockers(db: AsyncSession, household_id: str) -> dict[str, str]:
+    """Map every household account that **cannot** be hard-deleted to its reason, via batched
+    queries (never per-row counts). Precedence: transactions → value history."""
+    blockers: dict[str, str] = {}
+
+    async def _ids(model: type, column: str) -> set[str]:
+        col = getattr(model, column)
+        stmt = select(col).where(model.household_id == household_id, col.is_not(None)).distinct()
+        return {row for row in (await db.execute(stmt)).scalars().all()}
+
+    # Lowest precedence first; later writes win for the chosen reason.
+    for aid in await _ids(AccountSnapshot, "account_id"):
+        blockers[aid] = _BLOCKER_VALUE_HISTORY
+    for aid in (await _ids(FinancialEvent, "source_account_id")) | (
+        await _ids(FinancialEvent, "destination_account_id")
+    ):
+        blockers[aid] = _BLOCKER_TRANSACTIONS
+    return blockers
+
+
+async def single_delete_blocker(
+    db: AsyncSession, household_id: str, account_id: str
+) -> str | None:
+    """The hard-delete blocker reason for one account, or None if it is deletable. Same checks +
+    precedence as `delete_blockers`, for single-row responses."""
+
+    async def _referenced(model: type, column: str) -> bool:
+        stmt = select(exists().where(getattr(model, column) == account_id))
+        return bool((await db.execute(stmt)).scalar_one())
+
+    if await _referenced(FinancialEvent, "source_account_id") or await _referenced(
+        FinancialEvent, "destination_account_id"
+    ):
+        return _BLOCKER_TRANSACTIONS
+    if await _referenced(AccountSnapshot, "account_id"):
+        return _BLOCKER_VALUE_HISTORY
+    return None

@@ -1,19 +1,22 @@
-"""Account transport (ARCH §3.5/§4.5/§4.10, Story 4.1).
+"""Account transport (ARCH §3.5/§4.5/§4.10, Stories 4.1 + 4.2).
 
 `GET /api/accounts` (+ optional `account_type` filter) and `GET /api/accounts/{id}` —
-household-scoped reads, any member. `POST` / `PATCH` — admin/owner only (`require_role("admin")`,
-ARCH §2.8). Scoping is always `get_household_id` (the session's household, never the body).
-Snake_case wire. Responses are the §4.5 **discriminated union** (each subtype's columns only).
+household-scoped reads, any member. `POST` / `PATCH` and the lifecycle routes
+(`/{id}/archive`, `/{id}/restore`, `DELETE /{id}`, `/{id}/duplicate`) — admin/owner only
+(`require_role("admin")`, ARCH §2.8). Scoping is always `get_household_id` (the session's
+household, never the body). Snake_case wire. Responses are the §4.5 **discriminated union** (each
+subtype's columns only) + the computed `can_delete`/`delete_blocked_reason` (UX §8.1).
 
-NOT here: archive/restore/delete/duplicate (Story 4.2), multi-owner management (Story 4.3), value
-snapshots (Story 4.4), the value-history chart (Story 4.5), transaction history (Story 4.6).
+NOT here: multi-owner management (Story 4.3), value snapshots (Story 4.4), the value-history chart
+(Story 4.5), transaction history (Story 4.6).
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.dependencies import get_household_id, require_role
+from backend.models.account import Account
 from backend.models.identity import Person
 from backend.schemas.account import (
     AccountCreate,
@@ -30,17 +33,44 @@ router = APIRouter(prefix="/api", tags=["accounts"])
 _require_admin = require_role("admin")
 
 
+async def _response_for(db: AsyncSession, household_id: str, account: Account) -> AccountResponse:
+    """Build one subtype Response with its owner ids + the computed hard-delete eligibility (UX
+    §8.1). Single-row routes use this; the list route batches the scan instead (`list_accounts`)."""
+    owners = await account_service.owner_ids_for(db, [account.id])
+    reason = await account_service.single_delete_blocker(db, household_id, str(account.id))
+    return response_for(
+        account,
+        owners.get(account.id, []),
+        can_delete=reason is None,
+        delete_blocked_reason=reason,
+    )
+
+
 @router.get("/accounts")
 async def list_accounts(
     account_type: list[str] | None = Query(default=None),
+    include_archived: bool = False,
     household_id: str = Depends(get_household_id),
     db: AsyncSession = Depends(get_db),
 ) -> AccountListOut:
     """The household's accounts (any member; FR-A-002), ordered by name. The optional repeatable
-    `account_type` filter backs the four ACCOUNTS routes. `{items, total}` per the list rule."""
-    accounts = await account_service.list_accounts(db, household_id, account_types=account_type)
+    `account_type` filter backs the four ACCOUNTS routes; `?include_archived=true` includes archived
+    rows (default lists hide them). `can_delete`/reason come from a single batched dependency scan
+    (no per-row counts). `{items, total}` per the list rule."""
+    accounts = await account_service.list_accounts(
+        db, household_id, account_types=account_type, include_archived=include_archived
+    )
     owners = await account_service.owner_ids_for(db, [a.id for a in accounts])
-    items = [response_for(a, owners.get(a.id, [])) for a in accounts]
+    blockers = await account_service.delete_blockers(db, household_id)
+    items = [
+        response_for(
+            a,
+            owners.get(a.id, []),
+            can_delete=str(a.id) not in blockers,
+            delete_blocked_reason=blockers.get(str(a.id)),
+        )
+        for a in accounts
+    ]
     return AccountListOut(items=items, total=len(items))
 
 
@@ -55,7 +85,7 @@ async def create_account(
     `opening_balance` + `opening_balance_date` (422 otherwise). The creator becomes the
     sole owner."""
     account = await account_service.create_account(db, household_id, person.id, data)
-    return response_for(account, [person.id])
+    return await _response_for(db, household_id, account)
 
 
 @router.get("/accounts/{account_id}")
@@ -66,8 +96,7 @@ async def get_account(
 ) -> AccountResponse:
     """A single household-scoped account (any member). 404 incl. cross-household."""
     account = await account_service.get_account(db, household_id, account_id)
-    owners = await account_service.owner_ids_for(db, [account.id])
-    return response_for(account, owners.get(account.id, []))
+    return await _response_for(db, household_id, account)
 
 
 @router.patch("/accounts/{account_id}")
@@ -80,5 +109,55 @@ async def patch_account(
 ) -> AccountResponse:
     """Edit an account (admin/owner; FR-A-002). `account_type` is immutable. 404 cross-household."""
     account = await account_service.update_account(db, household_id, person.id, account_id, data)
-    owners = await account_service.owner_ids_for(db, [account.id])
-    return response_for(account, owners.get(account.id, []))
+    return await _response_for(db, household_id, account)
+
+
+@router.post("/accounts/{account_id}/archive")
+async def archive_account(
+    account_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> AccountResponse:
+    """Archive an account (admin/owner; FR-A-003). 200, never 409; hidden from default lists+totals,
+    history preserved. Idempotent. 404 cross-household."""
+    account = await account_service.archive_account(db, household_id, person.id, account_id)
+    return await _response_for(db, household_id, account)
+
+
+@router.post("/accounts/{account_id}/restore")
+async def restore_account(
+    account_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> AccountResponse:
+    """Restore an archived account (admin/owner; FR-A-003). Idempotent. 404 cross-household."""
+    account = await account_service.restore_account(db, household_id, person.id, account_id)
+    return await _response_for(db, household_id, account)
+
+
+@router.post("/accounts/{account_id}/duplicate", status_code=201)
+async def duplicate_account(
+    account_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> AccountResponse:
+    """Duplicate an account (admin/owner; FR-A-005). A new-UUID clone of all subtype fields with the
+    duplicator as sole owner, `status=active`. 404 cross-household."""
+    account = await account_service.duplicate_account(db, household_id, person.id, account_id)
+    return await _response_for(db, household_id, account)
+
+
+@router.delete("/accounts/{account_id}", status_code=204)
+async def delete_account(
+    account_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Hard-delete an empty account (admin/owner; FR-A-004). 204 if no events/snapshots; 409
+    `has_dependencies` otherwise (the UI offers archive). 404 cross-household."""
+    await account_service.delete_account(db, household_id, person.id, account_id)
+    return Response(status_code=204)

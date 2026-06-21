@@ -269,8 +269,8 @@ export function DesignSystem() {
           </div>
         </section>
 
-        {/* EntityPage — the standardized scaffold (toolbar + filter slot + content slot + states).
-            Content tiles are placeholders; EntityCard fills the slot in story 1.9b. */}
+        {/* EntityPage — the standardized scaffold (toolbar + filter slot + content slot + states),
+            filled with the real EntityCard §2.5 reference grid (bible #shell). */}
         <section id="entity-page" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">EntityPage</h2>
           <div className="flex items-center gap-sm mb-md">
@@ -298,15 +298,58 @@ export function DesignSystem() {
               emptyTitle="No accounts yet"
               emptyDescription="Add your first account to start tracking balances."
             >
-              {['DBS Multiplier', 'VWRA Holdings', 'Amex Platinum', 'Condo'].map((name) => (
-                <div
-                  key={name}
-                  className="flex min-h-entity-card flex-col justify-between rounded-lg border border-border bg-surface-raised p-md"
-                >
-                  <span className="text-sm font-medium text-text-primary">{name}</span>
-                  <span className="monetary-value text-base text-text-secondary">S$ 12,840</span>
-                </div>
-              ))}
+              {/* Real EntityCards (the §2.5 reference composition, bible #shell) — NOT placeholder
+                  divs: the EntityPage scaffold is verified in-context with the actual card grid.
+                  Per-instance `colour` hexes (the app's model — no per-subtype tokens, §EntityCard). */}
+              <EntityCard
+                colour="#6366f1"
+                icon="🏦"
+                name="DBS Multiplier"
+                hero="S$ 12,840"
+                meta="bank · SGD"
+                favourite
+                sparkline={<MiniSparkline data={[30, 28, 30, 22, 18, 14, 12, 9]} />}
+                menuItems={entityCardMenu}
+                onClick={() => {}}
+              />
+              <EntityCard
+                colour="#22c55e"
+                icon="📈"
+                name="VWRA Holdings"
+                hero="S$ 48,200"
+                meta="capital · USD"
+                sparkline={<MiniSparkline data={[32, 30, 26, 28, 20, 16, 10, 8]} />}
+                menuItems={entityCardMenu}
+                onClick={() => {}}
+              />
+              <EntityCard
+                colour="#ef4444"
+                vivid
+                icon="💳"
+                name="Amex Platinum"
+                hero="S$ 3,180"
+                subtitle="due 28 Jun · limit 20k"
+                meta="credit card · SGD"
+                menuItems={entityCardMenu}
+                onClick={() => {}}
+              />
+              <EntityCard
+                colour="#9bbc0f"
+                icon="🏠"
+                name="Condo"
+                hero="S$ 1.45M"
+                meta="asset · SGD"
+                menuItems={entityCardMenu}
+                onClick={() => {}}
+              />
+              <EntityCard
+                colour="#14b8a6"
+                icon="🛡"
+                name="Old Term Plan"
+                hero="S$ 0"
+                meta="insurance · SGD"
+                archived
+              />
             </EntityPage>
           </div>
         </section>

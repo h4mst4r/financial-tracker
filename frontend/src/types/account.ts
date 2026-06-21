@@ -18,6 +18,9 @@ interface AccountShared {
   created_by: string
   updated_at: string
   owner_ids: string[]
+  // Hard-delete eligibility (UX §8.1, Story 4.2) — computed server-side from a dependency scan.
+  can_delete: boolean
+  delete_blocked_reason: string | null
 }
 
 export interface BankAccount extends AccountShared {

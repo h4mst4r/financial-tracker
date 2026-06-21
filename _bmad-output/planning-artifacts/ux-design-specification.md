@@ -1022,7 +1022,14 @@ currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows
   the entity's series (fewer if fewer exist — never downsampled below the available data); the line
   carries a soft area fill beneath.
 - **Colour:** the entity's **deterministic identity colour** (§0.1) — so the sparkline matches the
-  card's fill/chip and stays consistent under immersive themes (the ramp remap, §0.2).
+  card's fill/chip and stays consistent under immersive themes (the ramp remap, §0.2). **Exception —
+  on a vivid card the fill *is* the entity colour, so the chart drawn in that same colour would be
+  invisible (red-on-red / green-on-green).** On a **vivid** fill the sparkline therefore switches to
+  the card's **contrast pole** (`--entity-on-colour` — white on dark fills, dark on light), i.e. a
+  monochrome chart, matching the same pole the vivid card's text/⋮ already use (§2.3). Calm fills
+  keep the identity colour (the 14% tint never obscures it). *(Implementation lands with the account
+  value-history chart, Story 4.5 — the first card-embedded sparkline; the FX-history sparkline §3.8
+  sits on a neutral row, unaffected.)*
 - **Latest-point emphasis:** the most recent point gets a small end-dot; an optional **delta
   caption** (▲▼ + % vs the first visible point) sits beside it, using the semantic inflow/outflow
   colours (§0.1), not the series colour.

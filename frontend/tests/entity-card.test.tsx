@@ -77,4 +77,32 @@ describe('EntityCard (story 1.9b)', () => {
     )
     expect(screen.getByLabelText('Actions')).toBeInTheDocument()
   })
+
+  it('⋮ trigger follows the contrast pole on a vivid card (not the fixed muted token)', () => {
+    // On a light vivid fill (e.g. cyan) the contrast pole is dark; the dots must inherit it (opacity
+    // mute), NOT text-text-secondary which would render light-on-light. Regression for the white-dots
+    // -on-cyan bug.
+    const { rerender } = render(
+      <EntityCard
+        name="Calm"
+        colour="#14b8a6"
+        menuItems={[{ label: 'Edit', icon: Pencil, onClick: vi.fn() }]}
+      />,
+    )
+    // Calm: muted neutral token.
+    expect(screen.getByLabelText('Actions')).toHaveClass('text-text-secondary')
+
+    rerender(
+      <EntityCard
+        name="Vivid"
+        colour="#14b8a6"
+        vivid
+        menuItems={[{ label: 'Edit', icon: Pencil, onClick: vi.fn() }]}
+      />,
+    )
+    const trigger = screen.getByLabelText('Actions')
+    // Vivid: inherits the root on-entity colour, muted via opacity — no fixed text token.
+    expect(trigger).toHaveClass('opacity-70')
+    expect(trigger).not.toHaveClass('text-text-secondary')
+  })
 })

@@ -69,6 +69,12 @@ export function EntityCard({
 
   const fillClass = vivid ? 'bg-entity-fill-vivid' : 'bg-entity-fill-calm'
   const textClass = onColour ? 'text-on-entity' : 'text-text-primary'
+  // The ⋮ trigger must follow the same contrast pole as the rest of the card. On a vivid fill with a
+  // known on-colour, inherit it (text-on-entity from the root) and mute via opacity — NOT a fixed
+  // text-text-secondary, which renders light-on-light on a light vivid fill (e.g. cyan → white dots).
+  const controlClass = onColour
+    ? 'opacity-70 hover:opacity-100'
+    : 'text-text-secondary hover:text-text-primary'
   // Default border is a tint of the instance colour (design bible .ecard: color-mix(--ec 30%, --border)),
   // so the card edge carries the entity identity — NOT a flat neutral border. Archived → dashed neutral;
   // selected → transparent (the §2.4 offset ring is the edge instead).
@@ -149,7 +155,7 @@ export function EntityCard({
         {menuItems && menuItems.length > 0 && (
           <ContextMenu
             trigger={
-              <span className="text-text-secondary hover:text-text-primary flex items-center" aria-label="Actions">
+              <span className={`flex items-center ${controlClass}`} aria-label="Actions">
                 <Icon icon={MoreVertical} size={16} />
               </span>
             }
