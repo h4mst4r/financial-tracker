@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { addMonths, format, getDaysInMonth, setDate } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import { Wallet, Pencil, Copy, LineChart, Archive, RotateCcw, Trash2 } from 'lucide-react'
 import { EntityPage } from '../components/entity'
@@ -171,16 +172,47 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
     )
   }
 
+  const symbolFor = (code: string | null | undefined) =>
+    currencies.find((c) => c.code === code)?.symbol ?? code ?? ''
+
   // The computed current value in its own NATIVE currency (Story 4.4) — no base/display conversion
   // (that is the Story 4.9 toggle). `null` → '—'.
   const heroFor = (a: Account) => {
     if (a.current_value == null) return '—'
-    const symbol =
-      currencies.find((c) => c.code === a.current_value_currency)?.symbol ??
-      a.current_value_currency ??
-      ''
     const n = Number(a.current_value)
-    return `${symbol} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return `${symbolFor(a.current_value_currency)} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  // The next future occurrence of a credit-card due day: this month if due_day ≥ today's day, else
+  // next month; clamped to the target month's length (e.g. due_day 31 in a 30-day month → the 30th).
+  // Rendered as a fixed short "d MMM" label (the bible "due 28 Jun"), NOT the per-person full format.
+  // ponytail: short d-MMM label, not the per-person display format
+  const nextDueDate = (day: number): string => {
+    const today = new Date()
+    const inThisMonth = day >= today.getDate()
+    const month = inThisMonth ? today : addMonths(today, 1)
+    return format(setDate(month, Math.min(day, getDaysInMonth(month))), 'd MMM')
+  }
+
+  // The card sub-line (Story 4.7) — bank: interest rate (· frequency) when set; credit card: the
+  // computed due date + limit (bible #entitycard). The credit-card HERO stays the current value; the
+  // red "Debt owing" hero is Epic 8 (FR-A-011). `undefined` → no sub-line.
+  const subtitleFor = (a: Account): ReactNode => {
+    if (a.account_type === 'bank') {
+      if (a.interest_rate == null) return undefined
+      const freq = a.interest_frequency ? ` · ${a.interest_frequency}` : ''
+      return `${Number(a.interest_rate)}%${freq}`
+    }
+    if (a.account_type === 'credit_card') {
+      const parts: string[] = []
+      if (a.due_day != null) parts.push(`due ${nextDueDate(a.due_day)}`)
+      if (a.credit_limit != null) {
+        const n = Number(a.credit_limit)
+        parts.push(`limit ${symbolFor(a.currency)} ${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
+      }
+      return parts.length ? parts.join(' · ') : undefined
+    }
+    return undefined
   }
 
   // The adaptive §8.1 ⋮ set: Edit · Duplicate · — · Archive/Restore · Delete-if-empty. Archive ↔
@@ -259,6 +291,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
             icon={<Icon icon={ACCOUNT_TYPE_ICON[a.account_type]} size={18} />}
             name={a.name}
             hero={heroFor(a)}
+            subtitle={subtitleFor(a)}
             sparkline={<MiniSparkline data={a.value_series.map(Number)} />}
             meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${a.currency}`}
             owners={ownersSlot(a)}

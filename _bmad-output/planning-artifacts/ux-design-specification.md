@@ -423,7 +423,8 @@ renders its instances through it.
 
 | Variant | Difference |
 |---|---|
-| bank / capital / asset / insurance | entity icon + default entity colour; hero = balance/value + sparkline |
+| capital / asset / insurance | entity icon + default entity colour; hero = balance/value + sparkline |
+| **bank** | as above; **interest rate** (when set) shows in the sub-line as `{rate}% · {frequency}` |
 | **credit card** | leads with **Debt owing** (semantic red), shows due date + limit; debt-trend may replace the balance sparkline |
 | archived | desaturated, **dashed** border, `Archived` badge, **`opacity-60`** (the named token — same value used by CategoryTree archived rows, CLAUDE.md §5.11) |
 

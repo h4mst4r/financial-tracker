@@ -84,8 +84,8 @@ function OwnerPicker({
 // The single create/edit surface for accounts (UX §8.2), shared by all four ACCOUNTS routes. The type
 // Dropdown swaps the subtype field slot; ledger-backed types (bank/credit_card) require an opening
 // balance + date. Accounts use the type-default icon — NO EmojiIconPicker (UX §8.2). The deep
-// per-subtype fields (interest, limits, coverage…) arrive in Stories 4.7/4.8; the slot is otherwise
-// empty here. `account_type` is immutable on edit (the STI discriminator).
+// per-subtype fields: bank + credit-card columns are wired here (Story 4.7); capital/asset/insurance
+// remain the Story 4.8 seam. `account_type` is immutable on edit (the STI discriminator).
 
 const TODAY_ISO = () => new Date().toISOString().slice(0, 10)
 
@@ -93,6 +93,14 @@ const TYPE_OPTIONS = (Object.keys(ACCOUNT_TYPE_LABEL) as AccountType[]).map((t) 
   value: t,
   label: ACCOUNT_TYPE_LABEL[t],
 }))
+
+// Locked option sets (Story 4.7). `reward_type` is the backend Literal; `interest_frequency` is a
+// free-form column with no specced enum — locked to these four so the stored value is deterministic.
+const INTEREST_FREQUENCY_OPTIONS = ['monthly', 'quarterly', 'semi-annual', 'annual'].map((v) => ({
+  value: v,
+  label: v,
+}))
+const REWARD_TYPE_OPTIONS = ['points', 'cashback', 'miles', 'none'].map((v) => ({ value: v, label: v }))
 
 interface FormState {
   account_type: AccountType
@@ -105,6 +113,20 @@ interface FormState {
   opening_balance: string
   opening_balance_date: string
   ownerIds: string[]
+  // Bank subtype (Story 4.7) — held as strings in form state; coerced/null'd on submit.
+  account_number: string
+  interest_rate: string
+  interest_frequency: string
+  reserved_amount: string
+  // Credit-card subtype (Story 4.7).
+  credit_limit: string
+  billing_day: string
+  due_day: string
+  reward_type: string
+  reward_points: string
+  annual_fee: string
+  bonus_limit: string
+  points_expiry: string
 }
 
 const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
@@ -118,7 +140,34 @@ const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
   opening_balance: '',
   opening_balance_date: TODAY_ISO(),
   ownerIds,
+  account_number: '',
+  interest_rate: '',
+  interest_frequency: '',
+  reserved_amount: '',
+  credit_limit: '',
+  billing_day: '',
+  due_day: '',
+  reward_type: '',
+  reward_points: '',
+  annual_fee: '',
+  bonus_limit: '',
+  points_expiry: '',
 })
+
+// Subtype field validators (Story 4.7) — all optional, so empty is always valid; only a non-empty
+// value is checked, so a malformed entry blocks Save client-side instead of round-tripping to a 422.
+const NUM_RE = /^-?\d+(\.\d+)?$/ // signed decimal (interest rate / opening balance may be negative)
+const NONNEG_RE = /^\d+(\.\d+)?$/ // unsigned decimal (limits/fees can't be negative)
+const INT_RE = /^\d+$/ // plain integer digits only (rejects hex/exponent that Number() would parse)
+const numOk = (s: string) => s.trim() === '' || NUM_RE.test(s.trim())
+const nonNegOk = (s: string) => s.trim() === '' || NONNEG_RE.test(s.trim())
+const dayOk = (s: string) => {
+  if (s.trim() === '') return true
+  if (!INT_RE.test(s.trim())) return false
+  const n = Number(s)
+  return n >= 1 && n <= 31
+}
+const countOk = (s: string) => s.trim() === '' || INT_RE.test(s.trim())
 
 interface AccountModalProps {
   open: boolean
@@ -157,6 +206,11 @@ export function AccountModal({
     if (editing) {
       const ledger = 'opening_balance' in editing ? editing.opening_balance : null
       const ledgerDate = 'opening_balance_date' in editing ? editing.opening_balance_date : null
+      // Repopulate every subtype field from the discriminated-union response (`'x' in editing` narrows
+      // the union; nullable columns → '' so the inputs are controlled). Decimals/ints → String().
+      const str = (v: string | number | null | undefined) => (v == null ? '' : String(v))
+      const bank = editing.account_type === 'bank' ? editing : null
+      const cc = editing.account_type === 'credit_card' ? editing : null
       setForm({
         account_type: editing.account_type,
         name: editing.name,
@@ -168,6 +222,18 @@ export function AccountModal({
         opening_balance: ledger ?? '',
         opening_balance_date: ledgerDate ?? TODAY_ISO(),
         ownerIds: editing.owner_ids,
+        account_number: str(bank?.account_number),
+        interest_rate: str(bank?.interest_rate),
+        interest_frequency: str(bank?.interest_frequency),
+        reserved_amount: str(bank?.reserved_amount),
+        credit_limit: str(cc?.credit_limit),
+        billing_day: str(cc?.billing_day),
+        due_day: str(cc?.due_day),
+        reward_type: str(cc?.reward_type),
+        reward_points: str(cc?.reward_points),
+        annual_fee: str(cc?.annual_fee),
+        bonus_limit: str(cc?.bonus_limit),
+        points_expiry: str(cc?.points_expiry),
       })
     } else {
       setForm(emptyForm(currentPersonId ? [currentPersonId] : [], baseCurrency))
@@ -176,13 +242,36 @@ export function AccountModal({
 
   const isLedger = LEDGER_BACKED.has(form.account_type)
 
+  // Per-field validity of the (optional) subtype inputs — drives both the inline error state and the
+  // save gate (Story 4.7). Empty is always valid; a malformed non-empty value blocks Save.
+  const fieldOk = {
+    interest_rate: numOk(form.interest_rate), // a rate may be negative (real negative rates exist)
+    reserved_amount: nonNegOk(form.reserved_amount),
+    credit_limit: nonNegOk(form.credit_limit),
+    annual_fee: nonNegOk(form.annual_fee),
+    bonus_limit: nonNegOk(form.bonus_limit),
+    billing_day: dayOk(form.billing_day),
+    due_day: dayOk(form.due_day),
+    reward_points: countOk(form.reward_points),
+  }
+  const subtypeInvalid =
+    (form.account_type === 'bank' && (!fieldOk.interest_rate || !fieldOk.reserved_amount)) ||
+    (form.account_type === 'credit_card' &&
+      (!fieldOk.credit_limit ||
+        !fieldOk.annual_fee ||
+        !fieldOk.bonus_limit ||
+        !fieldOk.billing_day ||
+        !fieldOk.due_day ||
+        !fieldOk.reward_points))
+
   // Opening balance must be a decimal (a credit card's may be negative) — block non-numeric input
   // client-side instead of letting it round-trip to a generic backend 422.
   const saveDisabled =
     form.name.trim() === '' ||
     (isLedger &&
       (!/^-?\d+(\.\d+)?$/.test(form.opening_balance.trim()) || form.opening_balance_date === '')) ||
-    !/^#[0-9a-fA-F]{6}$/.test(form.colour)
+    !/^#[0-9a-fA-F]{6}$/.test(form.colour) ||
+    subtypeInvalid
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -198,14 +287,38 @@ export function AccountModal({
     const ledger = isLedger
       ? { opening_balance: form.opening_balance, opening_balance_date: form.opening_balance_date }
       : {}
+    // Only the active subtype's columns (the backend rejects cross-subtype PATCH fields — Story 4.1
+    // review). Empty optional → null (never '' → 422); Decimals as strings, day/points ints as numbers.
+    const dec = (s: string) => (s.trim() === '' ? null : s.trim())
+    const int = (s: string) => (s.trim() === '' ? null : Number(s))
+    const subtype: Record<string, unknown> =
+      form.account_type === 'bank'
+        ? {
+            account_number: form.account_number.trim() || null,
+            interest_rate: dec(form.interest_rate),
+            interest_frequency: form.interest_frequency || null,
+            reserved_amount: dec(form.reserved_amount),
+          }
+        : form.account_type === 'credit_card'
+          ? {
+              credit_limit: dec(form.credit_limit),
+              billing_day: int(form.billing_day),
+              due_day: int(form.due_day),
+              reward_type: form.reward_type || null,
+              reward_points: int(form.reward_points),
+              annual_fee: dec(form.annual_fee),
+              bonus_limit: dec(form.bonus_limit),
+              points_expiry: form.points_expiry || null,
+            }
+          : {}
     if (editing) {
       // PATCH — no `account_type` (immutable STI discriminator); owners go via the owner PUT.
       // Currency only when it actually changed (the backend locks it once the account has history).
       const currencyPatch = form.currency !== editing.currency ? { currency: form.currency } : {}
-      await onSubmit({ ...shared, ...currencyPatch, ...ledger }, editing.id, form.ownerIds)
+      await onSubmit({ ...shared, ...currencyPatch, ...ledger, ...subtype }, editing.id, form.ownerIds)
     } else {
       await onSubmit(
-        { account_type: form.account_type, currency: form.currency, ...shared, ...ledger },
+        { account_type: form.account_type, currency: form.currency, ...shared, ...ledger, ...subtype },
         null,
         form.ownerIds,
       )
@@ -303,6 +416,143 @@ export function AccountModal({
               id="acct-opening-date"
               value={form.opening_balance_date}
               onChange={(v) => set('opening_balance_date', v)}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Bank subtype fields (Story 4.7, ARCH §3.5) — all optional. */}
+      {form.account_type === 'bank' && (
+        <>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-account-number">Account number</Label>
+            <Input
+              id="acct-account-number"
+              value={form.account_number}
+              onChange={(e) => set('account_number', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-interest-rate">Interest rate (%)</Label>
+            <Input
+              id="acct-interest-rate"
+              inputMode="decimal"
+              value={form.interest_rate}
+              error={!fieldOk.interest_rate}
+              onChange={(e) => set('interest_rate', e.target.value)}
+              placeholder="e.g. 2.5"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-interest-frequency">Interest frequency</Label>
+            <Dropdown
+              id="acct-interest-frequency"
+              value={form.interest_frequency}
+              placeholder="Select…"
+              options={INTEREST_FREQUENCY_OPTIONS}
+              onChange={(v) => set('interest_frequency', v)}
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-reserved">Reserved amount ({form.currency})</Label>
+            <Input
+              id="acct-reserved"
+              inputMode="decimal"
+              value={form.reserved_amount}
+              error={!fieldOk.reserved_amount}
+              onChange={(e) => set('reserved_amount', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+        </>
+      )}
+
+      {/* Credit-card subtype fields (Story 4.7, ARCH §3.5) — all optional. */}
+      {form.account_type === 'credit_card' && (
+        <>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-credit-limit">Credit limit ({form.currency})</Label>
+            <Input
+              id="acct-credit-limit"
+              inputMode="decimal"
+              value={form.credit_limit}
+              error={!fieldOk.credit_limit}
+              onChange={(e) => set('credit_limit', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-annual-fee">Annual fee ({form.currency})</Label>
+            <Input
+              id="acct-annual-fee"
+              inputMode="decimal"
+              value={form.annual_fee}
+              error={!fieldOk.annual_fee}
+              onChange={(e) => set('annual_fee', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-billing-day">Billing day (1–31)</Label>
+            <Input
+              id="acct-billing-day"
+              inputMode="numeric"
+              value={form.billing_day}
+              error={!fieldOk.billing_day}
+              onChange={(e) => set('billing_day', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-due-day">Due day (1–31)</Label>
+            <Input
+              id="acct-due-day"
+              inputMode="numeric"
+              value={form.due_day}
+              error={!fieldOk.due_day}
+              onChange={(e) => set('due_day', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-reward-type">Reward type</Label>
+            <Dropdown
+              id="acct-reward-type"
+              value={form.reward_type}
+              placeholder="Select…"
+              options={REWARD_TYPE_OPTIONS}
+              onChange={(v) => set('reward_type', v)}
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-reward-points">Reward points</Label>
+            <Input
+              id="acct-reward-points"
+              inputMode="numeric"
+              value={form.reward_points}
+              error={!fieldOk.reward_points}
+              onChange={(e) => set('reward_points', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-bonus-limit">Bonus limit ({form.currency})</Label>
+            <Input
+              id="acct-bonus-limit"
+              inputMode="decimal"
+              value={form.bonus_limit}
+              error={!fieldOk.bonus_limit}
+              onChange={(e) => set('bonus_limit', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-points-expiry">Points expiry</Label>
+            <DatePicker
+              id="acct-points-expiry"
+              value={form.points_expiry}
+              onChange={(v) => set('points_expiry', v)}
             />
           </div>
         </>

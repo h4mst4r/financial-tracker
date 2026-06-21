@@ -82,6 +82,26 @@ const accounts: Account[] = [
     value_series: [],
     investment_type: null, cost_basis: '9000.0000',
   },
+  // Story 4.7 fixtures — a credit card (due/limit sub-line) and an interest-bearing bank.
+  {
+    id: 'cc1', account_type: 'credit_card', name: 'Amex Platinum', currency: 'SGD', institution: 'Amex', notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '-3180.0000', current_value_currency: 'SGD',
+    value_series: [],
+    opening_balance: '0.0000', opening_balance_date: '2026-06-01',
+    credit_limit: '20000.0000', billing_day: 15, due_day: 28, reward_points: 1200,
+    annual_fee: '321.00', reward_type: 'points', bonus_limit: null, points_expiry: null,
+  },
+  {
+    id: 'bk-int', account_type: 'bank', name: 'High Yield', currency: 'SGD', institution: 'GXS', notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '8000.0000', current_value_currency: 'SGD',
+    value_series: [],
+    opening_balance: '8000.0000', opening_balance_date: '2026-06-01',
+    account_number: '1234567890', interest_rate: '2.5000', interest_frequency: 'annual', reserved_amount: null,
+  },
 ]
 
 function renderPage(subtypes: Account['account_type'][] = ['bank', 'credit_card']) {
@@ -337,6 +357,102 @@ describe('AccountsList', () => {
     const oldFund = screen.getByText('Old Fund')
     const oldFundCard = oldFund.closest('[data-testid="entity-card"]') as HTMLElement
     expect(oldFundCard.textContent).toContain('—') // current_value null → em dash
+  })
+
+  // ── Bank & credit-card details (Story 4.7) ──
+
+  test('a bank card shows the interest-rate sub-line when set', async () => {
+    renderPage(['bank', 'credit_card'])
+    const card = (await screen.findByText('High Yield')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).toContain('2.5% · annual')
+  })
+
+  test('a credit-card card shows the computed due date + limit; hero stays the value', async () => {
+    renderPage(['bank', 'credit_card'])
+    const card = (await screen.findByText('Amex Platinum')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).toMatch(/due \d{1,2} \w{3}/) // computed "due D Mon"
+    expect(card.textContent).toContain('limit S$ 20,000')
+    // The hero is the current value, NOT the red Debt-owing hero (that is Epic 8).
+    expect(card.textContent).toContain('S$ -3,180.00')
+  })
+
+  test('the subtype slot swaps bank ↔ credit-card fields', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    expect(await screen.findByLabelText(/Interest rate/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Credit limit/)).toBeNull()
+    fireEvent.click(screen.getByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    expect(await screen.findByLabelText(/Credit limit/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Interest rate/)).toBeNull()
+  })
+
+  test('saving a bank POSTs only bank subtype fields; empty optionals as null', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Bank' } })
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '1000' } })
+    fireEvent.change(screen.getByLabelText(/Interest rate/), { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const body = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.interest_rate).toBe('2.5')
+    expect(body.account_number).toBeNull() // empty optional → null, never ''
+    expect('credit_limit' in body).toBe(false) // no cross-subtype keys
+  })
+
+  test('saving a credit card POSTs day ints as numbers and limit as a string', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(screen.getByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Card' } })
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '0' } })
+    fireEvent.change(screen.getByLabelText(/Credit limit/), { target: { value: '5000' } })
+    fireEvent.change(screen.getByLabelText(/Billing day/), { target: { value: '15' } })
+    fireEvent.change(screen.getByLabelText(/Due day/), { target: { value: '28' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const body = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.credit_limit).toBe('5000') // Decimal → wire string
+    expect(body.billing_day).toBe(15) // int → number
+    expect(body.due_day).toBe(28)
+    expect('interest_rate' in body).toBe(false)
+  })
+
+  test('editing a credit card prefills its subtype fields (AC4)', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('Amex Platinum')
+    fireEvent.click(screen.getAllByLabelText('Actions')[3]) // cc1 (Amex Platinum)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    expect((screen.getByLabelText(/Credit limit/) as HTMLInputElement).value).toBe('20000.0000')
+    expect((screen.getByLabelText(/Due day/) as HTMLInputElement).value).toBe('28')
+  })
+
+  test('an out-of-range due day blocks Save', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(screen.getByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Card' } })
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '0' } })
+    fireEvent.change(screen.getByLabelText(/Due day/), { target: { value: '40' } })
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   test('the card renders the value-history sparkline, or a placeholder when there is no history', async () => {
