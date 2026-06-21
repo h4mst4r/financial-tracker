@@ -169,6 +169,10 @@
 /* ── Entity colour-fill identity (UX §0.1, frontend.md §2.5) — backgrounds only; text/contrast = 1.6 ── */
 @utility bg-entity-fill-calm  { background-color: color-mix(in oklab, var(--entity-colour) 18%, transparent); }
 @utility bg-entity-fill-vivid { background-color: var(--entity-colour); }
+/* EntityCard border — a tint of the instance colour blended into the neutral border (design bible
+   .ecard: color-mix(--ec 30%, --border)). The fill is the 18% tint above; the border is a stronger
+   30% so the card edge reads as the entity's colour, not a flat neutral box (UX §2.1). */
+@utility border-entity-calm { border-color: color-mix(in srgb, var(--entity-colour) 30%, var(--color-border)); }
 /* Subcategory rows: a lighter tint of the parent's colour (CategoryTree, UX §6 / frontend.md §2.11). */
 @utility bg-entity-fill-sub   { background-color: color-mix(in oklab, var(--entity-colour) 9%, transparent); }
 /* Contrast-aware text for the vivid fill (calm keeps text-text-primary). --entity-on-colour is set
@@ -399,6 +403,12 @@
 @utility h-sparkline { height: 40px; }
 /* The inline row-sparkline footprint width (Currencies table History column, Story 3.8 / bible §10 ~60px). */
 @utility w-sparkline { width: 72px; }
+/* DatePicker calendar popover — fits a 7-column day grid with comfortable tap targets (Story 4.1, bible §7 .datecal). */
+@utility w-date-picker { width: 17rem; }
+/* MonetaryValueInput currency selector — fits a 3-letter ISO code + chevron (Story 4.1, bible §7 .mvinput). */
+@utility w-currency-select { width: 6rem; }
+/* Accounts page bank/credit-card type filter dropdown (Story 4.1, UX §1.2). */
+@utility w-account-filter { width: 9rem; }
 @utility spark-area  { fill: var(--entity-colour); opacity: 0.14; }
 @utility spark-line  { fill: none; stroke: var(--entity-colour); stroke-width: 2; }
 @utility spark-end   { fill: var(--entity-colour); }

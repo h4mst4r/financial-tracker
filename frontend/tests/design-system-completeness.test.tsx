@@ -52,10 +52,12 @@ const SECTION_MARKER: Record<string, string> = {
   checkbox: 'input[type="checkbox"]',
   label: 'label',
   input: 'input',
+  'monetary-value-input': 'button[aria-haspopup="listbox"]',
   tooltip: '[role="tooltip"]',
   card: '[role="button"]',
   // Pickers
   dropdown: 'button[aria-haspopup="listbox"]',
+  'date-picker': 'button[aria-haspopup="dialog"]',
   'theme-picker': 'button[aria-haspopup="listbox"]',
   'colour-picker': 'button[aria-haspopup="dialog"]',
   'emoji-icon-picker': 'button[aria-haspopup="dialog"]',

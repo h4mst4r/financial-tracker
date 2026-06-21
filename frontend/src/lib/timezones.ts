@@ -34,18 +34,18 @@ export const COMMON_TIMEZONES: string[] = [
 ]
 
 /**
- * `City (offset)` label for a zone, e.g. `Singapore (GMT+8)`, `Los Angeles (PST)`, `Chicago (CST)`.
- * The offset/abbreviation comes from the runtime via `Intl` (`timeZoneName: 'short'`) — US zones
- * yield their abbreviation (PST/CST/EST…), the rest yield `GMT±N`. It reflects the *current* DST
- * state (a display hint, recomputed at load), not the validation authority.
+ * `City (GMT±N)` label for a zone, e.g. `Singapore (GMT+8)`, `New York (GMT-4)`. The offset comes
+ * from the runtime via `Intl` (`timeZoneName: 'shortOffset'`) so EVERY zone reads as a GMT offset —
+ * never an abbreviation (EDT/PST/CST), which people conflate with the zone itself. It reflects the
+ * *current* DST state (a display hint, recomputed at load), not the validation authority.
  */
 export function timezoneLabel(tz: string): string {
   if (tz === 'UTC') return 'UTC'
   const city = tz.split('/').pop()!.replace(/_/g, ' ')
-  const short = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+  const offset = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
     .formatToParts(new Date())
     .find((p) => p.type === 'timeZoneName')?.value
-  return short ? `${city} (${short})` : city
+  return offset ? `${city} (${offset})` : city
 }
 
 /** Ready-made `{ value, label }` options for the timezone Dropdown (value = IANA, label = §above). */

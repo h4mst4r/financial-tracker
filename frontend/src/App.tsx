@@ -13,6 +13,7 @@ import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
 import { Categories } from './pages/Categories'
 import { Currencies } from './pages/Currencies'
+import { AccountsList } from './pages/AccountsList'
 import { JoinHousehold } from './pages/JoinHousehold'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
@@ -89,6 +90,25 @@ function GatedApp({
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardHome />} />
+          {/* Four ACCOUNTS routes, one filtered component (Story 4.1 / UX §1.1). */}
+          <Route
+            path="/accounts"
+            element={
+              <AccountsList subtypes={['bank', 'credit_card']} title="Accounts" newLabel="account" />
+            }
+          />
+          <Route
+            path="/capital"
+            element={<AccountsList subtypes={['capital']} title="Capital" newLabel="capital account" />}
+          />
+          <Route
+            path="/assets"
+            element={<AccountsList subtypes={['asset']} title="Assets" newLabel="asset" />}
+          />
+          <Route
+            path="/insurance"
+            element={<AccountsList subtypes={['insurance']} title="Insurance" newLabel="policy" />}
+          />
           <Route path="/categories" element={<Categories />} />
           <Route path="/currencies" element={<Currencies />} />
           <Route path="/settings" element={<Settings />} />

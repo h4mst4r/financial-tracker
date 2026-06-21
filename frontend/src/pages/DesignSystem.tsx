@@ -26,6 +26,8 @@ import {
   Checkbox,
   Toggle,
   Dropdown,
+  DatePicker,
+  MonetaryValueInput,
   ThemePicker,
   ColourPicker,
   EmojiIconPicker,
@@ -160,6 +162,9 @@ export function DesignSystem() {
   const [demoColour, setDemoColour] = useState('#8b5cf6')
   const [demoVivid, setDemoVivid] = useState(false)
   const [demoGlyph, setDemoGlyph] = useState<string | null>('🏠')
+  const [demoDate, setDemoDate] = useState('2026-06-11')
+  const [demoAmount, setDemoAmount] = useState('14.99')
+  const [demoMvCurrency, setDemoMvCurrency] = useState('USD')
   const demoCategories: Category[] = [
     // Parent has children → can_delete:false demonstrates the ⋮ Delete-disabled-with-reason (UX §8.1).
     { id: 'c1', status: 'active', name: 'Food & Dining', color: '#f59e0b', icon: '🍔', category_type: 'expense', parent_id: null, depth: 0, vivid: false, can_delete: false, delete_blocked_reason: 'has subcategories' },
@@ -676,6 +681,28 @@ export function DesignSystem() {
           </div>
         </section>
 
+        {/* MonetaryValueInput — currency selector + mono amount (UX §7/§8.2, Story 4.1). */}
+        <section id="monetary-value-input" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">MonetaryValueInput</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <MonetaryValueInput
+              amount={demoAmount}
+              currency={demoMvCurrency}
+              currencyOptions={['SGD', 'USD', 'EUR']}
+              onAmountChange={setDemoAmount}
+              onCurrencyChange={setDemoMvCurrency}
+            />
+            <MonetaryValueInput
+              amount={demoAmount}
+              currency={demoMvCurrency}
+              currencyOptions={['SGD', 'USD', 'EUR']}
+              onAmountChange={() => {}}
+              onCurrencyChange={() => {}}
+              disabled
+            />
+          </div>
+        </section>
+
         {/* Tooltip */}
         <section id="tooltip" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Tooltip</h2>
@@ -711,6 +738,15 @@ export function DesignSystem() {
           <div className="flex flex-col gap-density max-w-input">
             <Dropdown value={dropdownValue} options={dropdownOptions} onChange={setDropdownValue} placeholder="Select…" />
             <Dropdown value="" options={dropdownOptions} onChange={() => {}} disabled placeholder="Disabled" />
+          </div>
+        </section>
+
+        {/* DatePicker — calendar popover, ISO value, per-person display format (UX §7/§8.2, Story 4.1). */}
+        <section id="date-picker" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">DatePicker</h2>
+          <div className="flex flex-col gap-density max-w-input">
+            <DatePicker value={demoDate} onChange={setDemoDate} />
+            <DatePicker value={demoDate} onChange={() => {}} disabled />
           </div>
         </section>
 

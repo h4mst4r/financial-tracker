@@ -803,6 +803,23 @@ view with no table** (§3.10) — listed here only for conceptual completeness.
    (a household's whole ledger, all accounts net worth); STI keeps those queries single-table
    and avoids join fan-out. The cost (nullable subtype columns) is acceptable at this scale.
 
+   **Decision — single-class STI, not ORM polymorphic subclasses (chosen Story 4.1).** The ORM side
+   is **one mapped class per family** (`Account`, `FinancialEvent`), with the discriminator as a plain
+   column — **no `polymorphic_on`/`polymorphic_identity` mapper, no `class BankAccount(Account)` subclasses.**
+   The per-subtype split lives only in the Pydantic discriminated-union schemas (§4.5). Why this over
+   multi-class: every query here is cross-subtype, and all kind-specific *behaviour* is deliberately
+   pushed into **services** (the formula engine §3.10/Epic 7, debt/budget derivations §3.11/Epic 8),
+   not onto model methods — so models stay dumb column-holders and subclasses would buy nothing but
+   ceremony. (Implementation rule + the `No such polymorphic_identity` failure mode this avoids: §4.5.)
+
+   **When to revisit (switch to multi-class = `polymorphic_on` + a registered subclass per identity):**
+   if a subtype starts needing genuine **per-kind behaviour on the model itself** — e.g. a `Transfer`
+   that settles its own far leg, a `RecurringPayment` that generates its own occurrences, or
+   per-subtype relationships/validation that read cleanly as class declarations instead of
+   `if event_type == …` ladders. The concrete signal: **subtype `if`-ladders accumulating inside a
+   model or its core service.** Until that happens, single-class is the lighter, sufficient choice;
+   the migration to subclasses is localized (it doesn't change the table, only the mapping).
+
 ### 3.1 `BaseEntity` — the 10 shared columns
 
 Every domain entity inherits these (the **only** exceptions are listed in §3.3).
@@ -1555,6 +1572,16 @@ isolation guarantee.
   instead of a single flat schema padded with every other subtype's columns as `null`. The route
   picks the subtype schema from the discriminator before `model_validate`; `from_attributes=True`
   reads the nullable ORM columns that belong to that subtype.
+- **STI is SINGLE-CLASS on the ORM side — no `polymorphic_on` mapper.** (Decision rationale + the
+  "when to switch to multi-class" trigger live in §3 point 7; this is the implementation rule.) The `accounts`/`financial_events`
+  models are one SQLAlchemy class each, with `account_type`/`event_type` as a plain column; the subtype
+  split lives **only** in the Pydantic discriminated union above, never in ORM polymorphic subclasses.
+  Do **not** set `__mapper_args__ = {"polymorphic_on": …, "polymorphic_identity": …}`: with no registered
+  subclass for a discriminator value, SQLAlchemy raises `AssertionError: No such polymorphic_identity
+  'bank'` (or `'transaction'`) on **every** `select()` of a row carrying that value. (Resolved in Story
+  4.1 for `accounts`; `financial_events` must follow the same single-class shape when Epic 5 stores real
+  `event_type`s — strip any `polymorphic_on` mapper there too, or register a subclass per identity, but
+  the single-class + schema-union path is the chosen pattern.)
 
 ### 4.6 Error contract — RFC 7807 (CANONICAL)
 

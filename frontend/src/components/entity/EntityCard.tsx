@@ -69,11 +69,14 @@ export function EntityCard({
 
   const fillClass = vivid ? 'bg-entity-fill-vivid' : 'bg-entity-fill-calm'
   const textClass = onColour ? 'text-on-entity' : 'text-text-primary'
+  // Default border is a tint of the instance colour (design bible .ecard: color-mix(--ec 30%, --border)),
+  // so the card edge carries the entity identity — NOT a flat neutral border. Archived → dashed neutral;
+  // selected → transparent (the §2.4 offset ring is the edge instead).
   const borderClass = archived
     ? 'border-dashed border-border-strong'
     : selected
       ? 'border-transparent'
-      : 'border-border'
+      : 'border-entity-calm'
 
   return (
     <div

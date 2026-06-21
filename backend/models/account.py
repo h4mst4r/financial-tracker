@@ -38,6 +38,9 @@ class Account(BaseEntity):
     institution: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
     colour: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    # Per-instance full-saturation fill opt-in (calm tint default; vivid = full-saturation fill).
+    # Cross-entity column (also on categories/currencies) — ARCH §3.5, FR-SYS-016, Story 4.1.
+    vivid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     opening_balance: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
     opening_balance_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -95,11 +98,11 @@ class Account(BaseEntity):
     surrender_value: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
     surrender_inquiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    __mapper_args__ = {
-        "polymorphic_on": account_type,
-        "polymorphic_identity": "account",
-    }
-
+    # Single-class STI: one table, `account_type` discriminator, all subtype columns nullable.
+    # We do NOT register ORM polymorphic subclasses — serialization is via the discriminated-union
+    # schemas (ARCH §4.5), and queries are cross-subtype. A `polymorphic_on` mapper here would
+    # make SQLAlchemy try to load each row as a registered subclass and raise "No such
+    # polymorphic_identity 'bank'" on every SELECT. Add subclasses only if ORM polymorphism needed.
     __table_args__ = (
         Index("ix_accounts_household_id_account_type", "household_id", "account_type"),
     )

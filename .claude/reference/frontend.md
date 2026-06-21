@@ -221,16 +221,19 @@ className={`
 default, or a **vivid** full-saturation fill when the per-instance `vivid` toggle is on. Text on the fill
 is **contrast-aware** (white/dark auto by luminance; muted sub-text = same colour, reduced alpha).
 
-Drive the fill from a CSS variable so children can read it, and keep the colour OFF the `border` shorthand:
+Drive the fill from a CSS variable so children can read it; the **border is also a tint** of the
+instance colour (design bible `.ecard`: `color-mix(--ec 30%, --border)`), via the `border-entity-calm`
+utility — NOT a flat neutral `border-border`. (The colour still never goes on a raw hex; it reads
+`--entity-colour`.)
 
 ```tsx
 <div
-  className="relative rounded-lg border border-border ..."   // border stays neutral
-  style={{ '--entity-colour': entity.colour }}                // fill + children read this
+  className="relative rounded-lg border border-entity-calm ..."  // tinted edge (bible .ecard)
+  style={{ '--entity-colour': entity.colour }}                   // fill + border + children read this
 >
 ```
 
-- Use the themed fill utilities (`bg-entity-fill-calm` / `bg-entity-fill-vivid`) that read `--entity-colour`; never inline a raw hex.
+- Use the themed utilities (`bg-entity-fill-calm` / `bg-entity-fill-vivid` for the fill, `border-entity-calm` for the edge) that read `--entity-colour`; never inline a raw hex.
 - **Selection** is NOT conveyed by the fill — use the §2.4 ring + corner check + lift (tint alone is insufficient on vivid fills).
 - Under an **immersive** theme the instance colour is remapped through the palette's tint ramp (UX §0.2) — because you read it from the token/variable, this happens for free. Never hardcode the hex.
 

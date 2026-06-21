@@ -26,6 +26,7 @@ from backend.middleware import (
     SecurityHeadersMiddleware,
 )
 from backend.rate_limit import limiter
+from backend.routers import accounts as accounts_router
 from backend.routers import auth as auth_router
 from backend.routers import categories as categories_router
 from backend.routers import currencies as currencies_router
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
     app.include_router(profile_router.router)
     app.include_router(categories_router.router)
     app.include_router(currencies_router.router)
+    app.include_router(accounts_router.router)
     app.include_router(fx_providers_router.router)
     app.include_router(jobs_router.router)
 
