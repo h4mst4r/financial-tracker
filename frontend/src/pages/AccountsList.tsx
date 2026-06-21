@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Wallet, Pencil, Copy, Archive, RotateCcw, Trash2 } from 'lucide-react'
+import { Wallet, Pencil, Copy, LineChart, Archive, RotateCcw, Trash2 } from 'lucide-react'
 import { EntityPage } from '../components/entity'
 import { EntityCard } from '../components/entity/EntityCard'
 import { Dropdown } from '../components/primitives/Dropdown'
 import { Icon } from '../components/primitives/Icon'
+import { Avatar } from '../components/primitives/Avatar'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import type { ContextMenuEntry } from '../components/primitives'
 import { useEntityManager } from '../hooks/useEntityManager'
@@ -12,16 +13,18 @@ import { useAlertStore } from '../stores/alertStore'
 import { api, ApiError } from '../api/client'
 import type { EntityListResponse } from '../types/entity'
 import type { Currency } from '../types/currency'
+import type { ListResponse, Member } from '../types/household'
 import { ACCOUNT_TYPE_ICON, ACCOUNT_TYPE_LABEL } from '../config/accountIcons'
-import { LEDGER_BACKED, type Account, type AccountType } from '../types/account'
+import { type Account, type AccountType } from '../types/account'
 import { AccountModal } from './AccountModal'
+import { AccountSnapshotModal } from './AccountSnapshotModal'
 
 // The accounts list page (UX §1/§2/§2.5) — the locked EntityCard reference screen. ONE component,
 // mounted at the four ACCOUNTS routes filtered by `subtypes` (/accounts=bank+credit, /capital,
-// /assets, /insurance). Create/edit + the full lifecycle ⋮ set (Edit · Duplicate · — · Archive/
-// Restore · Delete-if-empty, Story 4.2) are wired here. The value-history sparkline (Story 4.5) +
-// per-account currency (Story 4.4) are deliberately out of scope — the hero is the opening balance
-// for ledger-backed accounts, "—" for asset-like ones (their value comes from snapshots, Story 4.4).
+// /assets, /insurance). Create/edit + the full lifecycle ⋮ set (Edit · Duplicate · Add value
+// snapshot · — · Archive/Restore · Delete-if-empty) are wired here. The hero is the computed
+// current value in the account's NATIVE currency (Story 4.4); the value-history sparkline (Story
+// 4.5) and the Native/any-currency conversion toggle (Story 4.9) are out of scope.
 
 interface AccountsListProps {
   subtypes: AccountType[]
@@ -39,6 +42,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
   const [editing, setEditing] = useState<Account | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Account | null>(null)
   const [confirmArchive, setConfirmArchive] = useState<Account | null>(null)
+  const [snapshotFor, setSnapshotFor] = useState<Account | null>(null)
   // The bank/credit-card type filter (UX §1.2) — only meaningful on the multi-subtype /accounts route.
   const [typeFilter, setTypeFilter] = useState<'all' | AccountType>('all')
   const pushToast = useAlertStore((s) => s.pushToast)
@@ -49,10 +53,26 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
     queryKey: ['currencies'],
     queryFn: async () => (await api.get<EntityListResponse<Currency>>('/api/currencies')).data,
   })
-  const currencies = currencyQuery.data?.items ?? []
+  const currencies = useMemo(() => currencyQuery.data?.items ?? [], [currencyQuery.data])
   const base = currencies.find((c) => c.is_base)
   const baseCurrency = base?.code ?? 'SGD'
-  const baseSymbol = base?.symbol ?? baseCurrency
+  // The modal currency picker + snapshot value picker offer the household's display-active codes,
+  // with the base always available as the default (Story 4.4).
+  const displayCurrencyCodes = useMemo(() => {
+    const codes = currencies.filter((c) => c.is_display_active).map((c) => c.code)
+    return codes.includes(baseCurrency) ? codes : [baseCurrency, ...codes]
+  }, [currencies, baseCurrency])
+
+  // Household members — resolves owner_ids → avatar/name for the card's stacked-owner cluster
+  // (and the modal's picker, via the same query key — TanStack dedupes). Any member, read-only.
+  const membersQuery = useQuery({
+    queryKey: ['household', 'members'],
+    queryFn: async () => (await api.get<ListResponse<Member>>('/api/household/members')).data,
+  })
+  const memberById = useMemo(
+    () => new Map((membersQuery.data?.items ?? []).map((m) => [m.personId, m])),
+    [membersQuery.data],
+  )
 
   const subtypeSet = useMemo(() => new Set(subtypes), [subtypes])
   const q = search.trim().toLowerCase()
@@ -90,22 +110,75 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
     setModalOpen(true)
   }
 
-  const handleSubmit = async (payload: Record<string, unknown>, id: string | null) => {
+  const sameSet = (a: string[], b: string[]) =>
+    a.length === b.length && a.every((x) => b.includes(x))
+
+  const handleSubmit = async (
+    payload: Record<string, unknown>,
+    id: string | null,
+    ownerIds: string[],
+  ) => {
     try {
-      if (id) await manager.update(id, payload)
-      else await manager.create(payload)
+      if (id) {
+        await manager.update(id, payload)
+        // Owners aren't an `accounts` column — apply them via the dedicated PUT, only on a real diff.
+        if (!sameSet(editing?.owner_ids ?? [], ownerIds)) {
+          await api.put(`/api/accounts/${id}/owners`, { owner_ids: ownerIds })
+          await manager.refetch()
+        }
+      } else {
+        // Create folds owner_ids into the single POST (atomic — no created-but-ownerless window).
+        await manager.create({ ...payload, owner_ids: ownerIds })
+      }
       setModalOpen(false)
     } catch (err) {
       toastError(err, 'Could not save the account.')
     }
   }
 
+  // Stacked owner avatars (UX §2.1) — only on MULTI-owner accounts (avatars communicate sharing).
+  // ponytail: shows up to 3 (2 + a +N chip when more); households are small so overflow is rare.
+  const ownersSlot = (a: Account) => {
+    if (a.owner_ids.length <= 1) return undefined
+    const MAX = 3
+    const showCount = a.owner_ids.length > MAX ? MAX - 1 : a.owner_ids.length
+    const shown = a.owner_ids.slice(0, showCount)
+    const overflow = a.owner_ids.length - shown.length
+    return (
+      <span className="flex items-center">
+        {shown.map((id, i) => {
+          const m = memberById.get(id)
+          const name = m ? (m.displayName ?? m.email) : id
+          return (
+            <Avatar
+              key={id}
+              src={m?.pictureUrl ?? undefined}
+              name={name}
+              colour={m?.colour ?? undefined}
+              size={20}
+              className={`ring-2 ring-surface ${i > 0 ? '-ml-2xs' : ''}`}
+            />
+          )
+        })}
+        {overflow > 0 && (
+          <span className="-ml-2xs flex size-5 items-center justify-center rounded-full bg-surface-active text-2xs text-text-secondary ring-2 ring-surface">
+            +{overflow}
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  // The computed current value in its own NATIVE currency (Story 4.4) — no base/display conversion
+  // (that is the Story 4.9 toggle). `null` → '—'.
   const heroFor = (a: Account) => {
-    if (LEDGER_BACKED.has(a.account_type) && 'opening_balance' in a && a.opening_balance != null) {
-      const n = Number(a.opening_balance)
-      return `${baseSymbol} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    }
-    return '—'
+    if (a.current_value == null) return '—'
+    const symbol =
+      currencies.find((c) => c.code === a.current_value_currency)?.symbol ??
+      a.current_value_currency ??
+      ''
+    const n = Number(a.current_value)
+    return `${symbol} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   // The adaptive §8.1 ⋮ set: Edit · Duplicate · — · Archive/Restore · Delete-if-empty. Archive ↔
@@ -118,6 +191,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       onClick: () =>
         runAction(() => manager.duplicate(a.id), 'Could not duplicate the account.', 'Account duplicated'),
     },
+    { label: 'Add value snapshot', icon: LineChart, onClick: () => setSnapshotFor(a) },
     { divider: true },
     a.status === 'archived'
       ? {
@@ -183,7 +257,8 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
             icon={<Icon icon={ACCOUNT_TYPE_ICON[a.account_type]} size={18} />}
             name={a.name}
             hero={heroFor(a)}
-            meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${baseCurrency}`}
+            meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${a.currency}`}
+            owners={ownersSlot(a)}
             menuItems={rowMenu(a)}
             onClick={() => openEdit(a)}
           />
@@ -195,7 +270,16 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
         onClose={() => setModalOpen(false)}
         editing={editing}
         baseCurrency={baseCurrency}
+        currencyOptions={displayCurrencyCodes}
         onSubmit={handleSubmit}
+      />
+
+      <AccountSnapshotModal
+        open={snapshotFor !== null}
+        onClose={() => setSnapshotFor(null)}
+        account={snapshotFor}
+        currencyOptions={displayCurrencyCodes}
+        onError={(err) => toastError(err, 'Could not save the snapshot.')}
       />
 
       <ConfirmationDialog

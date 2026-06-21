@@ -56,6 +56,7 @@ import { CategoryTree } from '../components/category/CategoryTree'
 import { CategoryDefaultsPrompt } from '../components/category/CategoryDefaultsPrompt'
 import type { Category } from '../types/category'
 import { useMultiSelect } from '../hooks/useMultiSelect'
+import { TIMEZONE_OPTIONS } from '../lib/timezones'
 import { useAlertStore } from '../stores/alertStore'
 import { useThemeStore } from '../stores/themeStore'
 import type { DensityId } from '../theme/palettes'
@@ -128,6 +129,7 @@ export function DesignSystem() {
   const [checkboxChecked, setCheckboxChecked] = useState(false)
   const [toggleChecked, setToggleChecked] = useState(false)
   const [dropdownValue, setDropdownValue] = useState('a')
+  const [searchableValue, setSearchableValue] = useState('')
   const [segmentedValue, setSegmentedValue] = useState('all')
 
   // Overlay state
@@ -781,6 +783,9 @@ export function DesignSystem() {
           <div className="flex flex-col gap-density max-w-input">
             <Dropdown value={dropdownValue} options={dropdownOptions} onChange={setDropdownValue} placeholder="Select…" />
             <Dropdown value="" options={dropdownOptions} onChange={() => {}} disabled placeholder="Disabled" />
+            {/* searchable variant (§7) — filter input + filtered roving list over a long option set
+                (the IANA timezone list). Same themed panel + picker ring as the base Dropdown. */}
+            <Dropdown searchable value={searchableValue} options={TIMEZONE_OPTIONS} onChange={setSearchableValue} placeholder="Searchable — type to filter…" />
           </div>
         </section>
 

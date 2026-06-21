@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleDollarSign, Pencil, Trash2, MoreVertical } from 'lucide-react'
 import { EntityPage, EntityModal } from '../components/entity'
@@ -9,6 +9,7 @@ import { Badge } from '../components/primitives/Badge'
 import { ContextMenu } from '../components/primitives/ContextMenu'
 import type { ContextMenuEntry } from '../components/primitives'
 import { ColourPicker } from '../components/primitives/ColourPicker'
+import { Dropdown } from '../components/primitives/Dropdown'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { useAlertStore } from '../stores/alertStore'
@@ -34,7 +35,6 @@ import {
 // switcher (Story 9.7) are deliberately out of scope.
 
 const CODE_RE = /^[A-Z]{3}$/
-const CODE_DATALIST_ID = 'iso-currency-codes'
 
 interface FormState {
   id: string | null
@@ -67,6 +67,18 @@ export function Currencies() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<Currency | null>(null)
   const pushToast = useAlertStore((s) => s.pushToast)
+
+  // ISO-4217 options for the searchable code picker — value = code, label = "USD — US Dollar",
+  // searchText lets typing either the code or the name filter. Derived from the runtime `Intl`.
+  const codeOptions = useMemo(
+    () =>
+      isoCurrencyCodes().map((code) => ({
+        value: code,
+        label: `${code} — ${currencyName(code)}`,
+        searchText: `${code} ${currencyName(code)}`,
+      })),
+    [],
+  )
 
   const query = useQuery({
     queryKey: ['currencies'],
@@ -338,13 +350,6 @@ export function Currencies() {
         </div>
       </EntityPage>
 
-      {/* Native ISO-4217 typeahead source — no combobox lib (ponytail). */}
-      <datalist id={CODE_DATALIST_ID}>
-        {isoCurrencyCodes().map((code) => (
-          <option key={code} value={code} />
-        ))}
-      </datalist>
-
       <EntityModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -357,14 +362,16 @@ export function Currencies() {
           <Label htmlFor="cur-code" required>
             Code
           </Label>
-          <Input
+          {/* Searchable Dropdown over the runtime ISO-4217 list (§7 variant) — matches the app's other
+              pickers, not a native <datalist>. Read-only on edit: the code is the row's identity. */}
+          <Dropdown
             id="cur-code"
-            list={CODE_DATALIST_ID}
+            searchable
             value={form.code}
+            options={codeOptions}
             disabled={form.id !== null}
-            onChange={(e) => onCodeChange(e.target.value)}
-            placeholder="e.g. USD"
-            maxLength={3}
+            onChange={onCodeChange}
+            placeholder="Search ISO 4217…"
           />
         </div>
 

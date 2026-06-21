@@ -996,11 +996,16 @@ created_at, updated_at`. Reserved (not MVP): `plan_tier, billing_ref, expires_at
 ### 3.5 Accounts
 
 **`accounts`** (BaseEntity, **STI**, discriminator `account_type` ∈
-`bank|credit_card|capital|asset|insurance`). **No `MonetaryValueMixin`** (§3.2): an account has
-no single amount — its value is the `opening_balance`/`opening_balance_date` ledger anchor plus
-the `account_snapshots` series (asset-like current value = latest snapshot, §3.11).
+`bank|credit_card|capital|asset|insurance`). **No `MonetaryValueMixin`** (§3.2) — meaning an
+account stores **no current value** (it is computed: asset-like = latest snapshot; ledger-backed =
+`opening_balance` + ledger, §3.11). An account **is** denominated in a native **`currency`**
+(ISO 4217 `String(3)`, NOT NULL) — its static denomination, chosen at create (defaults to the
+household base). `opening_balance` is expressed in `currency`; `account_snapshots` default to it.
+Values are **stored native**; conversion to the household base or a person's `display_currency`
+is **display-only** (§3.11) via the `currency_mode` (`native` | a chosen currency) + the topbar
+display-currency picker (§8.4 / UX §1.1) — never a stored base-currency source of truth.
 
-*Shared columns:* `name, account_type, institution, notes`,
+*Shared columns:* `name, account_type, currency (ISO 4217, NOT NULL — native denomination), institution, notes`,
 `colour` (hex; per-instance brand/identity colour, default = entity-type colour),
 `vivid` (bool, def false; per-instance full-saturation fill opt-in, FR-SYS-016 / UX §8.2 — added by Story 4.1).
 *Reserved, post-MVP:* `brand_image_ref` (logo / card art).
@@ -1346,6 +1351,17 @@ builtins or globals. Guards: a max node-count and an exponent cap on `**` stop e
 parser for live preview, but **server evaluation is authoritative** — the client never submits a
 result to be trusted.
 
+> **OPEN (define before Epic 7 dev) — variable-resolution (binding) contract.** The evaluator
+> above is settled; what is **not** yet specified is *where each declared variable's value comes
+> from*. `variables` (JSON) declares names + defaults, but a **binding layer** must, per
+> `applies_to` type, map each `Name` to its source — account column, the in-flight transaction,
+> a formula default / per-account override, a **computed temporal** value (`years`/`t`/`n` relative
+> to an "as-of" reference date — today vs snapshot date vs event date), or a **cross-entity
+> aggregate** (`Σ account values`, `actual_spent`, computed via services §3.10/§3.11). It must also
+> fix the **currency** of each input/output (ties to the two-hop FX + tax money model, §3.2 / Epic 5).
+> This contract is a prerequisite for **both** the runtime evaluator (Story 7.2) and the editor's
+> per-type "unknown variable / did you mean" validation (Story 7.3). See epics.md Epic 7 prerequisite.
+
 ### 3.9 System tables
 
 **`alerts`** (BaseEntity) — `alert_type, title, body, entity_type(null),
@@ -1443,6 +1459,13 @@ underlying Transfers/events, never on these routes.
    `account_snapshot` per Bank/CreditCard account each month (FR-SYS-006); ledger-backed
    current balance = opening balance + ledger, anchored/corrected by manual snapshots;
    asset-like current value = latest snapshot. (§3.5, §3.6)
+4. **Account native currency (canonical-native, display-only conversion).** Accounts carry a
+   native `currency` (ISO 4217, NOT NULL). `opening_balance` and `account_snapshots.value` are
+   stored in it. Conversion to the household base or a person's `display_currency` is computed
+   **at display/read time** (the `currency_mode` toggle — `native` | a chosen currency, §8.4 /
+   UX §1.1) using `Currency.rate_to_base` — nothing is stored as a base-currency source of truth.
+   `account_snapshots.value_base` is a **non-canonical cached convenience** for backend rollups
+   (written at snapshot time via `rate_to_base`), not the value of record. (§3.5)
 
 ### 3.12 Migration plan (Alembic)
 

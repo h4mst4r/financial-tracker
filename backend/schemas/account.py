@@ -41,10 +41,18 @@ class _AccountCreateShared(BaseModel):
     """The columns every subtype's Create carries (the §3.5 shared block)."""
 
     name: str
+    # The account's native currency (ISO 4217, required) — validated against the household's
+    # configured currencies in the service (Story 4.4, AC1).
+    currency: str
     institution: str | None = None
     notes: str | None = None
     colour: str | None = None
     vivid: bool = False
+    # The account's owners (Story 4.3). Optional: omitted/None → the creator becomes the sole owner
+    # (the Story 4.1 default); when given (non-empty, all household members) the account is created
+    # owned by exactly that set. Not an `accounts` column — the service consumes it then builds the
+    # row from the rest, so `model_dump(exclude={"owner_ids"})` is used.
+    owner_ids: list[str] | None = None
 
     @field_validator("colour")
     @classmethod
@@ -129,6 +137,8 @@ class AccountUpdate(BaseModel):
 
     # Shared
     name: str | None = None
+    # Native currency — editable ONLY while the account has no history (service-gated, AC1).
+    currency: str | None = None
     institution: str | None = None
     notes: str | None = None
     colour: str | None = None
@@ -187,11 +197,18 @@ class _AccountResponseShared(BaseModel):
 
     id: str
     name: str
+    # Native currency (ARCH §3.5) — read from the ORM column.
+    currency: str
     institution: str | None
     notes: str | None
     colour: str | None
     vivid: bool
     status: str
+    # Computed current value + its currency (no ORM column — ARCH §3.11 #1). Attached by the router
+    # from `current_values_for`/`single_current_value`; `None` when an asset-like account has no
+    # snapshot. The currency is NOT always the account's native code (a snapshot may be in another).
+    current_value: Decimal | None = None
+    current_value_currency: str | None = None
     created_by: str
     updated_at: datetime
     # The account's owner person-ids (≥1; the creator on create — Story 4.3 adds more). Not an ORM
@@ -284,16 +301,62 @@ def response_for(
     *,
     can_delete: bool = True,
     delete_blocked_reason: str | None = None,
+    current_value: Decimal | None = None,
+    current_value_currency: str | None = None,
 ) -> _AccountResponseShared:
-    """Serialize one ORM `Account` to its subtype Response (ARCH §4.5), attaching `owner_ids` + the
-    computed hard-delete eligibility (UX §8.1, Story 4.2)."""
+    """Serialize one ORM `Account` to its subtype Response (ARCH §4.5), attaching `owner_ids`, the
+    computed hard-delete eligibility (UX §8.1, Story 4.2), and the computed current value + currency
+    (Story 4.4). `currency` rides on the ORM column, so `model_validate` carries it over."""
     resp = _RESPONSE_BY_TYPE[account.account_type].model_validate(account)
     resp.owner_ids = owner_ids
     resp.can_delete = can_delete
     resp.delete_blocked_reason = delete_blocked_reason
+    resp.current_value = current_value
+    resp.current_value_currency = current_value_currency
     return resp
 
 
 class AccountListOut(BaseModel):
     items: list[AccountResponse]
+    total: int
+
+
+class AccountOwnersUpdate(BaseModel):
+    """Body of `PUT /api/accounts/{id}/owners` (Story 4.3) — the full desired owner set (replace
+    semantics). Non-emptiness + household-membership are enforced in the service for a uniform
+    RFC-7807 400 (not a Pydantic `min_length`), so the message matches the create path."""
+
+    owner_ids: list[str]
+
+
+# ─── Value snapshots (Story 4.4, ARCH §3.5) ───
+
+
+class AccountSnapshotCreate(BaseModel):
+    """Body of `POST /api/accounts/{id}/snapshots`. `source` is restricted to the three user labels
+    (the system-only `formula|computed|import` are rejected by Pydantic → 422)."""
+
+    snapshot_date: date
+    value: Decimal
+    currency: str
+    source: Literal["manual", "reconciliation", "appraisal"]
+    note: str | None = None
+
+
+class AccountSnapshotResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    account_id: str
+    snapshot_date: date
+    value: Decimal
+    currency: str
+    value_base: Decimal
+    source: str
+    note: str | None
+    created_at: datetime
+
+
+class AccountSnapshotListOut(BaseModel):
+    items: list[AccountSnapshotResponse]
     total: int

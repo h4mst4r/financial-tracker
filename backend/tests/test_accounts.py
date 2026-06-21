@@ -25,6 +25,7 @@ from backend.database import get_db
 from backend.main import create_app
 from backend.models.account import Account, AccountOwner, AccountSnapshot
 from backend.models.base import Base
+from backend.models.currency import Currency
 from backend.models.event import FinancialEvent
 from backend.models.identity import Household, Person
 from backend.models.system import AuditLog
@@ -104,8 +105,41 @@ async def _seed_household(factory, *, role: str = "admin") -> tuple[str, str]:
                 google_sub=f"sub-{uuid4()}",
             )
         )
+        # The base currency row (Story 2.4c seeds this for real households) — accounts validate
+        # their native currency against the household's configured currencies (Story 4.4).
+        db.add(
+            Currency(
+                household_id=hh_id,
+                code="SGD",
+                name="Singapore Dollar",
+                symbol="S$",
+                is_base=True,
+                rate_to_base=Decimal("1.0"),
+            )
+        )
         await db.commit()
     return person_id, hh_id
+
+
+async def _seed_currency(
+    factory, hh_id: str, code: str, *, rate: str = "1.0"
+) -> str:
+    """Add a non-base currency to `hh_id` (for the native-currency / FX snapshot tests)."""
+    cid = str(uuid4())
+    async with factory() as db:
+        db.add(
+            Currency(
+                id=cid,
+                household_id=hh_id,
+                code=code,
+                name=code,
+                symbol=code,
+                is_base=False,
+                rate_to_base=Decimal(rate),
+            )
+        )
+        await db.commit()
+    return cid
 
 
 async def _seed_session(factory, person_id: str) -> tuple[str, str]:
@@ -126,10 +160,18 @@ def _bank(**over) -> dict:
     return {
         "account_type": "bank",
         "name": "DBS Multiplier",
+        "currency": "SGD",
         "opening_balance": "12840.00",
         "opening_balance_date": "2026-06-01",
         **over,
     }
+
+
+def _snap(
+    value: str, *, on: str = "2026-06-14", currency: str = "SGD", source: str = "manual"
+) -> dict:
+    """An `account_snapshots` POST body (Story 4.4)."""
+    return {"snapshot_date": on, "value": value, "currency": currency, "source": source}
 
 
 # ── Create per subtype ──
@@ -173,7 +215,8 @@ async def test_create_asset_like_no_opening_balance(monkeypatch):
             ("insurance", {"insurer": "Prudential", "policy_type": "life"}),
         ):
             resp = client.post(
-                "/api/accounts", json={"account_type": atype, "name": f"{atype} acct", **extra}
+                "/api/accounts",
+                json={"account_type": atype, "name": f"{atype} acct", "currency": "SGD", **extra},
             )
             assert resp.status_code == 201, resp.text
             assert resp.json()["account_type"] == atype
@@ -217,7 +260,12 @@ async def test_list_discriminated_union(monkeypatch):
         client.post("/api/accounts", json=_bank())
         client.post(
             "/api/accounts",
-            json={"account_type": "capital", "name": "Stocks", "cost_basis": "5000"},
+            json={
+                "account_type": "capital",
+                "name": "Stocks",
+                "currency": "SGD",
+                "cost_basis": "5000",
+            },
         )
 
         body = client.get("/api/accounts").json()
@@ -243,7 +291,8 @@ async def test_list_account_type_filter(monkeypatch):
 
         client.post("/api/accounts", json=_bank())
         client.post(
-            "/api/accounts", json={"account_type": "capital", "name": "Stocks"}
+            "/api/accounts",
+            json={"account_type": "capital", "name": "Stocks", "currency": "SGD"},
         )
 
         body = client.get("/api/accounts?account_type=capital").json()
@@ -629,5 +678,469 @@ async def test_lifecycle_cross_household_404(monkeypatch):
         assert client_b.post(f"/api/accounts/{acct_id}/archive").status_code == 404
         assert client_b.post(f"/api/accounts/{acct_id}/duplicate").status_code == 404
         assert client_b.delete(f"/api/accounts/{acct_id}").status_code == 404
+    finally:
+        await engine.dispose()
+
+
+# ── Multiple owners (Story 4.3) ──
+
+
+async def _add_member(factory, hh_id: str, *, role: str = "member") -> str:
+    """Insert another Person into `hh_id`, returning their id."""
+    pid = str(uuid4())
+    async with factory() as db:
+        db.add(
+            Person(
+                id=pid,
+                household_id=hh_id,
+                email=f"{uuid4()}@example.com",
+                display_name="Member",
+                role=role,
+                google_sub=f"sub-{uuid4()}",
+            )
+        )
+        await db.commit()
+    return pid
+
+
+async def _owner_rows(factory, account_id: str) -> list[AccountOwner]:
+    async with factory() as db:
+        return (
+            (await db.execute(select(AccountOwner).where(AccountOwner.account_id == account_id)))
+            .scalars()
+            .all()
+        )
+
+
+async def test_create_with_owner_ids_creator_primary(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        alex = await _add_member(factory, hh_id)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        body = client.post(
+            "/api/accounts", json=_bank(owner_ids=[person_id, alex])
+        ).json()
+        assert set(body["owner_ids"]) == {person_id, alex}
+        rows = await _owner_rows(factory, body["id"])
+        assert len(rows) == 2
+        primary = [o.person_id for o in rows if o.is_primary]
+        assert primary == [person_id]  # creator is primary when present in the set
+    finally:
+        await engine.dispose()
+
+
+async def test_create_without_owner_ids_creator_sole_owner(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        body = client.post("/api/accounts", json=_bank()).json()
+        assert body["owner_ids"] == [person_id]
+    finally:
+        await engine.dispose()
+
+
+async def test_create_owner_ids_without_creator_first_is_primary(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        alex = await _add_member(factory, hh_id)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        body = client.post("/api/accounts", json=_bank(owner_ids=[alex])).json()
+        assert body["owner_ids"] == [alex]
+        rows = await _owner_rows(factory, body["id"])
+        assert [o.person_id for o in rows if o.is_primary] == [alex]
+    finally:
+        await engine.dispose()
+
+
+async def test_put_owners_add_then_remove_reassigns_primary(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        alex = await _add_member(factory, hh_id)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+
+        # Add alex → two owners, ben (creator) stays primary.
+        resp = client.put(f"/api/accounts/{acct_id}/owners", json={"owner_ids": [person_id, alex]})
+        assert resp.status_code == 200
+        assert set(resp.json()["owner_ids"]) == {person_id, alex}
+        rows = await _owner_rows(factory, acct_id)
+        assert [o.person_id for o in rows if o.is_primary] == [person_id]
+
+        # Remove ben → alex is the lone owner and the new primary.
+        resp = client.put(f"/api/accounts/{acct_id}/owners", json={"owner_ids": [alex]})
+        assert resp.status_code == 200
+        assert resp.json()["owner_ids"] == [alex]
+        rows = await _owner_rows(factory, acct_id)
+        assert len(rows) == 1
+        assert rows[0].person_id == alex
+        assert rows[0].is_primary is True
+    finally:
+        await engine.dispose()
+
+
+async def test_put_owners_empty_400_untouched(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+        resp = client.put(f"/api/accounts/{acct_id}/owners", json={"owner_ids": []})
+        assert resp.status_code == 400
+        assert resp.json()["status"] == 400
+        # The original owner row survives untouched.
+        rows = await _owner_rows(factory, acct_id)
+        assert [o.person_id for o in rows] == [person_id]
+    finally:
+        await engine.dispose()
+
+
+async def test_put_owners_non_member_400_untouched(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # A person in a DIFFERENT household.
+        other_id, _ = await _seed_household(factory)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+        resp = client.put(
+            f"/api/accounts/{acct_id}/owners", json={"owner_ids": [person_id, other_id]}
+        )
+        assert resp.status_code == 400
+        rows = await _owner_rows(factory, acct_id)
+        assert [o.person_id for o in rows] == [person_id]  # untouched
+    finally:
+        await engine.dispose()
+
+
+async def test_put_owners_member_403_and_cross_household_404(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        admin_id, hh_id = await _seed_household(factory)
+        sid_a, csrf_a = await _seed_session(factory, admin_id)
+        client_a = _client_with_db(factory, monkeypatch)
+        _auth(client_a, sid_a, csrf_a)
+        acct_id = client_a.post("/api/accounts", json=_bank()).json()["id"]
+
+        # Plain member of the SAME household → 403.
+        member_id = await _add_member(factory, hh_id, role="member")
+        sid_m, csrf_m = await _seed_session(factory, member_id)
+        client_m = _client_with_db(factory, monkeypatch)
+        _auth(client_m, sid_m, csrf_m)
+        assert (
+            client_m.put(
+                f"/api/accounts/{acct_id}/owners", json={"owner_ids": [admin_id]}
+            ).status_code
+            == 403
+        )
+
+        # Admin of ANOTHER household → 404 (cross-household scope).
+        other_admin, _ = await _seed_household(factory)
+        sid_b, csrf_b = await _seed_session(factory, other_admin)
+        client_b = _client_with_db(factory, monkeypatch)
+        _auth(client_b, sid_b, csrf_b)
+        assert (
+            client_b.put(
+                f"/api/accounts/{acct_id}/owners", json={"owner_ids": [other_admin]}
+            ).status_code
+            == 404
+        )
+    finally:
+        await engine.dispose()
+
+
+async def test_put_owners_not_audited(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        alex = await _add_member(factory, hh_id)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+
+        async def _total_audit() -> int:
+            async with factory() as db:
+                return (
+                    await db.execute(
+                        select(func.count())
+                        .select_from(AuditLog)
+                        .where(AuditLog.entity_id == acct_id)
+                    )
+                ).scalar_one()
+
+        before = await _total_audit()
+        client.put(f"/api/accounts/{acct_id}/owners", json={"owner_ids": [person_id, alex]})
+        assert await _total_audit() == before  # owner changes are not audited
+    finally:
+        await engine.dispose()
+
+
+# ── Native currency + value snapshots (Story 4.4) ──
+
+
+async def test_create_requires_valid_currency(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "NZD")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # A configured currency → 201, echoed on the response.
+        resp = client.post("/api/accounts", json=_bank(currency="NZD"))
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["currency"] == "NZD"
+
+        # Missing currency → 422 (required field).
+        no_ccy = _bank()
+        del no_ccy["currency"]
+        assert client.post("/api/accounts", json=no_ccy).status_code == 422
+
+        # Unconfigured currency → 400 Unknown currency.
+        resp = client.post("/api/accounts", json=_bank(currency="XYZ"))
+        assert resp.status_code == 400
+        assert resp.json()["title"] == "Unknown currency"
+    finally:
+        await engine.dispose()
+
+
+async def test_currency_edit_gate(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "NZD")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post("/api/accounts", json=_bank()).json()["id"]
+
+        # No history → currency is editable.
+        resp = client.patch(f"/api/accounts/{acct_id}", json={"currency": "NZD"})
+        assert resp.status_code == 200
+        assert resp.json()["currency"] == "NZD"
+
+        # Same-value no-op is always allowed.
+        assert client.patch(f"/api/accounts/{acct_id}", json={"currency": "NZD"}).status_code == 200
+
+        # Unconfigured currency → 400 Unknown currency.
+        resp = client.patch(f"/api/accounts/{acct_id}", json={"currency": "XYZ"})
+        assert resp.status_code == 400
+        assert resp.json()["title"] == "Unknown currency"
+
+        # Add a snapshot → now it has history → currency is locked.
+        client.post(
+            f"/api/accounts/{acct_id}/snapshots",
+            json=_snap("100", on="2026-06-01", currency="NZD"),
+        )
+        resp = client.patch(f"/api/accounts/{acct_id}", json={"currency": "SGD"})
+        assert resp.status_code == 400
+        assert resp.json()["title"] == "Currency locked"
+        assert client.get(f"/api/accounts/{acct_id}").json()["currency"] == "NZD"  # unchanged
+    finally:
+        await engine.dispose()
+
+
+async def test_delete_currency_blocked_when_account_denominated(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        nzd_id = await _seed_currency(factory, hh_id, "NZD")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        client.post("/api/accounts", json=_bank(currency="NZD"))
+        resp = client.delete(f"/api/currencies/{nzd_id}")
+        assert resp.status_code == 409
+        assert resp.json()["type"] == "has_dependencies"
+        # The currency survives.
+        assert any(c["code"] == "NZD" for c in client.get("/api/currencies").json()["items"])
+    finally:
+        await engine.dispose()
+
+
+async def test_snapshot_resolves_current_value(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # Asset-like: no snapshot → current_value null; after a snapshot → that value + currency.
+        cap_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        assert client.get(f"/api/accounts/{cap_id}").json()["current_value"] is None
+
+        client.post(
+            f"/api/accounts/{cap_id}/snapshots",
+            json=_snap("5000", on="2026-06-10", source="appraisal"),
+        )
+        body = client.get(f"/api/accounts/{cap_id}").json()
+        assert Decimal(body["current_value"]) == Decimal("5000")
+        assert body["current_value_currency"] == "SGD"
+
+        # Ledger-backed: no snapshot → the opening anchor; after a snapshot → the snapshot.
+        bank_id = client.post("/api/accounts", json=_bank()).json()["id"]
+        body = client.get(f"/api/accounts/{bank_id}").json()
+        assert Decimal(body["current_value"]) == Decimal("12840.00")
+        assert body["current_value_currency"] == "SGD"
+
+        client.post(
+            f"/api/accounts/{bank_id}/snapshots",
+            json=_snap("13000", on="2026-06-11", source="reconciliation"),
+        )
+        body = client.get(f"/api/accounts/{bank_id}").json()
+        assert Decimal(body["current_value"]) == Decimal("13000")
+    finally:
+        await engine.dispose()
+
+
+async def test_snapshot_non_account_currency_value_base_and_unknown_400(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+
+        # A snapshot in a non-base currency caches value_base = value × rate_to_base (4dp).
+        resp = client.post(
+            f"/api/accounts/{acct_id}/snapshots",
+            json=_snap("100", on="2026-06-12", currency="USD"),
+        )
+        assert resp.status_code == 201
+        assert Decimal(resp.json()["value_base"]) == Decimal("135.0000")
+
+        # Unknown currency → 400 and no row written.
+        resp = client.post(
+            f"/api/accounts/{acct_id}/snapshots",
+            json=_snap("1", on="2026-06-12", currency="XYZ"),
+        )
+        assert resp.status_code == 400
+        async with factory() as db:
+            count = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(AccountSnapshot)
+                    .where(AccountSnapshot.account_id == acct_id)
+                )
+            ).scalar_one()
+        assert count == 1  # only the USD one
+    finally:
+        await engine.dispose()
+
+
+async def test_snapshot_same_date_tiebreak_latest_written(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        for val in ("100", "200"):
+            client.post(
+                f"/api/accounts/{acct_id}/snapshots", json=_snap(val, on="2026-06-13")
+            )
+        # Same date → the latest-written (200) wins current value.
+        current = client.get(f"/api/accounts/{acct_id}").json()["current_value"]
+        assert Decimal(current) == Decimal("200")
+        # list_snapshots returns it first (newest-first).
+        items = client.get(f"/api/accounts/{acct_id}/snapshots").json()["items"]
+        assert items[0]["value"] in ("200", "200.0000")
+        assert Decimal(items[0]["value"]) == Decimal("200")
+    finally:
+        await engine.dispose()
+
+
+async def test_snapshot_source_guard_and_user_sources(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+
+        # A system source → 422 (Pydantic Literal).
+        resp = client.post(
+            f"/api/accounts/{acct_id}/snapshots", json=_snap("1", source="formula")
+        )
+        assert resp.status_code == 422
+
+        # The three user sources are all accepted.
+        for src in ("manual", "reconciliation", "appraisal"):
+            resp = client.post(
+                f"/api/accounts/{acct_id}/snapshots", json=_snap("1", source=src)
+            )
+            assert resp.status_code == 201, resp.text
+    finally:
+        await engine.dispose()
+
+
+async def test_snapshot_member_403_and_cross_household_404(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        admin_id, hh_id = await _seed_household(factory)
+        sid_a, csrf_a = await _seed_session(factory, admin_id)
+        client_a = _client_with_db(factory, monkeypatch)
+        _auth(client_a, sid_a, csrf_a)
+        acct_id = client_a.post("/api/accounts", json=_bank()).json()["id"]
+
+        snap = _snap("1", on="2026-06-15")
+
+        # Plain member of the same household → 403 on POST.
+        member_id = await _add_member(factory, hh_id, role="member")
+        sid_m, csrf_m = await _seed_session(factory, member_id)
+        client_m = _client_with_db(factory, monkeypatch)
+        _auth(client_m, sid_m, csrf_m)
+        assert client_m.post(f"/api/accounts/{acct_id}/snapshots", json=snap).status_code == 403
+
+        # Admin of another household → 404 on POST + GET.
+        other_admin, _ = await _seed_household(factory)
+        sid_b, csrf_b = await _seed_session(factory, other_admin)
+        client_b = _client_with_db(factory, monkeypatch)
+        _auth(client_b, sid_b, csrf_b)
+        assert client_b.post(f"/api/accounts/{acct_id}/snapshots", json=snap).status_code == 404
+        assert client_b.get(f"/api/accounts/{acct_id}/snapshots").status_code == 404
     finally:
         await engine.dispose()

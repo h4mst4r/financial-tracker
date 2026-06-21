@@ -349,7 +349,8 @@ Per-tenant white-label (and a server-driven config) is post-MVP.
 
 **Topbar** (persistent across authenticated screens):
 - **Left — view context (grouped):** a **Household / Individual** segmented control **+ a
-  display-currency picker**, together (both scope *what you're looking at*). In **Individual**
+  display-currency picker** (**Native** or any display-active currency — converts every figure
+  app-wide, display-only; §8.4), together (both scope *what you're looking at*). In **Individual**
   mode a **member picker** chooses whose finances to view — **a Member may select only
   themselves; an Admin/Owner may select ANY household member** (the dropdown shows only the
   permitted entries). Persists via `Person.default_view` (FR-P-006); the chosen member sets the
@@ -408,6 +409,10 @@ renders its instances through it.
   entity-type colour, §0.1). Contrast-aware text on vivid fills.
 - **Header row:** colour **icon chip** · **name** (flex) · **favourite star** · **⋮** context menu.
 - **Hero figure:** the primary value (balance / current value), **sans face** (§0.3), large.
+  Rendered in the **active display currency** (the topbar picker, §8.4): in a chosen currency the
+  native value is converted (display-only via `Currency.rate_to_base`); in **Native** mode it
+  shows in the account's own currency. The account's **native** currency code always appears in
+  the footer meta (so the denomination is never hidden).
 - **Value-history sparkline** (FR-A-015) — from `account_snapshots`. The mini-chart is
   **clickable** (with a hover "expand" affordance) and opens the **Visualization viewer**
   (§9, FR-V-012).
@@ -558,7 +563,7 @@ callback runs server-side and cannot prompt, so `_create_and_seed_household` see
 
 - Icon (`home-plus`, accent) · title "Set up your household" · body "We've created your household with
   sensible defaults — adjust them now or change later in Settings."
-- Fields: **household name** · **timezone**.
+- Fields: **household name** · **timezone** (the **searchable `Dropdown`**, §7 variant — over the IANA zone list, each label its GMT-offset form).
 - Actions (§4.2 convention): **Skip** (left, ghost — keeps the seeded defaults) / **Save** (right,
   primary).
 - **Save** persists via `PATCH /api/household` (architecture §2.8 owner-scoped) — name/timezone only.
@@ -590,7 +595,7 @@ Single column of personal preferences:
 
 ### 5.2 Management tab (the household)
 
-- **Household config** (owner-editable; **read-only + lock for others**): name · timezone ·
+- **Household config** (owner-editable; **read-only + lock for others**): name · timezone *(searchable `Dropdown`, §7)* ·
   **base currency** + recompute warning (FR-CU-005, Epic 3). *(Date format is not configurable — the UI
   uses a fixed `DD-MM-YYYY`, FR-V-010.)*
 - **Members:** avatar · name+email · role chip · status (an **archived** member stays listed, shown
@@ -753,7 +758,7 @@ Every UI element resolves to a library component; **every component appears on `
 > every component is built to match its bible prototype. `/design-system` mirrors the bible's section order
 > as the live inventory of what's built. CI guards token parity (`design-bible-parity.test.ts`).
 
-- **Primitives:** Button · Input · Label · Checkbox · Toggle · Dropdown · SegmentedControl ·
+- **Primitives:** Button · Input · Label · Checkbox · Toggle · Dropdown *(+ optional **searchable** mode — a filter text input at the top of the open panel for long option lists; typing filters the options, ↑/↓ move the roving highlight, ↵ selects, Esc closes; same themed panel + picker focus ring (§0.9) as the base Dropdown — used by the currency-code picker (§10) and the timezone picker (§4.5/§5.2). NOT a native `<datalist>`)* · SegmentedControl ·
   DatePicker · ColourPicker · EmojiIconPicker · Badge · Avatar · Card · Divider · Spinner ·
   Skeleton · ProgressBar · Tooltip · **ContextMenu** · **Modal** · Drawer · Toast · Accordion ·
   Table · TagInput *(transaction tags — assign + create + inline rename/recolour/archive/delete; §12.7)* ·
@@ -861,8 +866,16 @@ The topbar-left view scope (FR-P-006 / FR-V-009). Three controls read as **one g
   §0.1). **Permission-adaptive (FR-P-006):** an **Admin/Owner** sees **every household member**;
   a **Member** sees **only themselves** — the dropdown collapses to a single, non-interactive
   entry (no chevron) so the restriction is obvious, never a disabled mystery.
-- **Display-currency picker** — a **Dropdown** of the household's `is_display_active` currencies,
-  each a colour chip + code (§0.1). Sets the person's display currency for all converted figures.
+- **Display-currency picker** — a **Dropdown** offering **Native** (each figure in its own
+  account currency — no conversion) plus every household `is_display_active` currency, each a
+  colour chip + code (§0.1). A chosen currency converts **all** monetary figures to it
+  (display-only, via `Currency.rate_to_base`, ARCH §3.11 #4); **Native** shows each figure in its
+  own currency, with mixed-currency aggregate totals converted to the household base and marked
+  "mixed". **Default = Native** (card/figure heroes show their own currency; the bible reference
+  renders this). The selection persists per-person (`Person.display_currency`, with `native` a
+  distinct mode). Because accounts carry a **native currency** (ARCH §3.5), this picker is what makes
+  Native vs converted meaningful; the built-once control (Story 4.9) is consumed by Accounts, the
+  Dashboard, and the Transactions ledger.
 
 **Behaviour:** Mode persists to `Person.default_view` (`household | personal`); on login the app
 restores the last-used mode. Selecting a member sets the global `person_ids = [member.id]` filter
@@ -1055,8 +1068,9 @@ Currencies page's TanStack **refetch / window-focus** (FX refresh is the daily s
 there is **no manual in-app trigger**) — a **toast** confirms *"Exchange rates updated."* **+ Add currency** → modal (any ISO 4217). Base-currency *change* lives in
 Settings (owner; recompute warning).
 
-**Add/Edit currency modal (EntityModal, §8.2).** Fields: **Code** (ISO 4217 — a type-ahead over the
-runtime's currency list; **read-only when editing**, since the code is the row's identity) · **Symbol**
+**Add/Edit currency modal (EntityModal, §8.2).** Fields: **Code** (ISO 4217 — the **searchable `Dropdown`**
+(§7 variant) over the runtime's currency list, **not** a native `<datalist>`, so it matches the app's other
+pickers; **read-only when editing**, since the code is the row's identity) · **Symbol**
 · **Name** · **Colour** (ColourPicker + the per-instance **vivid** toggle, §8.2) · **FX fee (%)**
 (a non-base currency's conversion fee — entered and stored as a **percentage number**, e.g. `1.5` =
 1.5%, no ×100/÷100; shown **only when editing a non-base currency**, since the base has no FX fee and

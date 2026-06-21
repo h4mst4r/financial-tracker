@@ -266,9 +266,11 @@ new person defaults to `DD-MM-YYYY`.
 **FR-A-001 — Create Account**
 Any Admin or Owner may create an account of any type. Account type is selected from
 a picker; the form adapts to show the relevant fields for that subtype.
-*Acceptance:* Account created with at least one owner (the creator, by default);
-MonetaryValue block populated; status = `active`. Ledger-backed accounts (Bank, CreditCard)
-additionally require `opening_balance` + `opening_balance_date` (FR-A-008).
+*Acceptance:* Account created with at least one owner (the creator, by default); a **native
+`currency`** selected (ISO 4217; defaults to the household base); status = `active`. Ledger-backed
+accounts (Bank, CreditCard) additionally require `opening_balance` + `opening_balance_date`,
+denominated in the account's currency (FR-A-008). Values are stored native; base/display
+conversion is display-only (architecture §3.11).
 
 **FR-A-002 — Edit Account**
 Any Admin or Owner may edit any account's fields.
@@ -304,6 +306,8 @@ Any user may view a filtered list of all events linked to a specific account
 **FR-A-008 — Account Value Snapshots & History (all account types)**
 Every account records its value over time through `AccountSnapshot` records:
 `{snapshot_date, value, currency, source: manual|formula|reconciliation|appraisal|import|computed, note}`.
+`currency` defaults to the account's native currency; a snapshot may be entered in another currency
+(its `value` is in `currency`; `value_base` is a derived convenience, not the value of record).
 - **Ledger-backed accounts (Bank, CreditCard):** value is the running balance computed from
   linked events, anchored by a required `opening_balance` + `opening_balance_date`. Manual
   snapshots act as corrections/anchors that override the computed value from their date forward.

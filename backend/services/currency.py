@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
 from backend.db_utils import get_or_404
+from backend.models.account import Account
 from backend.models.currency import Currency, FxRateHistory
 from backend.models.event import FinancialEvent
 from backend.models.identity import Household
@@ -152,14 +153,24 @@ async def update_currency(
 
 async def delete_currency(db: AsyncSession, household_id: str, currency_id: str) -> None:
     """Hard-delete a non-base currency (AC 2). The **base** currency is fixed and non-removable
-    (400) — a load-bearing data-integrity guard (base anchors all `amount_base`). No dependency
-    scan: `financial_events.currency` is an ISO **code string**, not an FK to `currencies.id`, and
-    `fx_rate_history` (the only FK) has no rows until Story 3.7. No audit (config/technical)."""
+    (400). An in-use currency — one an account is denominated in (`accounts.currency`, a code, not
+    an FK) — is blocked (409 `has_dependencies`, Story 4.4) so deleting it can't orphan a name.
+    No audit (config/technical)."""
     obj = await get_or_404(db, Currency, currency_id, household_id=household_id)
     if obj.is_base:
         errors.bad_request(
             "Cannot delete base currency", "The base currency is fixed and cannot be removed"
         )
+    # ponytail: add accounts.currency to the in-use scan; don't build a new mechanism.
+    in_use = (
+        await db.execute(
+            select(Account.id)
+            .where(Account.household_id == household_id, Account.currency == obj.code)
+            .limit(1)
+        )
+    ).first()
+    if in_use is not None:
+        errors.has_dependencies("Currency", obj.code, referrers=["accounts"])
     await db.delete(obj)
     await db.flush()
     logger.info(

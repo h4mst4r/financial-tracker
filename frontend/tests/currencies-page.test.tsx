@@ -72,8 +72,9 @@ describe('Currencies page', () => {
     await screen.findByTestId('currency-row-SGD')
     fireEvent.click(screen.getByTestId('entity-page-new'))
 
-    const codeInput = await screen.findByLabelText(/Code/)
-    fireEvent.change(codeInput, { target: { value: 'usd' } })
+    // Code is a searchable Dropdown (§7 variant): open the panel, pick the option.
+    fireEvent.click(await screen.findByLabelText(/Code/))
+    fireEvent.click(screen.getByRole('option', { name: 'USD — US Dollar' }))
     // Name auto-filled from Intl (not the bare code).
     const nameInput = screen.getByLabelText(/Name/) as HTMLInputElement
     expect(nameInput.value.length).toBeGreaterThan(0)
@@ -94,8 +95,9 @@ describe('Currencies page', () => {
     fireEvent.click(within(row).getByRole('button')) // ⋮
     fireEvent.click(await screen.findByText('Edit'))
 
-    const codeInput = (await screen.findByLabelText(/Code/)) as HTMLInputElement
-    expect(codeInput.disabled).toBe(true)
+    // The Code Dropdown trigger is disabled on edit (the code is the row's identity).
+    const codeTrigger = (await screen.findByLabelText(/Code/)) as HTMLButtonElement
+    expect(codeTrigger.disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/api/currencies/nzd', expect.any(Object)))
   })

@@ -70,6 +70,7 @@ export function NewHouseholdModal() {
           <Label htmlFor="new-household-timezone">Timezone</Label>
           <Dropdown
             id="new-household-timezone"
+            searchable
             value={timezone}
             options={TZ_OPTIONS}
             onChange={setTimezone}

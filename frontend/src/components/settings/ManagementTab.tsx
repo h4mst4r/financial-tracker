@@ -147,6 +147,7 @@ function HouseholdConfig() {
           <Label htmlFor="hh-timezone">Timezone</Label>
           <Dropdown
             id="hh-timezone"
+            searchable
             value={timezone}
             options={TZ_OPTIONS}
             disabled={!isOwner}

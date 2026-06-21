@@ -10,6 +10,9 @@ export type AccountType = 'bank' | 'credit_card' | 'capital' | 'asset' | 'insura
 interface AccountShared {
   id: string
   name: string
+  // The account's native currency (ISO 4217) — `opening_balance`/snapshots are denominated in it
+  // (Story 4.4). Editable only until the account has history, then locked.
+  currency: string
   institution: string | null
   notes: string | null
   colour: string | null
@@ -21,6 +24,10 @@ interface AccountShared {
   // Hard-delete eligibility (UX §8.1, Story 4.2) — computed server-side from a dependency scan.
   can_delete: boolean
   delete_blocked_reason: string | null
+  // Computed current value + its currency (no stored column, Story 4.4). `null` when an asset-like
+  // account has no snapshot; the currency is NOT always the native code (a snapshot may differ).
+  current_value: string | null
+  current_value_currency: string | null
 }
 
 export interface BankAccount extends AccountShared {
@@ -87,3 +94,22 @@ export type Account =
 
 /** Ledger-backed subtypes anchor their value with an opening balance + date (FR-A-008). */
 export const LEDGER_BACKED: ReadonlySet<AccountType> = new Set<AccountType>(['bank', 'credit_card'])
+
+// A value snapshot (Story 4.4, ARCH §3.5). All wire keys are strings per the generic-entity
+// convention; `value`/`value_base` are Decimals → JSON strings (format, never store as JS numbers).
+export interface AccountSnapshot {
+  id: string
+  account_id: string
+  snapshot_date: string
+  value: string
+  currency: string
+  value_base: string
+  source: string
+  note: string | null
+  created_at: string
+}
+
+export interface AccountSnapshotListOut {
+  items: AccountSnapshot[]
+  total: number
+}

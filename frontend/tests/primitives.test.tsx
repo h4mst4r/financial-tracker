@@ -224,6 +224,70 @@ describe('Dropdown', () => {
     expect(selected.getAttribute('tabindex')).toBe('0')
     expect(options.filter((o) => o.getAttribute('tabindex') === '-1')).toHaveLength(1)
   })
+
+  /* ── searchable mode (story 1.13, AC1) ── */
+
+  const searchOpts = [
+    { value: 'usd', label: 'USD — US Dollar', searchText: 'usd us dollar' },
+    { value: 'eur', label: 'EUR — Euro', searchText: 'eur euro' },
+    { value: 'sgd', label: 'SGD — Singapore Dollar', searchText: 'sgd singapore dollar' },
+  ]
+
+  it('renders no filter input without the searchable prop', () => {
+    render(wrap(<Dropdown value="" options={searchOpts} onChange={() => {}} placeholder="Pick" />))
+    fireEvent.click(screen.getByRole('button', { name: /Pick/i }))
+    expect(screen.queryByPlaceholderText('Search…')).not.toBeInTheDocument()
+  })
+
+  it('searchable mode shows a filter input that narrows the options as you type', () => {
+    render(wrap(<Dropdown searchable value="" options={searchOpts} onChange={() => {}} placeholder="Pick" />))
+    fireEvent.click(screen.getByRole('button', { name: /Pick/i }))
+    const filter = screen.getByPlaceholderText('Search…')
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+    fireEvent.change(filter, { target: { value: 'singapore' } })
+    const options = screen.getAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0].textContent).toContain('SGD')
+  })
+
+  it('searchable mode matches on the visible label string too (no searchText needed)', () => {
+    render(wrap(<Dropdown searchable value="" options={searchOpts} onChange={() => {}} placeholder="Pick" />))
+    fireEvent.click(screen.getByRole('button', { name: /Pick/i }))
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'euro' } })
+    expect(screen.getAllByRole('option')).toHaveLength(1)
+  })
+
+  it('Arrow keys + Enter select the highlighted option from the FILTERED list', () => {
+    const fn = vi.fn()
+    render(wrap(<Dropdown searchable value="" options={searchOpts} onChange={fn} placeholder="Pick" />))
+    fireEvent.click(screen.getByRole('button', { name: /Pick/i }))
+    const filter = screen.getByPlaceholderText('Search…')
+    fireEvent.change(filter, { target: { value: 'dollar' } }) // USD + SGD
+    // Highlight resets to index 0 (USD) on filter; ArrowDown → SGD; Enter selects it.
+    fireEvent.keyDown(filter, { key: 'ArrowDown' })
+    fireEvent.keyDown(filter, { key: 'Enter' })
+    expect(fn).toHaveBeenCalledWith('sgd')
+  })
+
+  it('shows "No matches" when the query filters everything out', () => {
+    render(wrap(<Dropdown searchable value="" options={searchOpts} onChange={() => {}} placeholder="Pick" />))
+    fireEvent.click(screen.getByRole('button', { name: /Pick/i }))
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'zzz' } })
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(screen.getByText('No matches')).toBeInTheDocument()
+  })
+
+  it('clears the filter when the panel is reopened', () => {
+    render(wrap(<Dropdown searchable value="" options={searchOpts} onChange={() => {}} placeholder="Pick" />))
+    const trigger = screen.getByRole('button', { name: /Pick/i })
+    fireEvent.click(trigger)
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'euro' } })
+    expect(screen.getAllByRole('option')).toHaveLength(1)
+    fireEvent.click(trigger) // close
+    fireEvent.click(trigger) // reopen
+    expect((screen.getByPlaceholderText('Search…') as HTMLInputElement).value).toBe('')
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+  })
 })
 
 /* ── SegmentedControl ── */

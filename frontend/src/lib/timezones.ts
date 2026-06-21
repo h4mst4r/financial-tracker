@@ -1,37 +1,13 @@
 /**
- * Curated IANA timezones for the New Household (§4.5) / Settings (§5.2) timezone Dropdown.
- * The backend validates against the full `zoneinfo` database (Story 2.4c), so this list is a UX
- * convenience (the common zones), not the validation authority. `Asia/Singapore` is the seeded default.
+ * IANA timezones for the New Household (§4.5) / Settings (§5.2) searchable timezone Dropdown.
+ * The full zone list comes from the runtime (`Intl.supportedValuesOf('timeZone')`) — no bundled
+ * zone data — so the picker offers every zone, searchable. The backend validates against the full
+ * `zoneinfo` database (Story 2.4c), so this is the convenience surface, not the validation authority.
+ * `Asia/Singapore` is the seeded default. Empty on older runtimes without `supportedValuesOf`.
  */
-export const COMMON_TIMEZONES: string[] = [
-  'Pacific/Auckland',
-  'Australia/Sydney',
-  'Australia/Brisbane',
-  'Australia/Perth',
-  'Asia/Singapore',
-  'Asia/Kuala_Lumpur',
-  'Asia/Manila',
-  'Asia/Hong_Kong',
-  'Asia/Shanghai',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Asia/Jakarta',
-  'Asia/Bangkok',
-  'Asia/Kolkata',
-  'Asia/Dubai',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Madrid',
-  'Europe/Moscow',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Sao_Paulo',
-  'UTC',
-]
+function ianaTimezones(): string[] {
+  return typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
+}
 
 /**
  * `City (GMT±N)` label for a zone, e.g. `Singapore (GMT+8)`, `New York (GMT-4)`. The offset comes
@@ -48,8 +24,14 @@ export function timezoneLabel(tz: string): string {
   return offset ? `${city} (${offset})` : city
 }
 
-/** Ready-made `{ value, label }` options for the timezone Dropdown (value = IANA, label = §above). */
-export const TIMEZONE_OPTIONS: { value: string; label: string }[] = COMMON_TIMEZONES.map((tz) => ({
-  value: tz,
-  label: timezoneLabel(tz),
-}))
+/**
+ * Ready-made options for the searchable timezone Dropdown (value = IANA id, label = §above).
+ * `searchText` includes the raw IANA id so typing a region/country segment (e.g. "Asia", "Pacific")
+ * filters too, not just the city label.
+ */
+export const TIMEZONE_OPTIONS: { value: string; label: string; searchText: string }[] = ianaTimezones().map(
+  (tz) => {
+    const label = timezoneLabel(tz)
+    return { value: tz, label, searchText: `${tz} ${label}` }
+  },
+)

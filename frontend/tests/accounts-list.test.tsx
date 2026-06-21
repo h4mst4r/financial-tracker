@@ -5,7 +5,25 @@ import type { ReactNode } from 'react'
 import { AccountsList } from '../src/pages/AccountsList'
 import type { Account } from '../src/types/account'
 import type { Currency } from '../src/types/currency'
+import type { Member } from '../src/types/household'
+import type { Person } from '../src/types/auth'
 import { api } from '../src/api/client'
+import { useAuthStore } from '../src/stores/authStore'
+
+const members: Member[] = [
+  {
+    personId: 'p1', displayName: 'Ben', email: 'ben@x.com', role: 'owner',
+    pictureUrl: null, colour: '#6366f1', status: 'active', canDelete: false,
+  },
+  {
+    personId: 'p2', displayName: 'Alex', email: 'alex@x.com', role: 'member',
+    pictureUrl: null, colour: '#22c55e', status: 'active', canDelete: false,
+  },
+  {
+    personId: 'p3', displayName: 'Sam', email: 'sam@x.com', role: 'member',
+    pictureUrl: null, colour: '#f59e0b', status: 'archived', canDelete: false,
+  },
+]
 
 const currencies: Currency[] = [
   {
@@ -13,28 +31,51 @@ const currencies: Currency[] = [
     is_base: true, is_display_active: true, rate_to_base: '1.0', fee_pct: '0',
     last_rate_at: null, rate_source: null, rate_history: [],
   },
+  {
+    id: 'usd', code: 'USD', name: 'US Dollar', symbol: 'US$', colour: null, vivid: false,
+    is_base: false, is_display_active: true, rate_to_base: '1.35', fee_pct: '0',
+    last_rate_at: null, rate_source: null, rate_history: [],
+  },
 ]
 
 const accounts: Account[] = [
   {
-    id: 'b1', account_type: 'bank', name: 'DBS Multiplier', institution: 'DBS', notes: null,
+    id: 'b1', account_type: 'bank', name: 'DBS Multiplier', currency: 'SGD', institution: 'DBS', notes: null,
     colour: '#6366f1', vivid: true, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '12840.0000', current_value_currency: 'SGD',
     opening_balance: '12840.0000', opening_balance_date: '2026-06-01',
     account_number: null, interest_rate: null, interest_frequency: null, reserved_amount: null,
   },
   {
-    id: 'b2', account_type: 'bank', name: 'POSB Everyday', institution: 'POSB', notes: null,
+    id: 'b2', account_type: 'bank', name: 'POSB Everyday', currency: 'SGD', institution: 'POSB', notes: null,
     colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1'], can_delete: false, delete_blocked_reason: 'has transactions',
+    current_value: '500.0000', current_value_currency: 'SGD',
     opening_balance: '500.0000', opening_balance_date: '2026-06-01',
     account_number: null, interest_rate: null, interest_frequency: null, reserved_amount: null,
   },
   {
-    id: 'c1', account_type: 'capital', name: 'Stocks', institution: null, notes: null,
+    id: 'c1', account_type: 'capital', name: 'Stocks', currency: 'USD', institution: null, notes: null,
     colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '5000.0000', current_value_currency: 'USD',
     investment_type: null, cost_basis: '5000.0000',
+  },
+  {
+    id: 'm1', account_type: 'bank', name: 'Joint Savings', currency: 'SGD', institution: 'OCBC', notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1', 'p2'], can_delete: true, delete_blocked_reason: null,
+    current_value: '2000.0000', current_value_currency: 'SGD',
+    opening_balance: '2000.0000', opening_balance_date: '2026-06-01',
+    account_number: null, interest_rate: null, interest_frequency: null, reserved_amount: null,
+  },
+  {
+    id: 'cap1', account_type: 'capital', name: 'Old Fund', currency: 'SGD', institution: null, notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1', 'p3'], can_delete: true, delete_blocked_reason: null,
+    current_value: null, current_value_currency: null,
+    investment_type: null, cost_basis: '9000.0000',
   },
 ]
 
@@ -47,17 +88,28 @@ function renderPage(subtypes: Account['account_type'][] = ['bank', 'credit_card'
 }
 
 beforeEach(() => {
+  useAuthStore.setState({ currentPerson: { personId: 'p1' } as unknown as Person })
   vi.spyOn(api, 'get').mockImplementation((url: string) => {
     if (url.startsWith('/api/currencies')) {
       return Promise.resolve({ data: { items: currencies, total: currencies.length }, status: 200 })
+    }
+    if (url.startsWith('/api/household/members')) {
+      return Promise.resolve({ data: { items: members, total: members.length }, status: 200 })
+    }
+    if (/\/api\/accounts\/[^/]+\/snapshots/.test(url)) {
+      return Promise.resolve({ data: { items: [], total: 0 }, status: 200 })
     }
     return Promise.resolve({ data: { items: accounts, total: accounts.length }, status: 200 })
   })
   vi.spyOn(api, 'post').mockResolvedValue({ data: {}, status: 201 })
   vi.spyOn(api, 'patch').mockResolvedValue({ data: {}, status: 200 })
+  vi.spyOn(api, 'put').mockResolvedValue({ data: {}, status: 200 })
   vi.spyOn(api, 'delete').mockResolvedValue({ data: undefined, status: 204 })
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  useAuthStore.setState({ currentPerson: null })
+})
 
 describe('AccountsList', () => {
   test('renders only the cards matching the route subtypes', async () => {
@@ -153,5 +205,129 @@ describe('AccountsList', () => {
     await waitFor(() =>
       expect(api.get).toHaveBeenCalledWith('/api/accounts?include_archived=true'),
     )
+  })
+
+  // ── Multiple owners (Story 4.3) ──
+
+  test('a multi-owner card renders stacked owner avatars; single-owner shows none', async () => {
+    renderPage()
+    await screen.findByText('Joint Savings')
+    // Only m1 (owners p1+p2) renders avatars → exactly Ben + Alex. b1/b2 single-owner show none.
+    const avatars = await screen.findAllByRole('img')
+    expect(avatars.map((a) => a.getAttribute('aria-label')).sort()).toEqual(['Alex', 'Ben'])
+  })
+
+  test('editing an account: owner chips prefill and adding an owner PUTs the new set', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getAllByLabelText('Actions')[0]) // b1 — sole owner Ben (p1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    fireEvent.click(screen.getByText('add owner…'))
+    fireEvent.click(screen.getByRole('option', { name: /Alex/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/accounts/b1/owners', { owner_ids: ['p1', 'p2'] }),
+    )
+  })
+
+  test('the last owner cannot be removed', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getAllByLabelText('Actions')[0]) // b1 — sole owner Ben
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    const remove = screen.getByRole('button', { name: 'Remove Ben' })
+    expect((remove as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('an archived owner resolves to a name in the modal and is not offered to add', async () => {
+    renderPage(['capital'])
+    await screen.findByText('Old Fund')
+    // Old Fund (cap1) is owned by p1 (Ben, active) + p3 (Sam, archived).
+    fireEvent.click(screen.getAllByLabelText('Actions')[1]) // c1=Stocks[0], cap1=Old Fund[1]
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    // The archived owner shows their name, not the raw UUID.
+    expect(screen.getByText('Sam')).toBeTruthy()
+    expect(screen.queryByText('p3')).toBeNull()
+    // The add-owner dropdown offers active members only — Alex (active), never Sam (archived).
+    fireEvent.click(screen.getByText('add owner…'))
+    expect(screen.getByRole('option', { name: /Alex/ })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /Sam/ })).toBeNull()
+  })
+
+  test('creating with a second owner POSTs owner_ids', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'Joint' } })
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '1000' } })
+    fireEvent.click(screen.getByText('add owner…'))
+    fireEvent.click(screen.getByRole('option', { name: /Alex/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/api/accounts',
+        expect.objectContaining({ owner_ids: ['p1', 'p2'] }),
+      ),
+    )
+  })
+
+  // ── Native currency + value snapshots (Story 4.4) ──
+
+  test('New: a required Currency picker defaults to the base; create POSTs the currency', async () => {
+    renderPage()
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    await screen.findByText('Opening balance')
+    // The Currency picker is present and defaults to the household base (SGD).
+    expect(screen.getByLabelText(/Currency/)).toHaveTextContent('SGD')
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'My Bank' } })
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '1000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/api/accounts',
+        expect.objectContaining({ account_type: 'bank', currency: 'SGD' }),
+      ),
+    )
+  })
+
+  test('editing an account with history disables the Currency picker', async () => {
+    renderPage()
+    await openMenu(1) // b2 — has transactions (can_delete=false) → currency locked
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    expect((screen.getByLabelText(/Currency/) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/Currency locks once the account has activity/)).toBeTruthy()
+  })
+
+  test('⋮ → Add value snapshot opens the modal and POSTs the snapshot', async () => {
+    renderPage()
+    await openMenu(0) // b1 (SGD)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add value snapshot' }))
+    // The modal header shows there are no snapshots yet (its GET returned an empty list).
+    await screen.findByText('No snapshots yet')
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '13000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save snapshot' }))
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/api/accounts/b1/snapshots',
+        expect.objectContaining({ value: '13000', currency: 'SGD', source: 'manual' }),
+      ),
+    )
+  })
+
+  test('the hero shows the native-currency value and the meta shows the native code', async () => {
+    renderPage(['capital'])
+    // Stocks (c1) is a USD account with a current value; Old Fund (cap1) has none.
+    const stocks = await screen.findByText('Stocks')
+    const stocksCard = stocks.closest('[data-testid="entity-card"]') as HTMLElement
+    expect(stocksCard.textContent).toContain('US$')
+    expect(stocksCard.textContent).toContain('USD') // native code in the meta
+    const oldFund = screen.getByText('Old Fund')
+    const oldFundCard = oldFund.closest('[data-testid="entity-card"]') as HTMLElement
+    expect(oldFundCard.textContent).toContain('—') // current_value null → em dash
   })
 })

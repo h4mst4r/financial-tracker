@@ -41,6 +41,10 @@ class Account(BaseEntity):
     # Per-instance full-saturation fill opt-in (calm tint default; vivid = full-saturation fill).
     # Cross-entity column (also on categories/currencies) — ARCH §3.5, FR-SYS-016, Story 4.1.
     vivid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # The account's native currency (ISO 4217) — `opening_balance`/snapshots are denominated in it
+    # (ARCH §3.5, FR-A-001, Story 4.4). Validated against household currencies on create; editable
+    # only until the account has history, then locked (changing it reinterprets stored values).
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
     opening_balance: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
     opening_balance_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 

@@ -86,4 +86,19 @@ describe('NewHouseholdModal', () => {
     await waitFor(() => expect(useAuthStore.getState().isFirstLogin).toBe(false))
     expect(useAuthStore.getState().household?.name).toBe('The Lim Household')
   })
+
+  test('timezone is a searchable Dropdown — filter then select PATCHes the chosen IANA zone (story 1.13)', async () => {
+    fetchMock.mockResolvedValue(makeResponse({ ...HH, timezone: 'Pacific/Auckland' }))
+    useAuthStore.setState({ household: HH, isFirstLogin: true })
+    renderModal()
+
+    fireEvent.click(screen.getByLabelText('Timezone')) // open the searchable panel
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'auckland' } })
+    fireEvent.click(screen.getByRole('option', { name: /Auckland/ }))
+    fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const [, opts] = fetchMock.mock.calls[0]!
+    expect(JSON.parse(opts.body as string).timezone).toBe('Pacific/Auckland')
+  })
 })

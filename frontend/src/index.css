@@ -325,6 +325,10 @@
 /* ── ContextMenu / dropdown min-width (P4: no arbitrary [160px]) ── */
 @utility min-w-menu { min-width: 160px; }
 
+/* Searchable Dropdown (§7 variant): caps the filtered option list so a long list (e.g. the full
+   IANA timezone set, ~340 zones) scrolls inside the panel instead of growing past the modal. P4. */
+@utility max-h-dropdown-panel { max-height: 15rem; }
+
 /* ── AppShell sidebar widths (UX §1.1, bible #shell). Fixed layout widths → tokens, not inline px
    (P4, D-SIZE): expanded column + the ~62px icon-rail (≤ lg). ── */
 @utility w-sidebar      { width: 16rem; }
@@ -409,6 +413,8 @@
 @utility w-currency-select { width: 6rem; }
 /* Accounts page bank/credit-card type filter dropdown (Story 4.1, UX §1.2). */
 @utility w-account-filter { width: 9rem; }
+/* Account modal "add owner…" member dropdown — fits an avatar + name + chevron (Story 4.3, UX §8.2). */
+@utility w-owner-add { width: 11rem; }
 @utility spark-area  { fill: var(--entity-colour); opacity: 0.14; }
 @utility spark-line  { fill: none; stroke: var(--entity-colour); stroke-width: 2; }
 @utility spark-end   { fill: var(--entity-colour); }

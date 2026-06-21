@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { Icon } from './Icon'
 
@@ -6,6 +6,9 @@ interface DropdownOption {
   value: string
   /** String, or a node (e.g. a colour-tinted label) — rendered in the trigger and the option list. */
   label: ReactNode
+  /** Text the `searchable` filter matches on (defaults to the label when it's a string, else the value).
+   *  Lets a caller match on more than the visible label — e.g. a currency's code AND its name. */
+  searchText?: string
 }
 
 interface DropdownProps {
@@ -15,17 +18,34 @@ interface DropdownProps {
   placeholder?: string
   disabled?: boolean
   id?: string
+  /** Opt-in: renders a filter input at the top of the panel and filters the list as you type. Off by
+   *  default — every existing consumer keeps the plain (non-searchable) behaviour unchanged. */
+  searchable?: boolean
 }
 
-export function Dropdown({ value, options, onChange, placeholder, disabled, id }: DropdownProps) {
+export function Dropdown({ value, options, onChange, placeholder, disabled, id, searchable }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   // Roving-focus targets: one ref per option so ArrowUp/Down can move DOM focus (WAI-ARIA listbox).
+  // Searchable mode keeps DOM focus in the filter input instead and tracks the highlight via
+  // aria-activedescendant, so these refs are only used when NOT searchable.
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const selectedOption = options.find((o) => o.value === value)
-  const selectedIndex = options.findIndex((o) => o.value === value)
+
+  // The list the panel actually shows: filtered when searchable + a query is present, else all options.
+  const visibleOptions = useMemo(() => {
+    if (!searchable) return options
+    const q = query.trim().toLowerCase()
+    if (!q) return options
+    return options.filter((o) =>
+      (o.searchText ?? (typeof o.label === 'string' ? o.label : o.value)).toLowerCase().includes(q),
+    )
+  }, [searchable, options, query])
+
+  const baseId = id ?? 'dropdown'
 
   // Close on outside click
   const handleOutsideClick = useCallback((e: MouseEvent) => {
@@ -50,18 +70,38 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
     }
   }, [open, handleOutsideClick, handleKeyDown])
 
-  // Move DOM focus to the active option (roving tabIndex) whenever it changes while open.
+  // While open, keep the active option reachable: the non-searchable list moves DOM focus (roving
+  // tabIndex); the searchable list keeps focus in the filter input and just scrolls the highlight
+  // into view (focus tracked via aria-activedescendant) so arrowing down a long list follows along.
   useEffect(() => {
-    if (open && activeIndex >= 0) {
-      optionRefs.current[activeIndex]?.focus()
+    if (!open || activeIndex < 0) return
+    const el = optionRefs.current[activeIndex]
+    // scrollIntoView is unimplemented in jsdom — optional-chain the method so tests don't throw.
+    if (searchable) el?.scrollIntoView?.({ block: 'nearest' })
+    else el?.focus()
+  }, [open, searchable, activeIndex])
+
+  // Searchable: reset the highlight to the top of the filtered list when the query changes — but NOT
+  // on open (handleTriggerClick seeds the highlight to the selected option there).
+  const prevQueryRef = useRef(query)
+  useEffect(() => {
+    if (searchable && open && prevQueryRef.current !== query) {
+      setActiveIndex(visibleOptions.length === 0 ? -1 : 0)
     }
-  }, [open, activeIndex])
+    prevQueryRef.current = query
+  }, [searchable, open, query, visibleOptions.length])
+
+  // Clear the filter when the panel closes so reopening starts fresh.
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
 
   const handleTriggerClick = () => {
     if (!disabled) {
       setOpen((p) => !p)
-      // Open onto the selected option (or the first) so the roving focus has a home; with no options
-      // there is nothing to focus, so leave the active index unset (-1).
+      // Open onto the selected option (or the first) so the roving focus / highlight has a home; with
+      // no options there is nothing to focus, so leave the active index unset (-1).
+      const selectedIndex = options.findIndex((o) => o.value === value)
       setActiveIndex(options.length === 0 ? -1 : selectedIndex >= 0 ? selectedIndex : 0)
     }
   }
@@ -74,13 +114,13 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
   const handlePanelKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActiveIndex((i) => Math.min(i + 1, options.length - 1))
+      setActiveIndex((i) => Math.min(i + 1, visibleOptions.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setActiveIndex((i) => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < options.length) {
+    } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < visibleOptions.length) {
       e.preventDefault()
-      handleOptionClick(options[activeIndex].value)
+      handleOptionClick(visibleOptions[activeIndex].value)
     } else if (e.key === 'Escape') {
       setOpen(false)
     }
@@ -92,6 +132,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
         id={id}
         type="button"
         onClick={handleTriggerClick}
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`
@@ -120,25 +161,44 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id }
           className="absolute z-dropdown mt-1 w-full bg-surface-raised border border-border rounded-md shadow-lg"
           onKeyDown={handlePanelKeyDown}
         >
-          {options.map((opt, i) => (
-            <button
-              key={opt.value}
-              ref={(el) => { optionRefs.current[i] = el }}
-              type="button"
-              role="option"
-              aria-selected={opt.value === value}
-              tabIndex={i === activeIndex ? 0 : -1}
-              className={`
-                w-full flex items-center justify-between px-sm py-2 text-sm
-                ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}
-                ${opt.value === value ? 'text-primary' : 'text-text-primary'}
-              `}
-              onClick={() => handleOptionClick(opt.value)}
-            >
-              <span>{opt.label}</span>
-              {opt.value === value && <Icon icon={Check} size={16} className="text-primary" />}
-            </button>
-          ))}
+          {searchable && (
+            <input
+              type="text"
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              aria-activedescendant={activeIndex >= 0 ? `${baseId}-opt-${activeIndex}` : undefined}
+              className="w-full h-control px-sm mb-sm rounded-md text-sm bg-surface-raised border border-border text-text-primary focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-border-accent"
+            />
+          )}
+
+          <div className={searchable ? 'max-h-dropdown-panel overflow-y-auto' : undefined}>
+            {visibleOptions.length === 0 ? (
+              <div className="px-sm py-2 text-sm text-text-muted">No matches</div>
+            ) : (
+              visibleOptions.map((opt, i) => (
+                <button
+                  key={opt.value}
+                  id={searchable ? `${baseId}-opt-${i}` : undefined}
+                  ref={(el) => { optionRefs.current[i] = el }}
+                  type="button"
+                  role="option"
+                  aria-selected={opt.value === value}
+                  tabIndex={!searchable && i === activeIndex ? 0 : -1}
+                  className={`
+                    w-full flex items-center justify-between px-sm py-2 text-sm
+                    ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}
+                    ${opt.value === value ? 'text-primary' : 'text-text-primary'}
+                  `}
+                  onClick={() => handleOptionClick(opt.value)}
+                >
+                  <span>{opt.label}</span>
+                  {opt.value === value && <Icon icon={Check} size={16} className="text-primary" />}
+                </button>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>

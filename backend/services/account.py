@@ -5,14 +5,14 @@ Create / read / update for the STI `accounts` table. Follows the generic-entity 
 duplicate are **Story 4.2** and intentionally absent here.
 
 Accounts have **no name-uniqueness** constraint (unlike categories/currencies) — multiple "DBS"
-accounts are valid. On create, the actor becomes the **sole owner** (one `account_owners` row,
-`is_primary=true`); multi-owner management is Story 4.3.
+accounts are valid. On create, the actor becomes the **sole owner** unless `owner_ids` is given;
+multi-owner add/remove is `set_account_owners`/`replace_owners` (Story 4.3, `PUT /{id}/owners`).
 """
 
 import logging
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,8 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend import errors
 from backend.db_utils import get_or_404
 from backend.models.account import Account, AccountOwner, AccountSnapshot
+from backend.models.currency import Currency
 from backend.models.event import FinancialEvent
-from backend.schemas.account import AccountCreate, AccountUpdate
+from backend.models.identity import Person
+from backend.schemas.account import AccountCreate, AccountSnapshotCreate, AccountUpdate
 from backend.services.audit import audit
 from backend.services.base import assert_no_dependencies
 
@@ -30,7 +32,10 @@ logger = logging.getLogger(__name__)
 # Which columns a PATCH may set per subtype. `AccountUpdate` is one flat schema (build-ahead, so
 # Stories 4.7/4.8 need no schema change), so the service enforces discriminator integrity: a field
 # foreign to the row's `account_type` (e.g. `cost_basis` on a bank) is rejected, not silently kept.
-_SHARED_UPDATE_FIELDS = frozenset({"name", "institution", "notes", "colour", "vivid"})
+_SHARED_UPDATE_FIELDS = frozenset({"name", "currency", "institution", "notes", "colour", "vivid"})
+# Money quantization (ARCH §3.2) — `value_base` is Numeric(15,4), `ROUND_HALF_UP` (mirrors
+# currency.py:recompute_amount_base).
+_MONEY_QUANT = Decimal("0.0001")
 _LEDGER_FIELDS = frozenset({"opening_balance", "opening_balance_date"})
 _SUBTYPE_UPDATE_FIELDS: dict[str, frozenset[str]] = {
     "bank": _LEDGER_FIELDS
@@ -104,9 +109,24 @@ def _snapshot(account: Account) -> dict:
     }
 
 
+async def _resolve_rate(db: AsyncSession, household_id: str, code: str) -> Decimal:
+    """The `rate_to_base` of a configured household currency, or 400 if the code isn't configured.
+    Doubles as the "is this a real household currency" guard for create + snapshot."""
+    rate = (
+        await db.execute(
+            select(Currency.rate_to_base).where(
+                Currency.household_id == household_id, Currency.code == code
+            )
+        )
+    ).scalar_one_or_none()
+    if rate is None:
+        errors.bad_request("Unknown currency", f"'{code}' is not a configured household currency")
+    return rate
+
+
 def _add_primary_owner(db: AsyncSession, account_id: str, person_id: str) -> None:
-    """Attach one primary `account_owners` row (the sole owner on create/duplicate; Story 4.3 adds
-    more). Caller flushes."""
+    """Attach one primary `account_owners` row (the sole owner on create/duplicate, or when create's
+    `owner_ids` is omitted). Caller flushes."""
     db.add(
         AccountOwner(
             account_id=account_id,
@@ -117,23 +137,120 @@ def _add_primary_owner(db: AsyncSession, account_id: str, person_id: str) -> Non
     )
 
 
+async def set_account_owners(
+    db: AsyncSession,
+    household_id: str,
+    account_id: str,
+    person_ids: Sequence[str],
+    *,
+    primary_preference: str | None,
+) -> None:
+    """Reconcile `account_owners` for `account_id` to exactly `person_ids` (set-semantics, Story
+    4.3, AC1). The client sends the full desired set; this diffs against the existing rows.
+    Validates BEFORE writing so a bad request leaves the junction untouched: the set must be
+    non-empty (400) and every id must be a member of `household_id` — any status (400). Exactly one
+    row stays `is_primary` (a server invariant, never client-trusted): the previous primary if it
+    survives, else `primary_preference` if present, else the first id. No audit — the junction is
+    the account's own composition, not an audited business column. Caller's `get_db` commits."""
+    desired = list(dict.fromkeys(person_ids))  # de-dup, preserve order
+    if not desired:
+        errors.bad_request("Invalid owners", "An account must have at least one owner")
+    members = set(
+        (
+            await db.execute(
+                select(Person.id).where(
+                    Person.household_id == household_id, Person.id.in_(desired)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    invalid = [pid for pid in desired if pid not in members]
+    if invalid:
+        errors.bad_request(
+            "Invalid owners", f"{sorted(invalid)} are not members of this household"
+        )
+
+    existing = (
+        (await db.execute(select(AccountOwner).where(AccountOwner.account_id == account_id)))
+        .scalars()
+        .all()
+    )
+    desired_set = set(desired)
+    existing_ids = {o.person_id for o in existing}
+
+    removed = existing_ids - desired_set
+    if removed:
+        await db.execute(
+            delete(AccountOwner).where(
+                AccountOwner.account_id == account_id,
+                AccountOwner.person_id.in_(removed),
+            )
+        )
+    for pid in desired:
+        if pid not in existing_ids:
+            db.add(
+                AccountOwner(
+                    account_id=account_id,
+                    person_id=pid,
+                    is_primary=False,
+                    added_at=datetime.now(UTC),
+                )
+            )
+    await db.flush()
+
+    rows = (
+        (await db.execute(select(AccountOwner).where(AccountOwner.account_id == account_id)))
+        .scalars()
+        .all()
+    )
+    surviving_primary = next((o.person_id for o in rows if o.is_primary), None)
+    chosen = surviving_primary or (
+        primary_preference if primary_preference in desired_set else desired[0]
+    )
+    for o in rows:
+        o.is_primary = o.person_id == chosen
+    await db.flush()
+
+
+async def replace_owners(
+    db: AsyncSession, household_id: str, actor_id: str, account_id: str, person_ids: Sequence[str]
+) -> Account:
+    """Replace an existing account's owner set (Story 4.3, AC3) — the `PUT /{id}/owners` entry
+    point. 404 scope guard, then reconcile (previous primary kept if it survives, else first of the
+    new set). `actor_id` is accepted for signature symmetry (owners aren't audited)."""
+    obj = await get_or_404(db, Account, account_id, household_id=household_id)
+    await set_account_owners(db, household_id, account_id, person_ids, primary_preference=None)
+    return obj
+
+
 async def create_account(
     db: AsyncSession, household_id: str, actor_id: str, data: AccountCreate
 ) -> Account:
     """Create an account of any subtype (AC1). The discriminated-union `data` carries only its
-    subtype's columns; the rest stay NULL. Attaches the creator as the sole owner and writes a
-    `create` audit row."""
+    subtype's columns; the rest stay NULL. Owners come from `data.owner_ids` (Story 4.3) or default
+    to the creator as sole owner; writes a `create` audit row. The native `currency` (Story 4.4) is
+    a real column carried in `data` — validated against the household's currencies before insert."""
+    await _resolve_rate(db, household_id, data.currency)
     obj = Account(
         household_id=household_id,
         created_by=actor_id,
         status="active",
-        **data.model_dump(),
+        **data.model_dump(exclude={"owner_ids"}),
     )
     db.add(obj)
     await db.flush()
 
-    _add_primary_owner(db, obj.id, actor_id)
-    await db.flush()
+    # owner_ids omitted → creator is the sole owner (Story 4.1 default); given → exactly that set
+    # (Story 4.3, AC2), primary = the creator when present.
+    if data.owner_ids:
+        await set_account_owners(
+            db, household_id, obj.id, data.owner_ids, primary_preference=actor_id
+        )
+    else:
+        _add_primary_owner(db, obj.id, actor_id)
+        await db.flush()
 
     await audit.log(
         db,
@@ -163,6 +280,17 @@ async def update_account(
             "Invalid fields",
             f"{sorted(foreign)} are not valid for a {obj.account_type} account",
         )
+    # Native currency is editable only while the account has no history (AC1) — a no-op (same value)
+    # is always allowed. A real change must be a configured currency AND the account must have no
+    # transactions/snapshots (changing it would reinterpret stored values).
+    if "currency" in fields and fields["currency"] != obj.currency:
+        await _resolve_rate(db, household_id, fields["currency"])  # 400 if unknown
+        # ponytail: reuse single_delete_blocker — "has history" == "not deletable".
+        if await single_delete_blocker(db, household_id, str(account_id)) is not None:
+            errors.bad_request(
+                "Currency locked",
+                "Cannot change the currency of an account with transactions or value history",
+            )
     before = _snapshot(obj)
     for key, value in fields.items():
         setattr(obj, key, value)
@@ -220,6 +348,109 @@ async def owner_ids_for(
     for account_id, person_id in rows.all():
         out.setdefault(account_id, []).append(person_id)
     return out
+
+
+# ─── Value snapshots + current-value resolution (Story 4.4) ───
+
+
+async def create_snapshot(
+    db: AsyncSession,
+    household_id: str,
+    actor_id: str,
+    account_id: str,
+    data: AccountSnapshotCreate,
+) -> AccountSnapshot:
+    """Record a value snapshot (AC2). 404-scope-guards the account, resolves the snapshot currency's
+    `rate_to_base` (400 unknown → no row), caches `value_base = value × rate` (4dp, ROUND_HALF_UP —
+    a convenience, not canonical, AC4b), and appends an `account_snapshots` row. Append-only history
+    fact → **no audit** (like `fx_rate_history`). Caller's `get_db` commits."""
+    await get_or_404(db, Account, account_id, household_id=household_id)  # scope guard
+    rate = await _resolve_rate(db, household_id, data.currency)  # 400 before any write (AC4b)
+    value_base = (data.value * rate).quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+    snap = AccountSnapshot(
+        household_id=household_id,
+        created_by=actor_id,
+        account_id=account_id,
+        snapshot_date=data.snapshot_date,
+        value=data.value,
+        currency=data.currency,
+        value_base=value_base,
+        source=data.source,
+        note=data.note,
+    )
+    db.add(snap)
+    await db.flush()
+    return snap
+
+
+async def list_snapshots(
+    db: AsyncSession, household_id: str, account_id: str
+) -> Sequence[AccountSnapshot]:
+    """An account's snapshots, newest-first (AC4a tiebreak + §8.2a header + the Story 4.5 chart).
+    404-guards the account for scope."""
+    await get_or_404(db, Account, account_id, household_id=household_id)  # scope guard
+    stmt = (
+        select(AccountSnapshot)
+        .where(AccountSnapshot.account_id == account_id)
+        .order_by(AccountSnapshot.snapshot_date.desc(), AccountSnapshot.created_at.desc())
+    )
+    return (await db.execute(stmt)).scalars().all()
+
+
+# Asset-like subtypes resolve current value from snapshots only; ledger-backed fall back to the
+# opening anchor (the financial_events sum is an Epic 5 seam).
+_LEDGER_BACKED = frozenset({"bank", "credit_card"})
+
+
+async def current_values_for(
+    db: AsyncSession, household_id: str, accounts: Sequence[Account]
+) -> dict[str, tuple[Decimal, str] | None]:
+    """Map each account id → its computed `(current_value, currency)` (or None), batched (no N+1).
+
+    One ordered select of the household's snapshots; the first row per account is the latest
+    (`snapshot_date DESC, created_at DESC` — same-date tiebreak via `created_at`, AC4a). Per
+    account: asset-like → that latest `(value, currency)` or None; ledger-backed → the latest
+    snapshot if any, else the opening anchor `(opening_balance, account.currency)`.
+    """
+    if not accounts:
+        return {}
+    ids = [a.id for a in accounts]
+    rows = (
+        await db.execute(
+            select(
+                AccountSnapshot.account_id,
+                AccountSnapshot.value,
+                AccountSnapshot.currency,
+            )
+            .where(AccountSnapshot.account_id.in_(ids))
+            .order_by(
+                AccountSnapshot.account_id,
+                AccountSnapshot.snapshot_date.desc(),
+                AccountSnapshot.created_at.desc(),
+            )
+        )
+    ).all()
+    latest: dict[str, tuple[Decimal, str]] = {}
+    for account_id, value, currency in rows:
+        latest.setdefault(account_id, (value, currency))  # first row per id = the latest
+
+    out: dict[str, tuple[Decimal, str] | None] = {}
+    for a in accounts:
+        snap = latest.get(a.id)
+        if snap is not None:
+            out[a.id] = snap  # Epic 5 seam: + sum(ledger after anchor)
+        elif a.account_type in _LEDGER_BACKED and a.opening_balance is not None:
+            out[a.id] = (a.opening_balance, a.currency)
+        else:
+            out[a.id] = None
+    return out
+
+
+async def single_current_value(
+    db: AsyncSession, household_id: str, account: Account
+) -> tuple[Decimal, str] | None:
+    """The computed `(current_value, currency)` for one account (via `current_values_for`)."""
+    return (await current_values_for(db, household_id, [account]))[account.id]
 
 
 # ─── Archive / restore / delete / duplicate (Story 4.2) ───
