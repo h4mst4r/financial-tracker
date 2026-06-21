@@ -415,10 +415,13 @@
 @utility w-account-filter { width: 9rem; }
 /* Account modal "add owner…" member dropdown — fits an avatar + name + chevron (Story 4.3, UX §8.2). */
 @utility w-owner-add { width: 11rem; }
-@utility spark-area  { fill: var(--entity-colour); opacity: 0.14; }
-@utility spark-line  { fill: none; stroke: var(--entity-colour); stroke-width: 2; }
-@utility spark-end   { fill: var(--entity-colour); }
-@utility spark-bar   { fill: var(--entity-colour); }
+/* spark-colour pole (Story 4.5): reads var(--spark-colour, var(--entity-colour)). On a vivid card the
+   fill IS --entity-colour, so EntityCard sets --spark-colour to the contrast pole (--entity-on-colour)
+   to keep the chart visible; calm cards leave it unset and fall back to the identity colour (UX §9.2). */
+@utility spark-area  { fill: var(--spark-colour, var(--entity-colour)); opacity: 0.14; }
+@utility spark-line  { fill: none; stroke: var(--spark-colour, var(--entity-colour)); stroke-width: 2; }
+@utility spark-end   { fill: var(--spark-colour, var(--entity-colour)); }
+@utility spark-bar   { fill: var(--spark-colour, var(--entity-colour)); }
 
 /* Draw-on-mount for the line stroke (motion-aware via --motion-factor, mirroring animate-shimmer /
    animate-slide-up). The polyline carries pathLength="1" so dasharray/offset normalise regardless of

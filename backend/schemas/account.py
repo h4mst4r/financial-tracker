@@ -219,6 +219,10 @@ class _AccountResponseShared(BaseModel):
     # a batched dependency scan and attaches them. Default deletable so `model_validate(obj)` is ok.
     can_delete: bool = True
     delete_blocked_reason: str | None = None
+    # Value-history series for the card MiniSparkline (Story 4.5) — the last ≤12 snapshot
+    # `value_base` values, oldest→newest. Not an ORM column; attached by the list router from a
+    # batched `value_series_for`. `[]` (no snapshots) → the atom's "no history yet" placeholder.
+    value_series: list[Decimal] = Field(default_factory=list)
 
 
 class BankAccountResponse(_AccountResponseShared):
@@ -303,16 +307,19 @@ def response_for(
     delete_blocked_reason: str | None = None,
     current_value: Decimal | None = None,
     current_value_currency: str | None = None,
+    value_series: list[Decimal] | None = None,
 ) -> _AccountResponseShared:
     """Serialize one ORM `Account` to its subtype Response (ARCH §4.5), attaching `owner_ids`, the
-    computed hard-delete eligibility (UX §8.1, Story 4.2), and the computed current value + currency
-    (Story 4.4). `currency` rides on the ORM column, so `model_validate` carries it over."""
+    computed hard-delete eligibility (UX §8.1, Story 4.2), the computed current value + currency
+    (Story 4.4), and the card value-history series (Story 4.5). `currency` rides on the ORM column,
+    so `model_validate` carries it over."""
     resp = _RESPONSE_BY_TYPE[account.account_type].model_validate(account)
     resp.owner_ids = owner_ids
     resp.can_delete = can_delete
     resp.delete_blocked_reason = delete_blocked_reason
     resp.current_value = current_value
     resp.current_value_currency = current_value_currency
+    resp.value_series = value_series or []
     return resp
 
 

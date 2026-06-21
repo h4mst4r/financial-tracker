@@ -44,6 +44,7 @@ const accounts: Account[] = [
     colour: '#6366f1', vivid: true, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
     current_value: '12840.0000', current_value_currency: 'SGD',
+    value_series: ['12000.0000', '12400.0000', '12840.0000'],
     opening_balance: '12840.0000', opening_balance_date: '2026-06-01',
     account_number: null, interest_rate: null, interest_frequency: null, reserved_amount: null,
   },
@@ -52,6 +53,7 @@ const accounts: Account[] = [
     colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1'], can_delete: false, delete_blocked_reason: 'has transactions',
     current_value: '500.0000', current_value_currency: 'SGD',
+    value_series: ['480.0000', '500.0000'],
     opening_balance: '500.0000', opening_balance_date: '2026-06-01',
     account_number: null, interest_rate: null, interest_frequency: null, reserved_amount: null,
   },
@@ -60,6 +62,7 @@ const accounts: Account[] = [
     colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
     current_value: '5000.0000', current_value_currency: 'USD',
+    value_series: ['4800.0000', '5200.0000', '5000.0000'],
     investment_type: null, cost_basis: '5000.0000',
   },
   {
@@ -67,6 +70,7 @@ const accounts: Account[] = [
     colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1', 'p2'], can_delete: true, delete_blocked_reason: null,
     current_value: '2000.0000', current_value_currency: 'SGD',
+    value_series: ['2000.0000'],
     opening_balance: '2000.0000', opening_balance_date: '2026-06-01',
     account_number: null, interest_rate: null, interest_frequency: null, reserved_amount: null,
   },
@@ -75,6 +79,7 @@ const accounts: Account[] = [
     colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
     owner_ids: ['p1', 'p3'], can_delete: true, delete_blocked_reason: null,
     current_value: null, current_value_currency: null,
+    value_series: [],
     investment_type: null, cost_basis: '9000.0000',
   },
 ]
@@ -213,7 +218,10 @@ describe('AccountsList', () => {
     renderPage()
     await screen.findByText('Joint Savings')
     // Only m1 (owners p1+p2) renders avatars → exactly Ben + Alex. b1/b2 single-owner show none.
-    const avatars = await screen.findAllByRole('img')
+    // (Every card's MiniSparkline is also role="img" — exclude it; this test is about owner avatars.)
+    const avatars = (await screen.findAllByRole('img')).filter(
+      (a) => a.getAttribute('aria-label') !== 'Value history sparkline',
+    )
     expect(avatars.map((a) => a.getAttribute('aria-label')).sort()).toEqual(['Alex', 'Ben'])
   })
 
@@ -329,5 +337,19 @@ describe('AccountsList', () => {
     const oldFund = screen.getByText('Old Fund')
     const oldFundCard = oldFund.closest('[data-testid="entity-card"]') as HTMLElement
     expect(oldFundCard.textContent).toContain('—') // current_value null → em dash
+  })
+
+  test('the card renders the value-history sparkline, or a placeholder when there is no history', async () => {
+    renderPage(['capital'])
+    // Stocks (c1) has a ≥2-point value_series → the sparkline SVG renders.
+    const stocks = await screen.findByText('Stocks')
+    const stocksCard = stocks.closest('[data-testid="entity-card"]') as HTMLElement
+    expect(stocksCard.querySelector('svg.spark')).toBeTruthy()
+    expect(stocksCard.querySelector('[data-testid="spark-empty"]')).toBeNull()
+    // Old Fund (cap1) has value_series: [] → the "no history yet" placeholder, no chart.
+    const oldFund = screen.getByText('Old Fund')
+    const oldFundCard = oldFund.closest('[data-testid="entity-card"]') as HTMLElement
+    expect(oldFundCard.querySelector('[data-testid="spark-empty"]')).toBeTruthy()
+    expect(oldFundCard.querySelector('svg.spark')).toBeNull()
   })
 })

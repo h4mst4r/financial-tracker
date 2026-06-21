@@ -1144,3 +1144,100 @@ async def test_snapshot_member_403_and_cross_household_404(monkeypatch):
         assert client_b.get(f"/api/accounts/{acct_id}/snapshots").status_code == 404
     finally:
         await engine.dispose()
+
+
+# ── Value-history series for the card MiniSparkline (Story 4.5) ──
+
+
+async def test_value_series_oldest_to_newest(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        # Three snapshots on ascending dates → value_series is their value_base, oldest→newest.
+        for val, on in (("100", "2026-06-10"), ("250", "2026-06-11"), ("175", "2026-06-12")):
+            client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap(val, on=on))
+
+        item = next(a for a in client.get("/api/accounts").json()["items"] if a["id"] == acct_id)
+        assert [Decimal(v) for v in item["value_series"]] == [
+            Decimal("100"),
+            Decimal("250"),
+            Decimal("175"),
+        ]
+    finally:
+        await engine.dispose()
+
+
+async def test_value_series_empty_and_single(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # No snapshots → [] (the atom's "no history yet" placeholder; opening anchor NOT folded in).
+        bank_id = client.post("/api/accounts", json=_bank()).json()["id"]
+        # One snapshot → length 1 (backend still returns the single point).
+        cap_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        client.post(f"/api/accounts/{cap_id}/snapshots", json=_snap("42", on="2026-06-10"))
+
+        items = {a["id"]: a for a in client.get("/api/accounts").json()["items"]}
+        assert items[bank_id]["value_series"] == []
+        assert [Decimal(v) for v in items[cap_id]["value_series"]] == [Decimal("42")]
+    finally:
+        await engine.dispose()
+
+
+async def test_value_series_caps_at_twelve_most_recent(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        # 15 snapshots on ascending dates (values 1..15) → series is the most recent 12 (4..15),
+        # still oldest→newest.
+        for i in range(1, 16):
+            client.post(
+                f"/api/accounts/{acct_id}/snapshots",
+                json=_snap(str(i), on=date(2026, 6, i).isoformat()),
+            )
+
+        item = next(a for a in client.get("/api/accounts").json()["items"] if a["id"] == acct_id)
+        assert [Decimal(v) for v in item["value_series"]] == [Decimal(str(i)) for i in range(4, 16)]
+    finally:
+        await engine.dispose()
+
+
+async def test_value_series_same_date_in_write_order(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        # Two same-date snapshots → ASC created_at tiebreak: write order (100 then 200).
+        for val in ("100", "200"):
+            client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap(val, on="2026-06-13"))
+
+        item = next(a for a in client.get("/api/accounts").json()["items"] if a["id"] == acct_id)
+        assert [Decimal(v) for v in item["value_series"]] == [Decimal("100"), Decimal("200")]
+    finally:
+        await engine.dispose()

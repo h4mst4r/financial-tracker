@@ -28,6 +28,9 @@ interface AccountShared {
   // account has no snapshot; the currency is NOT always the native code (a snapshot may differ).
   current_value: string | null
   current_value_currency: string | null
+  // Value-history series for the card MiniSparkline (Story 4.5) — the last ≤12 snapshot `value_base`
+  // values (decimal strings), oldest→newest. `[]` when the account has no snapshots.
+  value_series: string[]
 }
 
 export interface BankAccount extends AccountShared {

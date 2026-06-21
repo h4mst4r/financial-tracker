@@ -70,6 +70,7 @@ async def list_accounts(
     owners = await account_service.owner_ids_for(db, [a.id for a in accounts])
     blockers = await account_service.delete_blockers(db, household_id)
     current = await account_service.current_values_for(db, household_id, accounts)
+    series = await account_service.value_series_for(db, household_id, accounts)
     items = []
     for a in accounts:
         cv = current.get(a.id)
@@ -81,6 +82,7 @@ async def list_accounts(
                 delete_blocked_reason=blockers.get(str(a.id)),
                 current_value=cv[0] if cv else None,
                 current_value_currency=cv[1] if cv else None,
+                value_series=series.get(a.id, []),
             )
         )
     return AccountListOut(items=items, total=len(items))

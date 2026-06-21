@@ -65,6 +65,9 @@ export function EntityCard({
   const style: CSSProperties = {
     ...(colour ? { '--entity-colour': colour } : {}),
     ...(onColour ? { '--entity-on-colour': onColour } : {}),
+    // On a vivid fill the MiniSparkline switches to the contrast pole (else it'd be drawn in the fill
+    // colour and vanish — UX §9.2). Calm cards leave it unset → the atom keeps the identity colour.
+    ...(onColour ? { '--spark-colour': 'var(--entity-on-colour)' } : {}),
   } as CSSProperties
 
   const fillClass = vivid ? 'bg-entity-fill-vivid' : 'bg-entity-fill-calm'

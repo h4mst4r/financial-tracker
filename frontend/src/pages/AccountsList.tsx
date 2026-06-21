@@ -5,6 +5,7 @@ import { EntityPage } from '../components/entity'
 import { EntityCard } from '../components/entity/EntityCard'
 import { Dropdown } from '../components/primitives/Dropdown'
 import { Icon } from '../components/primitives/Icon'
+import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { Avatar } from '../components/primitives/Avatar'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import type { ContextMenuEntry } from '../components/primitives'
@@ -23,8 +24,9 @@ import { AccountSnapshotModal } from './AccountSnapshotModal'
 // mounted at the four ACCOUNTS routes filtered by `subtypes` (/accounts=bank+credit, /capital,
 // /assets, /insurance). Create/edit + the full lifecycle ⋮ set (Edit · Duplicate · Add value
 // snapshot · — · Archive/Restore · Delete-if-empty) are wired here. The hero is the computed
-// current value in the account's NATIVE currency (Story 4.4); the value-history sparkline (Story
-// 4.5) and the Native/any-currency conversion toggle (Story 4.9) are out of scope.
+// current value in the account's NATIVE currency (Story 4.4); the card carries the value-history
+// MiniSparkline from its snapshot series (Story 4.5, presentational — the click→Viewer expand
+// affordance is the Epic-9 seam). The Native/any-currency conversion toggle (Story 4.9) is out of scope.
 
 interface AccountsListProps {
   subtypes: AccountType[]
@@ -257,6 +259,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
             icon={<Icon icon={ACCOUNT_TYPE_ICON[a.account_type]} size={18} />}
             name={a.name}
             hero={heroFor(a)}
+            sparkline={<MiniSparkline data={a.value_series.map(Number)} />}
             meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${a.currency}`}
             owners={ownersSlot(a)}
             menuItems={rowMenu(a)}

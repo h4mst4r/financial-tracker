@@ -382,9 +382,12 @@ export function DesignSystem() {
               name="Vivid (dark fill → light text)"
               hero="S$ 12,840"
               meta="bank · SGD"
+              sparkline={<MiniSparkline data={[30, 28, 30, 22, 18, 14, 12, 9]} />}
               menuItems={entityCardMenu}
               onClick={() => {}}
             />
+            {/* Light vivid fill — the §9.2 contrast-pole guard: the sparkline must draw in
+                --entity-on-colour (dark), not the lime fill colour, or it'd be invisible (Story 4.5). */}
             <EntityCard
               colour="#9bbc0f"
               vivid
@@ -392,6 +395,7 @@ export function DesignSystem() {
               name="Vivid (light fill → dark text)"
               hero="S$ 1.45M"
               meta="asset · SGD"
+              sparkline={<MiniSparkline data={[8, 10, 9, 14, 18, 22, 26, 30]} />}
               onClick={() => {}}
             />
             <EntityCard

@@ -36,6 +36,8 @@ _SHARED_UPDATE_FIELDS = frozenset({"name", "currency", "institution", "notes", "
 # Money quantization (ARCH §3.2) — `value_base` is Numeric(15,4), `ROUND_HALF_UP` (mirrors
 # currency.py:recompute_amount_base).
 _MONEY_QUANT = Decimal("0.0001")
+# Max points the card MiniSparkline plots (mirrors the frontend atom's MAX_POINTS in sparkline.ts).
+_SPARK_MAX_POINTS = 12
 _LEDGER_FIELDS = frozenset({"opening_balance", "opening_balance_date"})
 _SUBTYPE_UPDATE_FIELDS: dict[str, frozenset[str]] = {
     "bank": _LEDGER_FIELDS
@@ -451,6 +453,39 @@ async def single_current_value(
 ) -> tuple[Decimal, str] | None:
     """The computed `(current_value, currency)` for one account (via `current_values_for`)."""
     return (await current_values_for(db, household_id, [account]))[account.id]
+
+
+async def value_series_for(
+    db: AsyncSession, household_id: str, accounts: Sequence[Account]
+) -> dict[str, list[Decimal]]:
+    """Map each account id → its value-history series for the card MiniSparkline (Story 4.5).
+
+    One ordered select of the household's snapshots; per account the last ≤12 `value_base` values,
+    oldest→newest (the atom plots index 0 at the left). `value_base` (not native `value`) so the
+    trend is currency-consistent across mixed-currency snapshots — the hero stays native; the
+    sparkline is shape-only (§9.2). Snapshots only: a no-snapshot account → `[]` (the atom's
+    "< 2 points" placeholder), never the opening anchor (that would draw a fake flat line).
+    Batched (no N+1), the same shape as `current_values_for`.
+    """
+    if not accounts:
+        return {}
+    ids = [a.id for a in accounts]
+    rows = (
+        await db.execute(
+            select(AccountSnapshot.account_id, AccountSnapshot.value_base)
+            .where(AccountSnapshot.account_id.in_(ids))
+            .order_by(
+                AccountSnapshot.account_id,
+                AccountSnapshot.snapshot_date.asc(),
+                AccountSnapshot.created_at.asc(),
+            )
+        )
+    ).all()
+    series: dict[str, list[Decimal]] = {a.id: [] for a in accounts}
+    for account_id, value_base in rows:
+        series[account_id].append(value_base)
+    # ponytail: window after grouping — keep the most recent 12, still oldest→newest.
+    return {aid: vals[-_SPARK_MAX_POINTS:] for aid, vals in series.items()}
 
 
 # ─── Archive / restore / delete / duplicate (Story 4.2) ───
