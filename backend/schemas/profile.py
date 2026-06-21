@@ -2,10 +2,10 @@
 
 `ProfileUpdate` is the body for `PATCH /api/profile` — the per-person self-edit of profile &
 appearance preferences. camelCase wire keys (the §2.14.C surface, like `HouseholdUpdate`); every
-field optional (partial PATCH; only `exclude_unset` fields are touched). `display_currency` and
-`colour` are deliberately NOT writable here — the display-currency selector is Story 3.9 (no
-Currency entity until Epic 3) and §5.1 renders no colour control (Story 2.9 D-DISPCCY / D-COLOUR).
-Stories 2.11 (`display_format`) and 3.9 (`display_currency`) extend this same schema/endpoint.
+field optional (partial PATCH; only `exclude_unset` fields are touched). `colour` is deliberately
+NOT writable here — §5.1 renders no colour control (Story 2.9 D-COLOUR). Story 3.9 makes
+`display_currency` writable (validated against the household's display-active currencies, FR-P-004 /
+FR-CU-004); Story 2.11 added `display_format`.
 """
 
 from pydantic import BaseModel, ConfigDict
@@ -22,6 +22,7 @@ class ProfileUpdate(BaseModel):
     font: str | None = None
     density: str | None = None
     display_format: str | None = None
+    display_currency: str | None = None
     reduce_motion: bool | None = None
     notification_prefs: dict[str, bool] | None = None
 

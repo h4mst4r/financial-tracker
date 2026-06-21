@@ -9,10 +9,10 @@ A private, household financial tracker — Python 3.12 + FastAPI backend, React 
 | Layer | Choice |
 |---|---|
 | Backend | Python 3.12, FastAPI (ASGI) on uvicorn — app factory `backend.main:app` |
-| Frontend | React 19 + Vite + TypeScript (strict, no `any`) |
+| Frontend | React 19 + Vite + TypeScript (strict, no `any`); `@dnd-kit/core` for drag-and-drop |
 | Styling | Tailwind v4, token-first (`@theme` / `@utility`) |
 | Config | `pydantic-settings` reading the ARCH §5.4 env matrix |
-| Quality gates | ruff · pytest (+pytest-asyncio, +cov) · vitest + Testing Library · Playwright · bandit · pip-audit |
+| Quality gates | ruff · pytest (+pytest-asyncio, +cov) · bandit · pip-audit · eslint + tsc + stylelint (`npm run lint`) · vitest + Testing Library · Playwright |
 
 ## Prerequisites
 
@@ -90,13 +90,18 @@ python scripts/check_health_latency.py   # backend latency budget (NFR §4.1)
 Frontend (from `frontend/`):
 
 ```bash
-npm run typecheck                    # strict TS, no any
+npm run lint                         # eslint + tsc (strict, no any) + stylelint — the full lint gate
+npm run typecheck                    # tsc --noEmit only (a subset of `lint`)
 npm test                             # vitest + Testing Library
 npm run build                        # production bundle
 node scripts/check-bundle-size.mjs   # initial-load budget (NFR §4.1)
 npx playwright install --with-deps   # one-time browser install
 npm run test:e2e                     # cross-browser matrix: chromium/firefox/webkit
 ```
+
+> `npm run lint` runs three layers — `eslint` (JS/TS: no `any`, import order, rules-of-hooks),
+> `tsc --noEmit` (types), and `stylelint` (`src/**/*.css`). Run a single layer with `lint:js` /
+> `typecheck` / `lint:css`.
 
 The E2E suite builds the SPA, stages it into `frontend_dist/`, and serves it plus
 `/health` from a single uvicorn origin — the same-origin production path. It needs the

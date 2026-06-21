@@ -914,6 +914,23 @@ rows, not audited domain entities. This is a deliberate scope decision, not an o
 created_at, created_by(UUID,no FK)`. Base currency is immutable after creation in practice
 (changing it triggers a full `amount_base` recompute — FR-CU-005).
 
+> **Base-currency change mechanics (Story 3.9, resolved 2026-06-21).** The change is **owner-triggered
+> via `POST /api/household/base-currency`** (Settings → Management → Household config; owner-only, audited)
+> and **recomputes synchronously inside that request** — *not* a Cloud Scheduler `/jobs/*` run. FR-CU-005's
+> "background job" wording predates the §1.7 decision that the only async path is cron→`/jobs/*`, which an
+> owner action cannot reach; with household-scale event volumes the recompute is sub-second, so it runs
+> in-request as a standalone `recompute_amount_base` service fn (promotable to `BackgroundTasks`/a queued
+> job later). **Do not add a `/jobs/recompute-base` endpoint** (§5.6's job table is complete as-is). The
+> persistent `BASE_CURRENCY_CHANGED` alert records completion; an in-session toast covers "while running".
+> The change: re-base every `Currency.rate_to_base` to the new base (new base → `1.0`, others ÷ the new
+> currency's old `rate_to_base`), flip `is_base`, then recompute each `financial_event`'s
+> `amount_base_calculated`/`amount_base`/`fx_delta`/`fx_rate_date` using the **historical `event_date` rate
+> derived from `FxRateHistory`** (`hist(c→old)/hist(new→old)`), falling back to the re-based **current**
+> rate when a date has no history row. `FxProvider.fetch_historical` (§5.7) stays unimplemented — no
+> provider backfill. A base change **resets** `amount_base` to the recomputed `amount_base_calculated`
+> (a prior `manual` override was in old-base units; the override flow is Epic 5). A zero-event household
+> changes with nothing to recompute (§2.6).
+
 **`persons`** (BaseEntity, nullable `household_id`/`created_by`) — adds: `email(320,unique),
 display_name, picture_url, role(owner|admin|member), display_currency(ISO,def SGD),
 default_view(household|personal), google_sub(unique), last_active_at, can_create_household
@@ -1235,6 +1252,11 @@ foreign amount to base**: `amount_base = amount × rate_to_base`. Example: `amou
 `rate_to_base = 0.88` → `amount_base = 88 SGD`. The base currency's own `rate_to_base = 1.0`.
 This is the single allowed direction everywhere money is converted; any inverse is a bug.
 The PRD's prose "1 base = X target" is restated in this multiplier form to match the field.
+**Fee convention (resolved — authoritative):** `fee_pct` is stored as a **percentage number**
+(e.g. `1.5` = 1.5%), matching `fx_fee_calculation`'s `(1 + fee_pct/100)` (the §3.8 formula table
+below) and the example `fee_pct=1.5`. The per-transaction `fee_amount = amount × fee_pct / 100`
+(set on entry — Epic 5). The currencies table displays the stored value directly with a `%`
+suffix (no ×100). Locked in Story 3.8.
 
 **`fx_rate_history`** (Base) — `id, currency_id(FK), rate_date, rate_to_base(10,6), source`.
 UNIQUE `(currency_id, rate_date)`. The read side (FR-CU-009 chart) queries this.

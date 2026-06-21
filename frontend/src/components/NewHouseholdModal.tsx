@@ -7,10 +7,10 @@ import { Label } from './primitives/Label'
 import { Dropdown } from './primitives/Dropdown'
 import { useAuthStore } from '../stores/authStore'
 import { api } from '../api/client'
-import { COMMON_TIMEZONES } from '../lib/timezones'
+import { TIMEZONE_OPTIONS } from '../lib/timezones'
 import type { Household } from '../types/auth'
 
-const TZ_OPTIONS = COMMON_TIMEZONES.map((tz) => ({ value: tz, label: tz }))
+const TZ_OPTIONS = TIMEZONE_OPTIONS
 
 /**
  * First-login owner setup (UX §4.5, FR-HH-001). Auto-shows once when `/auth/me` returns

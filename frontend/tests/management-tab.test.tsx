@@ -31,6 +31,15 @@ function makeResponse(body: unknown, status = 200) {
 
 /** Route fetch by URL so the list queries + the PATCH each get the right body. The owner/admin path
  *  reads the token-bearing `…/invitations/manage`; a plain member reads `…/invitations` (Story 2.6b). */
+// SGD (base) + NZD for the base-currency picker (Story 3.9).
+const CURRENCIES = {
+  items: [
+    { code: 'SGD', symbol: 'S$', is_base: true, is_display_active: true },
+    { code: 'NZD', symbol: 'NZ$', is_base: false, is_display_active: true },
+  ],
+  total: 2,
+}
+
 function routeFetch(overrides: { members?: ListResponse<Member>; invitations?: ListResponse<Invitation>; manage?: ListResponse<unknown>; patch?: Household } = {}) {
   const members = overrides.members ?? MEMBERS
   const invitations = overrides.invitations ?? { items: [], total: 0 }
@@ -40,9 +49,11 @@ function routeFetch(overrides: { members?: ListResponse<Member>; invitations?: L
     if (u === '/api/household' && opts?.method === 'PATCH') {
       return makeResponse(overrides.patch ?? { ...HH, name: 'Renamed' })
     }
+    if (u === '/api/household/base-currency') return makeResponse({ ...HH, baseCurrency: 'NZD' })
     if (u === '/api/household/members') return makeResponse(members)
     if (u === '/api/household/invitations/manage') return makeResponse(manage)
     if (u === '/api/household/invitations') return makeResponse(invitations)
+    if (u === '/api/currencies') return makeResponse(CURRENCIES)
     if (u === '/api/fx-providers/types') return makeResponse([])
     if (u === '/api/fx-providers') return makeResponse({ items: [], total: 0 })
     throw new Error(`unexpected fetch ${u}`)
@@ -100,12 +111,37 @@ describe('ManagementTab — household config', () => {
     expect(screen.getAllByText('Owner only').length).toBeGreaterThan(0)
   })
 
-  test('base currency is read-only; no base-currency selector or date-format field (P0)', () => {
+  test('non-owner base currency is read-only; no date-format field (P0)', () => {
+    useAuthStore.setState({ currentPerson: MEMBER })
     renderTab()
     const baseCcy = screen.getByLabelText('Base currency') as HTMLInputElement
     expect(baseCcy.value).toBe('SGD')
     expect(baseCcy.readOnly).toBe(true)
     expect(screen.queryByText(/date format/i)).toBeNull()
+  })
+
+  test('owner picks a new base currency → recompute confirm → POST + store update (Story 3.9)', async () => {
+    renderTab()
+    // Owner gets a picker (button), not a read-only input; pre-set to SGD.
+    const trigger = await screen.findByRole('button', { name: 'Base currency' })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('option', { name: 'NZD (NZ$)' }))
+
+    // The recompute-warning confirm appears; nothing is POSTed until confirmed.
+    expect(screen.getByText(/recomputes all amounts/i)).toBeTruthy()
+    expect(
+      fetchMock.mock.calls.some(([u]) => String(u) === '/api/household/base-currency'),
+    ).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change base currency' }))
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([u]) => String(u) === '/api/household/base-currency'),
+      ).toBe(true),
+    )
+    const call = fetchMock.mock.calls.find(([u]) => String(u) === '/api/household/base-currency')!
+    expect(JSON.parse(call[1].body as string)).toEqual({ baseCurrency: 'NZD' })
+    await waitFor(() => expect(useAuthStore.getState().household?.baseCurrency).toBe('NZD'))
   })
 })
 

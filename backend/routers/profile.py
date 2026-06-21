@@ -4,8 +4,8 @@
 ONLY the authenticated person (via `get_writable_person`, never a body-supplied id) and returns the
 updated §2.14.C person object (`person_payload`, camelCase) so the SPA can refresh its store. No
 household scoping and no role gate (a personal preference; any authenticated member edits own); the
-PATCH is CSRF-protected by the middleware (mutating verb). Display currency (Story 3.9) and date
-format (Story 2.11) are not writable here.
+PATCH is CSRF-protected by the middleware (mutating verb). Display currency (Story 3.9, validated
+against the household's display-active currencies) and date format (Story 2.11) are writable here.
 """
 
 from fastapi import APIRouter, Depends

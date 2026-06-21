@@ -3,7 +3,8 @@
 The household/auth surface is camelCase (§2.14.C), so these models carry `to_camel` aliasing
 (`HouseholdUpdate` for the write; `MemberOut`/`InvitationOut` mirror the §2.14.C `person` /
 `pendingInvitation` camelCase shapes — Story 2.5 D-CASE-LISTS). The list responses follow the
-`{items, total}` rule (backend.md §2). Base-currency change is Epic 3 (FR-CU-005), absent here.
+`{items, total}` rule (backend.md §2). `BaseCurrencyUpdate` is the owner base-currency change
+(Story 3.9, FR-CU-005).
 """
 
 from datetime import datetime
@@ -21,6 +22,13 @@ class _CamelModel(BaseModel):
 class HouseholdUpdate(_CamelModel):
     name: str | None = None
     timezone: str | None = None
+
+
+class BaseCurrencyUpdate(_CamelModel):
+    """Body for `POST /api/household/base-currency` (Story 3.9, FR-CU-005, owner-only). The code is
+    validated in the service against the household's currencies (no pydantic enum)."""
+
+    base_currency: str
 
 
 class MemberOut(_CamelModel):

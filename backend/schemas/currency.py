@@ -28,13 +28,15 @@ class CurrencyCreate(BaseModel):
 
 class CurrencyUpdate(BaseModel):
     # No `code` (the UNIQUE identity is immutable after create), no `is_base` (base-change is Story
-    # 3.9), no `rate_to_base` (Story 3.7), no `fee_pct` (Story 3.8). Editing the base currency's
-    # name/symbol/colour/vivid is allowed; `is_base` simply isn't here so it can't be flipped.
+    # 3.9), no `rate_to_base` (Story 3.7). `fee_pct` is owned by Story 3.8 — stored as the
+    # percentage number itself (`1.5` = 1.5%; ARCH §3.8 "Fee convention"). Editing the base
+    # currency's name/symbol/colour/vivid is allowed; `is_base` simply isn't here so it can't flip.
     name: str | None = None
     symbol: str | None = None
     colour: str | None = None
     vivid: bool | None = None
     is_display_active: bool | None = None
+    fee_pct: Decimal | None = None
 
 
 class CurrencyResponse(BaseModel):
@@ -52,6 +54,10 @@ class CurrencyResponse(BaseModel):
     fee_pct: Decimal
     last_rate_at: datetime | None
     rate_source: str | None
+    # The last <=12 daily `rate_to_base` points (oldest->newest) for the row MiniSparkline (Story
+    # 3.8, FR-CU-009). Presentational float (no money math on it); attached by the list router from
+    # a batched `list_rate_histories`. Empty on the single-currency GET (not a sparkline consumer).
+    rate_history: list[float] = []
 
 
 class CurrencyListOut(BaseModel):

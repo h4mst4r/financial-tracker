@@ -5,8 +5,12 @@
 `get_household_id` (the session's household, never the body). Currencies are flat config rows:
 no archive/restore, no audit (§3.10). Snake_case wire (generic-entity surface).
 
-NOT here: FX fetch (Story 3.7), fee editing + FX-history chart (Story 3.8), base-currency change
-(Story 3.9), the topbar display-currency switcher (Story 9.7).
+Story 3.8 adds the read side of FX: each list row carries `rate_history` (the last <=12 daily
+`rate_to_base` points for the MiniSparkline) and `fee_pct` is editable via PATCH.
+
+NOT here: FX fetch (Story 3.7 — writes the rates this story reads), base-currency change
+(Story 3.9), the topbar display-currency switcher (Story 9.7), the full FX-history Viewer endpoint
+`GET /api/visualizations/fx-rate-history/{id}` (Epic 9).
 """
 
 from fastapi import APIRouter, Depends, Response
@@ -37,7 +41,12 @@ async def list_currencies(
     """The household's currencies as a flat list (any member; FR-CU-001). Base first, then by
     code. `{items, total}` per the list rule."""
     currencies = await currency_service.list_currencies(db, household_id)
-    items = [CurrencyResponse.model_validate(c) for c in currencies]
+    histories = await currency_service.list_rate_histories(db, [c.id for c in currencies])
+    items = []
+    for c in currencies:
+        item = CurrencyResponse.model_validate(c)
+        item.rate_history = histories.get(c.id, [])
+        items.append(item)
     return CurrencyListOut(items=items, total=len(items))
 
 

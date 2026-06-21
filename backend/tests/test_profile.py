@@ -9,6 +9,7 @@ isolation, and the extended §2.14.C `/auth/me` person payload (appearance defau
 
 import json
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from backend.database import get_db
 from backend.main import create_app
 from backend.models.base import Base
-from backend.models.identity import Person
+from backend.models.currency import Currency
+from backend.models.identity import Household, Person
 from backend.rate_limit import limiter
 from backend.services import auth
 
@@ -273,6 +275,82 @@ async def test_auth_me_person_carries_appearance_defaults(monkeypatch):
             "fxStale": True,
             "backups": False,
         }
+    finally:
+        await engine.dispose()
+
+
+# ── Display currency (Story 3.9, FR-CU-004) ──
+
+
+async def _seed_person_with_currencies(factory) -> str:
+    """A household with base SGD + a display-active NZD + a non-display-active EUR, and a member.
+    Returns the member's id."""
+    hh_id = str(uuid4())
+    person_id = str(uuid4())
+    async with factory() as db:
+        db.add(Household(id=hh_id, name="Acme", base_currency="SGD", created_by=person_id))
+        await db.flush()
+        db.add(
+            Person(
+                id=person_id,
+                household_id=hh_id,
+                email=f"{uuid4()}@example.com",
+                display_name="Member",
+                role="member",
+                google_sub=f"sub-{uuid4()}",
+            )
+        )
+        for code, active in (("SGD", True), ("NZD", True), ("EUR", False)):
+            db.add(
+                Currency(
+                    household_id=hh_id,
+                    code=code,
+                    name=code,
+                    symbol=code,
+                    is_base=(code == "SGD"),
+                    is_display_active=active,
+                    rate_to_base=Decimal("1.0"),
+                    fee_pct=Decimal("0"),
+                )
+            )
+        await db.commit()
+    return person_id
+
+
+async def test_patch_profile_display_currency_persists(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id = await _seed_person_with_currencies(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.patch("/api/profile", json={"displayCurrency": "nzd"})  # lowercased input
+        assert resp.status_code == 200
+        assert resp.json()["displayCurrency"] == "NZD"  # uppercased
+
+        async with factory() as db:
+            assert (await db.get(Person, person_id)).display_currency == "NZD"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("code", ["EUR", "USD"])
+async def test_patch_profile_display_currency_invalid_400(monkeypatch, code):
+    """EUR exists but is not display-active; USD is not in the household at all. Both → 400."""
+    engine, factory = await _make_factory()
+    try:
+        person_id = await _seed_person_with_currencies(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.patch("/api/profile", json={"displayCurrency": code})
+        assert resp.status_code == 400
+        assert resp.json()["status"] == 400
+
+        async with factory() as db:
+            assert (await db.get(Person, person_id)).display_currency == "SGD"  # unchanged
     finally:
         await engine.dispose()
 

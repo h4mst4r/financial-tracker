@@ -1050,21 +1050,26 @@ Settings (owner; recompute warning).
 
 **Add/Edit currency modal (EntityModal, §8.2).** Fields: **Code** (ISO 4217 — a type-ahead over the
 runtime's currency list; **read-only when editing**, since the code is the row's identity) · **Symbol**
-· **Name** · **Colour** (ColourPicker + the per-instance **vivid** toggle, §8.2) · **Display-active**
-toggle (defaults on). The code list, default **Name**, and default **Symbol** come from the browser's
-native `Intl` (`supportedValuesOf` / `DisplayNames` / `NumberFormat`) — there is **no maintained
-currency table**; picking a code auto-fills Name + Symbol + a deterministic default colour, all
-overridable. A freshly-added currency has **no rate yet** (the FX fetch is a later story) — its rate
-reads as the placeholder and its freshness shows **"never"** until the daily refresh runs.
+· **Name** · **Colour** (ColourPicker + the per-instance **vivid** toggle, §8.2) · **FX fee (%)**
+(a non-base currency's conversion fee — entered and stored as a **percentage number**, e.g. `1.5` =
+1.5%, no ×100/÷100; shown **only when editing a non-base currency**, since the base has no FX fee and
+a new currency's fee is set right after adding) · **Display-active** toggle (defaults on). The code
+list, default **Name**, and default **Symbol** come from the browser's native `Intl`
+(`supportedValuesOf` / `DisplayNames` / `NumberFormat`) — there is **no maintained currency table**;
+picking a code auto-fills Name + Symbol + a deterministic default colour, all overridable. A
+freshly-added currency has **no rate yet** (the FX fetch is a later story) — its rate reads as the
+placeholder and its freshness shows **"never"** until the daily refresh runs.
 
-> **Scope notes (sequencing).** The **fee** value is *set* in a later story (FR-CU-007) — the column
-> is read-only here. The **FX-history mini-chart** + real rate freshness arrive with FX fetching
-> (FR-CU-009). The **"Status" column rename** (from "Fresh"), the **last-updated time**, and the
-> **"Exchange rates updated" refetch toast** are built in **Story 3.8** alongside the real freshness
-> (Story 3.5 ships the basic badge with the "Fresh" header; the rename + time + toast land in 3.8).
-> *(SCP 2026-06-20 — Ben: surface when rates were last updated + confirm an update in-session.)* The **topbar display-currency switcher** that consumes `is_display_active` is the
-> **ViewContextSwitcher** (§8.4), and **per-person display currency** is its own story (FR-CU-004) —
-> the Currencies page only *sets* `is_display_active`, it does not render the switcher.
+> **Scope notes (sequencing).** **Built in Story 3.8:** fee editing (the **FX fee (%)** modal field,
+> FR-CU-007 — `fee_pct` as a percentage number); the **FX-history mini-chart** (the row sparkline,
+> FR-CU-009) reading the embedded `rate_history` (the click→Viewer expand stays Epic 9); real >48 h
+> rate freshness; the **"Status" column rename** (from "Fresh"); the **last-updated time**; and the
+> **"Exchange rates updated" refetch toast**. *(Story 3.5 shipped the basic badge with the "Fresh"
+> header; the fee field, sparkline, rename, time + toast landed in 3.8 — SCP 2026-06-20, Ben: surface
+> when rates were last updated + confirm an update in-session.)* **Still deferred:** the **topbar
+> display-currency switcher** that consumes `is_display_active` is the **ViewContextSwitcher** (§8.4,
+> Story 9.7), and **per-person display currency** is its own story (FR-CU-004) — the Currencies page
+> only *sets* `is_display_active`, it does not render the switcher.
 
 ## 11. Formula
 

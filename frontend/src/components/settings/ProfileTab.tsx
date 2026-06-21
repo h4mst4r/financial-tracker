@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
 import { Dropdown } from '../primitives/Dropdown'
@@ -15,6 +15,8 @@ import { FONT_OPTIONS } from '../../theme/palettes'
 import type { ThemeId, FontId } from '../../theme/palettes'
 import type { DisplayFormat } from '../../lib/date'
 import type { Person, NotificationPrefs } from '../../types/auth'
+import type { Currency } from '../../types/currency'
+import type { ListResponse } from '../../types/household'
 
 /** The three date-format orderings (FR-P-009, Story 2.11) — label == token. */
 const DATE_FORMAT_OPTIONS: { value: DisplayFormat; label: string }[] = [
@@ -40,13 +42,14 @@ type ProfilePatch = Partial<{
   font: FontId
   density: 'comfortable' | 'compact'
   displayFormat: DisplayFormat
+  displayCurrency: string
   reduceMotion: boolean
   notificationPrefs: Partial<NotificationPrefs>
 }>
 
 /**
  * Settings → Profile tab (UX §5.1, FR-P-003, Story 2.9). Personal preferences split into Identity
- * (display name editable; display currency read-only — Story 3.9), Appearance (theme + font),
+ * (display name + display-currency picker — the latter Story 3.9, FR-CU-004), Appearance (theme + font),
  * Notifications (per-alert checkboxes), and App (density + reduce-motion). Appearance/App changes
  * apply live through the Epic-1 theming engine (themeStore → useAppearance) and persist immediately;
  * the display name has an explicit Save. The App date format (Story 2.11) persists per person and is
@@ -67,6 +70,16 @@ export function ProfileTab() {
   const setReduceMotion = useThemeStore((s) => s.setReduceMotion)
 
   const [name, setName] = useState(person?.displayName ?? '')
+
+  // The display-currency picker offers the household's display-active currencies (FR-CU-004). Same
+  // query key as the Currencies page so it shares the cache.
+  const { data: currencies } = useQuery({
+    queryKey: ['currencies'],
+    queryFn: async () => (await api.get<ListResponse<Currency>>('/api/currencies')).data,
+  })
+  const currencyOptions = (currencies?.items ?? [])
+    .filter((c) => c.is_display_active)
+    .map((c) => ({ value: c.code, label: `${c.code} (${c.symbol})` }))
 
   const save = useMutation({
     mutationFn: async (body: ProfilePatch) => (await api.patch<Person>('/api/profile', body)).data,
@@ -104,6 +117,15 @@ export function ProfileTab() {
     // mutation's onSuccess (setCurrentPerson) refreshes. Persist only.
     save.mutate({ displayFormat: next as DisplayFormat })
   }
+  function pickDisplayCurrency(next: string) {
+    // Render-time preference only (FR-P-004) — never touches stored amount_base. onSuccess refreshes
+    // currentPerson; the dashboard render + topbar switcher are Epic 9 / Story 9.7 consumers. It has
+    // no live visual effect yet, so toast on save (else picking feels like a no-op).
+    save.mutate(
+      { displayCurrency: next },
+      { onSuccess: () => pushToast({ message: 'Display currency updated', variant: 'success' }) },
+    )
+  }
   function toggleNotification(key: keyof NotificationPrefs, next: boolean) {
     // Send only the changed key — the backend merges over the stored set. Sending the full render-time
     // snapshot would let a rapid second toggle of another key clobber the first (lost update).
@@ -123,8 +145,18 @@ export function ProfileTab() {
           </div>
           <div className="flex flex-col gap-2xs">
             <Label htmlFor="profile-currency">Display currency</Label>
-            {/* Read-only here; the per-person display-currency selector is Story 3.9 (D-DISPCCY). */}
-            <Input id="profile-currency" value={person.displayCurrency} disabled readOnly />
+            {/* Per-person display currency (Story 3.9, FR-CU-004) — the household's display-active
+                currencies; persists on pick. While the list loads, show the current value disabled. */}
+            {currencyOptions.length > 0 ? (
+              <Dropdown
+                id="profile-currency"
+                value={person.displayCurrency}
+                options={currencyOptions}
+                onChange={pickDisplayCurrency}
+              />
+            ) : (
+              <Input id="profile-currency" value={person.displayCurrency} disabled readOnly />
+            )}
           </div>
         </div>
         <div className="flex justify-end">

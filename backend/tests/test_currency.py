@@ -10,6 +10,7 @@ delete, cross-household 404, member-role 403.
 """
 
 import tempfile
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -22,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from backend.database import get_db
 from backend.main import create_app
 from backend.models.base import Base
-from backend.models.currency import Currency
+from backend.models.currency import Currency, FxRateHistory
 from backend.models.identity import Household, Person
 from backend.rate_limit import limiter
 from backend.services import auth
@@ -340,5 +341,118 @@ async def test_member_role_cannot_mutate_403(monkeypatch):
         assert client.post("/api/currencies", json=_new("NZD")).status_code == 403
         # but a member CAN list
         assert client.get("/api/currencies").status_code == 200
+    finally:
+        await engine.dispose()
+
+
+# ── Conversion fee (Story 3.8 — fee_pct is the percentage number, stored as-is) ──
+
+
+async def test_fee_pct_persists(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        cur = client.post("/api/currencies", json=_new("NZD")).json()
+        resp = client.patch(f"/api/currencies/{cur['id']}", json={"fee_pct": 1.5})
+        assert resp.status_code == 200
+        # Stored as the percentage number itself (no x100/÷100), ARCH §3.8 fee convention.
+        assert Decimal(str(resp.json()["fee_pct"])) == Decimal("1.5")
+        fetched = client.get(f"/api/currencies/{cur['id']}").json()
+        assert Decimal(str(fetched["fee_pct"])) == Decimal("1.5")
+    finally:
+        await engine.dispose()
+
+
+async def test_negative_fee_rejected_400(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        cur = client.post("/api/currencies", json=_new("NZD")).json()
+        resp = client.patch(f"/api/currencies/{cur['id']}", json={"fee_pct": -5})
+        assert resp.status_code == 400
+        assert resp.json()["status"] == 400  # RFC 7807
+    finally:
+        await engine.dispose()
+
+
+async def test_member_cannot_set_fee_403(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        # An admin creates the currency; then a member of the SAME household tries to set the fee.
+        admin_id, hh_id = await _seed_household(factory)
+        a_sid, a_csrf = await _seed_session(factory, admin_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, a_sid, a_csrf)
+        cur = client.post("/api/currencies", json=_new("NZD")).json()
+
+        member_id = str(uuid4())
+        async with factory() as db:
+            db.add(
+                Person(
+                    id=member_id,
+                    household_id=hh_id,
+                    email=f"{uuid4()}@example.com",
+                    display_name="Member Person",
+                    role="member",
+                    google_sub=f"sub-{uuid4()}",
+                )
+            )
+            await db.commit()
+        m_sid, m_csrf = await _seed_session(factory, member_id)
+        client_m = _client_with_db(factory, monkeypatch)
+        _auth(client_m, m_sid, m_csrf)
+        resp = client_m.patch(f"/api/currencies/{cur['id']}", json={"fee_pct": 1.5})
+        assert resp.status_code == 403
+    finally:
+        await engine.dispose()
+
+
+# ── FX rate history embedded in the list (Story 3.8 — sparkline series) ──
+
+
+async def _add_history(factory, currency_id: str, rates: list[float]) -> None:
+    """Insert `len(rates)` consecutive daily FxRateHistory rows (oldest first)."""
+    async with factory() as db:
+        start = date.today() - timedelta(days=len(rates) - 1)
+        for i, rate in enumerate(rates):
+            db.add(
+                FxRateHistory(
+                    currency_id=currency_id,
+                    rate_date=start + timedelta(days=i),
+                    rate_to_base=Decimal(str(rate)),
+                    source="test",
+                )
+            )
+        await db.commit()
+
+
+async def test_list_includes_rate_history(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        nzd = client.post("/api/currencies", json=_new("NZD")).json()
+        # 14 days of history — only the most recent 12 should come back, oldest->newest.
+        rates = [round(0.80 + i * 0.01, 6) for i in range(14)]
+        await _add_history(factory, nzd["id"], rates)
+        # A currency with NO history → empty series.
+        client.post("/api/currencies", json=_new("USD"))
+
+        items = client.get("/api/currencies").json()["items"]
+        by_code = {c["code"]: c for c in items}
+        assert by_code["NZD"]["rate_history"] == rates[-12:]
+        assert by_code["USD"]["rate_history"] == []
+        assert by_code["SGD"]["rate_history"] == []  # base, no history
     finally:
         await engine.dispose()

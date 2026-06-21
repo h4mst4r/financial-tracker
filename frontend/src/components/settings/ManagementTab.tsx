@@ -31,14 +31,15 @@ import { useAuthStore } from '../../stores/authStore'
 import { useAlertStore } from '../../stores/alertStore'
 import { useLeaveHousehold, useDeleteHousehold } from '../../hooks/useMembershipExit'
 import { api, ApiError } from '../../api/client'
-import { COMMON_TIMEZONES } from '../../lib/timezones'
+import { TIMEZONE_OPTIONS } from '../../lib/timezones'
 import { formatDateDisplay } from '../../lib/date'
 import type { Household } from '../../types/auth'
+import type { Currency } from '../../types/currency'
 import type { Invitation, InvitationManage, ListResponse, Member } from '../../types/household'
 import type { EntityListResponse } from '../../types/entity'
 import type { FxProvider, FxProviderType } from '../../types/fxProvider'
 
-const TZ_OPTIONS = COMMON_TIMEZONES.map((tz) => ({ value: tz, label: tz }))
+const TZ_OPTIONS = TIMEZONE_OPTIONS
 
 const ROLE_BADGE: Record<Member['role'], BadgeVariant> = {
   owner: 'info',
@@ -55,9 +56,9 @@ const INVITATION_BADGE: Record<string, BadgeVariant> = {
 }
 
 /**
- * Settings → Management tab (UX §5.2, FR-HH-002, Stories 2.5/2.6b/2.7/2.8). Household config
- * (name/timezone editable by the owner via the Story 2.4c `PATCH /api/household`; base currency
- * read-only — Epic 3), the Members roster (with the adaptive ⋮ — role/archive/remove/delete, Story
+ * Settings → Management tab (UX §5.2, FR-HH-002, Stories 2.5/2.6b/2.7/2.8/3.9). Household config
+ * (name/timezone editable by the owner via the Story 2.4c `PATCH /api/household`; base-currency
+ * change + recompute via Story 3.9 `POST /api/household/base-currency`), the Members roster (with the adaptive ⋮ — role/archive/remove/delete, Story
  * 2.8), the Invitations roster (admin/owner Invite + per-row actions, 2.6b), the Integrations panel
  * (FX rate providers — owner-editable, read-only for others, Story 3.6), and the Danger Zone (2.7).
  * The lists are bespoke token-styled layouts pending the Epic-5 Table primitive (D-TABLE).
@@ -79,10 +80,23 @@ function HouseholdConfig() {
   const role = useAuthStore((s) => s.currentPerson?.role)
   const setHousehold = useAuthStore((s) => s.setHousehold)
   const pushToast = useAlertStore((s) => s.pushToast)
+  const queryClient = useQueryClient()
   const isOwner = role === 'owner'
 
   const [name, setName] = useState(household?.name ?? '')
   const [timezone, setTimezone] = useState(household?.timezone ?? 'Asia/Singapore')
+  // The base-currency change is a confirm→commit action of its own (recompute warning), separate
+  // from the name/timezone Save. `pendingBase` holds the picked code until the owner confirms.
+  const [pendingBase, setPendingBase] = useState<string | null>(null)
+
+  const { data: currencies } = useQuery({
+    queryKey: ['currencies'],
+    queryFn: async () => (await api.get<ListResponse<Currency>>('/api/currencies')).data,
+  })
+  const currencyOptions = (currencies?.items ?? []).map((c) => ({
+    value: c.code,
+    label: `${c.code} (${c.symbol})`,
+  }))
 
   const save = useMutation({
     mutationFn: async () => (await api.patch<Household>('/api/household', { name, timezone })).data,
@@ -90,6 +104,20 @@ function HouseholdConfig() {
       setHousehold(updated)
       pushToast({ message: 'Household settings saved', variant: 'success' })
     },
+  })
+
+  const changeBase = useMutation({
+    mutationFn: async (baseCurrency: string) =>
+      (await api.post<Household>('/api/household/base-currency', { baseCurrency })).data,
+    onSuccess: (updated) => {
+      setHousehold(updated)
+      // Rates re-base on the server — drop the cached currency list so it refetches.
+      queryClient.invalidateQueries({ queryKey: ['currencies'] })
+      pushToast({ message: 'Base currency updated', variant: 'success' })
+    },
+    // The confirm dialog has already closed — surface a failure (e.g. no-rate-yet 400) instead of
+    // leaving the owner with no feedback.
+    onError: () => pushToast({ message: 'Could not change the base currency', variant: 'error' }),
   })
 
   const dirty = name !== household?.name || timezone !== household?.timezone
@@ -127,8 +155,20 @@ function HouseholdConfig() {
         </div>
         <div className="flex flex-col gap-2xs">
           <Label htmlFor="hh-base-currency">Base currency</Label>
-          {/* Read-only here; base-currency change + recompute is Epic 3 / FR-CU-005 (D-DEFER). */}
-          <Input id="hh-base-currency" value={household?.baseCurrency ?? ''} disabled readOnly />
+          {/* Owner-editable base-currency change + recompute (Story 3.9, FR-CU-005); read-only for
+              others. Picking a different code opens the recompute-warning confirm below. */}
+          {isOwner && currencyOptions.length > 0 ? (
+            <Dropdown
+              id="hh-base-currency"
+              value={household?.baseCurrency ?? ''}
+              options={currencyOptions}
+              onChange={(next) => {
+                if (next !== household?.baseCurrency) setPendingBase(next)
+              }}
+            />
+          ) : (
+            <Input id="hh-base-currency" value={household?.baseCurrency ?? ''} disabled readOnly />
+          )}
         </div>
       </div>
 
@@ -139,6 +179,17 @@ function HouseholdConfig() {
           </Button>
         </div>
       )}
+
+      <ConfirmationDialog
+        open={pendingBase !== null}
+        onClose={() => setPendingBase(null)}
+        onConfirm={() => {
+          if (pendingBase) changeBase.mutate(pendingBase)
+        }}
+        title="Change base currency"
+        message={`Changing the base currency to ${pendingBase} recomputes all amounts. This can't be undone.`}
+        confirmLabel="Change base currency"
+      />
     </section>
   )
 }

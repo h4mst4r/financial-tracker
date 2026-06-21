@@ -397,6 +397,8 @@
    NOTE: keep `*` `/` apart in these comments — a literal star-slash closes the CSS comment early and the
    next @utility silently breaks (that bug cost real time during 1.10). ── */
 @utility h-sparkline { height: 40px; }
+/* The inline row-sparkline footprint width (Currencies table History column, Story 3.8 / bible §10 ~60px). */
+@utility w-sparkline { width: 72px; }
 @utility spark-area  { fill: var(--entity-colour); opacity: 0.14; }
 @utility spark-line  { fill: none; stroke: var(--entity-colour); stroke-width: 2; }
 @utility spark-end   { fill: var(--entity-colour); }

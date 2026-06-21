@@ -3,7 +3,9 @@
 `PATCH /api/household` — owner-scoped name/timezone update (Story 2.4c).
 `GET /api/household/members` and `GET /api/household/invitations` — household-scoped read-only
 rosters for the Settings → Management tab (Story 2.5, any member may view). The PATCH is
-CSRF-protected by the middleware (not exempt); GETs are exempt by method. Base currency is Epic 3.
+CSRF-protected by the middleware (not exempt); GETs are exempt by method. `POST
+/api/household/base-currency` is the owner base-currency change + synchronous recompute (Story 3.9,
+FR-CU-005).
 """
 
 from datetime import UTC, datetime
@@ -15,6 +17,7 @@ from backend.database import get_db
 from backend.dependencies import get_household_id, get_writable_person, require_role
 from backend.models.identity import HouseholdInvitation, Person
 from backend.schemas.household import (
+    BaseCurrencyUpdate,
     HouseholdUpdate,
     InvitationCreate,
     InvitationListOut,
@@ -26,6 +29,7 @@ from backend.schemas.household import (
     RoleUpdate,
 )
 from backend.services import auth as auth_service
+from backend.services import currency as currency_service
 from backend.services import household as household_service
 from backend.services import invitation as invitation_service
 from backend.services import membership as membership_service
@@ -80,6 +84,25 @@ async def patch_household(
     `require_role`. A non-owner gets 403; a NULL-household session gets 401.
     """
     household = await household_service.update_household(db, household_id, person.id, data)
+    return auth_service.household_payload(household)
+
+
+@router.post("/household/base-currency")
+async def change_base_currency(
+    data: BaseCurrencyUpdate,
+    person: Person = Depends(_require_owner),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Owner changes the base currency (FR-CU-005); return the §2.14.C household object.
+
+    Re-bases every currency rate, flips `is_base`, updates `Household.base_currency`, recomputes all
+    financial events synchronously, audits, and writes a `BASE_CURRENCY_CHANGED` alert. Non-owner →
+    403; unknown/cross-household code → 404; already-the-base or no-rate-yet → 400.
+    """
+    household = await currency_service.change_base_currency(
+        db, household_id, person.id, data.base_currency
+    )
     return auth_service.household_payload(household)
 
 

@@ -61,8 +61,38 @@ export function displayRate(rateToBase: string, baseCode: string, code: string, 
   return `1 ${baseCode} = ${formatted} ${code}`
 }
 
+/** `last_rate_at` round-trips from SQLite as a **naive** UTC string (no tz designator — see the
+ *  Story 3.7 "SQLite drops tzinfo" note). Parse it AS UTC so the freshness/age math isn't skewed by
+ *  the viewer's timezone: append `Z` when the string carries no offset/`Z`. */
+function rateTimeMs(iso: string): number {
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso)
+  return new Date(hasTz ? iso : `${iso}Z`).getTime()
+}
+
+/** The absolute last-updated time for the Status hover tooltip (local-rendered, Story 3.8). */
+export function absoluteRateTime(iso: string): string {
+  return new Date(rateTimeMs(iso)).toLocaleString()
+}
+
 /** Rate freshness (FR-CU-001): stale when never fetched (null) or older than 48 hours. */
 export function isStale(lastRateAt: string | null): boolean {
   if (lastRateAt === null) return true
-  return Date.now() - new Date(lastRateAt).getTime() > STALE_MS
+  return Date.now() - rateTimeMs(lastRateAt) > STALE_MS
+}
+
+/** Compact relative age for the Status badge (Story 3.8, UX §10): "just now" / "5m ago" /
+ *  "2h ago" / "3d ago". Hand-rolled for the compact form — `Intl.RelativeTimeFormat` yields the
+ *  verbose "2 hours ago", and `date-fns` "about 2 hours ago". No dependency. */
+export function relativeAge(iso: string): string {
+  const mins = Math.floor((Date.now() - rateTimeMs(iso)) / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+/** Whole hours since `iso` — the `stale {N}h` label (Story 3.8). */
+export function staleHours(iso: string): number {
+  return Math.floor((Date.now() - rateTimeMs(iso)) / (60 * 60 * 1000))
 }

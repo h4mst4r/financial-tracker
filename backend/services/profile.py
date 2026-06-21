@@ -13,9 +13,11 @@ by `person_payload` so every read returns a complete, well-typed object.
 
 import json
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
+from backend.models.currency import Currency
 from backend.models.identity import Person
 from backend.schemas.profile import ProfileUpdate
 
@@ -78,6 +80,24 @@ async def update_profile(db: AsyncSession, person: Person, data: ProfileUpdate) 
                 "Invalid date format", f"'{fields['display_format']}' is not a valid date format"
             )
         person.display_format = fields["display_format"]
+    if fields.get("display_currency") is not None:
+        # Must be a display-active currency in the person's own household (FR-CU-004). The picker
+        # only offers those; the API is the trust boundary, so re-check here (404/cross-hh codes
+        # never resolve).
+        code = fields["display_currency"].strip().upper()
+        match = await db.scalar(
+            select(Currency.id).where(
+                Currency.household_id == person.household_id,
+                Currency.code == code,
+                Currency.is_display_active.is_(True),
+            )
+        )
+        if match is None:
+            errors.bad_request(
+                "Invalid display currency",
+                f"'{fields['display_currency']}' is not a display-active currency",
+            )
+        person.display_currency = code
     if fields.get("reduce_motion") is not None:
         person.reduce_motion = fields["reduce_motion"]
     if fields.get("display_name") is not None:

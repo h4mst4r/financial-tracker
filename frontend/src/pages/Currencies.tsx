@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleDollarSign, Pencil, Trash2, MoreVertical } from 'lucide-react'
 import { EntityPage, EntityModal } from '../components/entity'
@@ -10,6 +10,7 @@ import { ContextMenu } from '../components/primitives/ContextMenu'
 import type { ContextMenuEntry } from '../components/primitives'
 import { ColourPicker } from '../components/primitives/ColourPicker'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
+import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { useAlertStore } from '../stores/alertStore'
 import { api, ApiError } from '../api/client'
 import type { EntityListResponse } from '../types/entity'
@@ -21,6 +22,9 @@ import {
   colourForCode,
   displayRate,
   isStale,
+  relativeAge,
+  staleHours,
+  absoluteRateTime,
 } from '../lib/currency'
 
 // Currencies page (UX §10). EntityPage scaffold over a bespoke FX table (there's no Table primitive
@@ -40,6 +44,8 @@ interface FormState {
   colour: string
   vivid: boolean
   isDisplayActive: boolean
+  isBase: boolean
+  feePct: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -50,6 +56,8 @@ const EMPTY_FORM: FormState = {
   colour: colourForCode(''),
   vivid: false,
   isDisplayActive: true,
+  isBase: false,
+  feePct: '0',
 }
 
 export function Currencies() {
@@ -63,10 +71,30 @@ export function Currencies() {
   const query = useQuery({
     queryKey: ['currencies'],
     queryFn: async () => (await api.get<EntityListResponse<Currency>>('/api/currencies')).data,
+    // Window-focus refetch is how the daily FX refresh surfaces in-session (the global default is
+    // off, main.tsx). There is no manual in-app trigger (UX §10).
+    refetchOnWindowFocus: true,
   })
   const currencies = query.data?.items ?? []
   const baseCode = currencies.find((c) => c.is_base)?.code ?? 'SGD'
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['currencies'] })
+
+  // "Exchange rates updated." toast (AC3): when a refetch lands a newer last_rate_at than the
+  // session last saw, confirm it once. The ref is just an edge-detector over TanStack's data — the
+  // query stays the source of truth (no server state copied into component state). Skip the initial
+  // load (seenMax starts null) so the first fetch never toasts.
+  const seenMaxRef = useRef<string | null>(null)
+  const maxLastRate = currencies.reduce<string | null>(
+    (max, c) => (!c.is_base && c.last_rate_at && (max === null || c.last_rate_at > max) ? c.last_rate_at : max),
+    null,
+  )
+  useEffect(() => {
+    if (maxLastRate === null) return
+    if (seenMaxRef.current !== null && maxLastRate > seenMaxRef.current) {
+      pushToast({ variant: 'success', message: 'Exchange rates updated.' })
+    }
+    seenMaxRef.current = maxLastRate
+  }, [maxLastRate, pushToast])
 
   // RFC 7807 `detail` is a string for our typed errors; 401 short-circuits upstream.
   const toastError = (err: unknown, fallback: string) => {
@@ -97,6 +125,9 @@ export function Currencies() {
       colour: c.colour ?? colourForCode(c.code),
       vivid: c.vivid,
       isDisplayActive: c.is_display_active,
+      isBase: c.is_base,
+      // fee_pct is the percentage number itself (1.5 = 1.5%) — shown/saved as-is, no conversion.
+      feePct: c.fee_pct,
     })
     setModalOpen(true)
   }
@@ -126,7 +157,9 @@ export function Currencies() {
     }
     try {
       if (form.id) {
-        await api.patch(`/api/currencies/${form.id}`, payload)
+        // The FX fee (percentage number, as-is) is editable only for a non-base currency.
+        const patch = form.isBase ? payload : { ...payload, fee_pct: Number(form.feePct) }
+        await api.patch(`/api/currencies/${form.id}`, patch)
       } else {
         await api.post('/api/currencies', { code, ...payload })
       }
@@ -211,7 +244,7 @@ export function Currencies() {
                 <th className="px-md py-sm font-medium">Code</th>
                 <th className="px-md py-sm font-medium">Name</th>
                 <th className="px-md py-sm font-medium">Rate</th>
-                <th className="px-md py-sm font-medium">Fresh</th>
+                <th className="px-md py-sm font-medium">Status</th>
                 <th className="px-md py-sm font-medium">Fee</th>
                 <th className="px-md py-sm font-medium">Display</th>
                 <th className="px-md py-sm font-medium">History</th>
@@ -239,18 +272,26 @@ export function Currencies() {
                     <td className="px-md py-sm font-mono text-text-secondary">
                       {displayRate(c.rate_to_base, baseCode, c.code, c.is_base)}
                     </td>
+                    {/* Status (UX §10): base = fresh (no time, matches bible §10); non-base shows the
+                        freshness badge with the last-updated time, absolute on hover. */}
                     <td className="px-md py-sm">
                       {c.is_base ? (
-                        <Badge variant="success">fixed</Badge>
+                        <Badge variant="success">fresh</Badge>
+                      ) : c.last_rate_at === null ? (
+                        <Badge variant="warning">never</Badge>
                       ) : (
-                        <Badge variant={stale ? 'warning' : 'success'}>
-                          {c.last_rate_at === null ? 'never' : stale ? 'stale' : 'fresh'}
-                        </Badge>
+                        <span title={absoluteRateTime(c.last_rate_at)}>
+                          <Badge variant={stale ? 'warning' : 'success'}>
+                            {stale
+                              ? `stale ${staleHours(c.last_rate_at)}h`
+                              : `fresh · ${relativeAge(c.last_rate_at)}`}
+                          </Badge>
+                        </span>
                       )}
                     </td>
-                    {/* Fee is read-only here — editing is Story 3.8 (FR-CU-007). */}
+                    {/* Fee = fee_pct as the percentage number, shown as-is (ARCH §3.8 fee convention). */}
                     <td className="px-md py-sm font-mono text-text-secondary">
-                      {c.is_base ? '—' : `${(Number(c.fee_pct) * 100).toFixed(1)}%`}
+                      {c.is_base ? '—' : `${Number(c.fee_pct).toFixed(1)}%`}
                     </td>
                     <td className="px-md py-sm">
                       {c.is_base ? (
@@ -263,8 +304,21 @@ export function Currencies() {
                         />
                       )}
                     </td>
-                    {/* History (FX-rate mini-chart) is Story 3.8 — empty for now. */}
-                    <td className="px-md py-sm text-text-muted">—</td>
+                    {/* History (FX-rate mini-chart, FR-CU-009): the currency's own colour; the atom
+                        shows "no history yet" for < 2 points. onExpand→Viewer is the Epic 9 seam. */}
+                    <td className="px-md py-sm">
+                      {c.is_base ? (
+                        <span className="text-text-muted">—</span>
+                      ) : (
+                        <MiniSparkline
+                          data={c.rate_history}
+                          colour={c.colour ?? colourForCode(c.code)}
+                          variant="line"
+                          className="w-sparkline"
+                          aria-label={`${c.code} rate history`}
+                        />
+                      )}
+                    </td>
                     <td className="px-md py-sm text-right">
                       <ContextMenu
                         trigger={
@@ -349,6 +403,24 @@ export function Currencies() {
             onVividChange={(vivid) => setForm((f) => ({ ...f, vivid }))}
           />
         </div>
+
+        {/* FX conversion fee (FR-CU-007) — a percentage number (1.5 = 1.5%), stored as-is. Only for
+            a non-base currency being edited (the base has no FX fee; new currencies set it after add). */}
+        {form.id !== null && !form.isBase && (
+          <div className="flex flex-col gap-xs md:col-span-2">
+            <Label htmlFor="cur-fee">FX fee (%)</Label>
+            <Input
+              id="cur-fee"
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              min="0"
+              value={form.feePct}
+              onChange={(e) => setForm((f) => ({ ...f, feePct: e.target.value }))}
+              placeholder="e.g. 1.5"
+            />
+          </div>
+        )}
 
         <label className="flex items-center gap-sm md:col-span-2">
           <Toggle

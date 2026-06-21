@@ -6,6 +6,8 @@ import {
   colourForCode,
   displayRate,
   isStale,
+  relativeAge,
+  staleHours,
 } from '../src/lib/currency'
 
 describe('currency lib', () => {
@@ -46,5 +48,28 @@ describe('currency lib', () => {
     const fiftyHoursAgo = new Date(Date.now() - 50 * 60 * 60 * 1000).toISOString()
     expect(isStale(twoHoursAgo)).toBe(false)
     expect(isStale(fiftyHoursAgo)).toBe(true)
+  })
+
+  test('relativeAge is the compact "Nh ago" form (Story 3.8)', () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    expect(relativeAge(twoHoursAgo)).toBe('2h ago')
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+    expect(relativeAge(threeDaysAgo)).toBe('3d ago')
+    expect(relativeAge(new Date().toISOString())).toBe('just now')
+  })
+
+  test('staleHours is the whole-hours count since the timestamp', () => {
+    const fiftyHoursAgo = new Date(Date.now() - 50 * 60 * 60 * 1000).toISOString()
+    expect(staleHours(fiftyHoursAgo)).toBe(50)
+  })
+
+  test('naive backend timestamps (no tz, as SQLite round-trips) are parsed as UTC — no skew', () => {
+    // last_rate_at comes back naive (e.g. "2026-06-20T09:00:00") — must be read as UTC, not local.
+    const naive = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().replace('Z', '')
+    expect(relativeAge(naive)).toBe('3h ago')
+    expect(staleHours(naive)).toBe(3)
+    // And a naive >48h timestamp is stale regardless of the viewer's timezone.
+    const naiveStale = new Date(Date.now() - 60 * 60 * 60 * 1000).toISOString().replace('Z', '')
+    expect(isStale(naiveStale)).toBe(true)
   })
 })

@@ -18,6 +18,16 @@ const PERSON: Person = {
   reduceMotion: false, notificationPrefs: PREFS,
 }
 
+// SGD + NZD are display-active; EUR is not (must be excluded from the picker).
+const CURRENCIES = {
+  items: [
+    { code: 'SGD', symbol: 'S$', is_display_active: true },
+    { code: 'NZD', symbol: 'NZ$', is_display_active: true },
+    { code: 'EUR', symbol: '€', is_display_active: false },
+  ],
+  total: 3,
+}
+
 function makeResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
@@ -43,7 +53,12 @@ beforeEach(() => {
   useAuthStore.getState().clearAuth()
   useAuthStore.setState({ currentPerson: PERSON, csrfToken: 'csrf-1' })
   useThemeStore.setState({ theme: 'base', font: 'base', density: 'comfortable', reduceMotion: false })
-  fetchMock = vi.fn().mockResolvedValue(makeResponse(PERSON))
+  // URL-aware: the GET /api/currencies feeds the display-currency picker; everything else → PERSON.
+  fetchMock = vi.fn((url: unknown) =>
+    Promise.resolve(
+      String(url).includes('/api/currencies') ? makeResponse(CURRENCIES) : makeResponse(PERSON),
+    ),
+  )
   vi.stubGlobal('fetch', fetchMock)
 })
 
@@ -61,15 +76,48 @@ describe('ProfileTab', () => {
     expect(screen.getByText('App')).toBeTruthy()
   })
 
-  test('display currency is read-only and there is no colour control (P0)', () => {
+  test('no colour control in Identity (P0)', () => {
     renderProfile()
-    expect(screen.getByLabelText('Display currency').hasAttribute('readonly')).toBe(true)
     expect(screen.queryByLabelText(/colour/i)).toBeNull()
+  })
+
+  test('display currency is a picker of display-active currencies (Story 3.9)', async () => {
+    renderProfile()
+    // The trigger's accessible name is its <Label> ("Display currency"); pre-set to SGD.
+    const trigger = await screen.findByRole('button', { name: 'Display currency' })
+    fireEvent.click(trigger)
+    // NZD is display-active → offered; EUR is not → excluded.
+    expect(screen.getByRole('option', { name: 'NZD (NZ$)' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: '€' })).toBeNull()
+  })
+
+  test('picking a display currency persists it', async () => {
+    fetchMock.mockImplementation((url: unknown) =>
+      Promise.resolve(
+        String(url).includes('/api/currencies')
+          ? makeResponse(CURRENCIES)
+          : makeResponse({ ...PERSON, displayCurrency: 'NZD' }),
+      ),
+    )
+    renderProfile()
+    fireEvent.click(await screen.findByRole('button', { name: 'Display currency' }))
+    fireEvent.click(screen.getByRole('option', { name: 'NZD (NZ$)' }))
+
+    await waitFor(() => expect(lastPatchBody()).toEqual({ displayCurrency: 'NZD' }))
+    await waitFor(() =>
+      expect(useAuthStore.getState().currentPerson?.displayCurrency).toBe('NZD'),
+    )
   })
 
   test('picking a date format persists it (no themeStore — read from currentPerson)', async () => {
     const updated = { ...PERSON, displayFormat: 'MM-DD-YYYY' as const }
-    fetchMock.mockResolvedValue(makeResponse(updated))
+    // mockImplementation (not mockResolvedValue) so each fetch gets a FRESH Response — the
+    // mount-time GET /api/currencies must not drain the body the PATCH then reads.
+    fetchMock.mockImplementation((url: unknown) =>
+      Promise.resolve(
+        String(url).includes('/api/currencies') ? makeResponse(CURRENCIES) : makeResponse(updated),
+      ),
+    )
     renderProfile()
     // The trigger's accessible name is its associated <Label> ("Date format").
     fireEvent.click(screen.getByRole('button', { name: 'Date format' }))
@@ -83,14 +131,19 @@ describe('ProfileTab', () => {
 
   test('display name Save sends PATCH and updates the store + toast', async () => {
     const updated = { ...PERSON, displayName: 'Benjamin' }
-    fetchMock.mockResolvedValue(makeResponse(updated))
+    fetchMock.mockImplementation((url: unknown) =>
+      Promise.resolve(
+        String(url).includes('/api/currencies') ? makeResponse(CURRENCIES) : makeResponse(updated),
+      ),
+    )
     renderProfile()
 
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Benjamin' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('/api/profile')
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([u]) => String(u) === '/api/profile')).toBe(true),
+    )
     expect(lastPatchBody()).toEqual({ displayName: 'Benjamin' })
     await waitFor(() => expect(useAuthStore.getState().currentPerson?.displayName).toBe('Benjamin'))
   })
