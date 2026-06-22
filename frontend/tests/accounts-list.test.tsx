@@ -633,4 +633,38 @@ describe('AccountsList', () => {
     expect(oldFundCard.querySelector('[data-testid="spark-empty"]')).toBeTruthy()
     expect(oldFundCard.querySelector('svg.spark')).toBeNull()
   })
+
+  // ── Currency display toggle (Story 4.9) ──
+
+  test('a chosen display currency converts the hero; the native code stays in the meta', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p1', displayCurrency: 'USD' } as unknown as Person })
+    renderPage(['bank', 'credit_card'])
+    const card = (await screen.findByText('DBS Multiplier')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    // 12,840 SGD ÷ 1.35 (USD rate_to_base) = 9,511.11, shown with the USD symbol. Await the
+    // post-fetch re-render — before the currencies query resolves the hero shows the native fallback.
+    await waitFor(() => expect(card.textContent).toContain('US$ 9,511.11'))
+    // The account's native code is never hidden — still in the footer meta.
+    expect(card.textContent).toContain('Bank · SGD')
+  })
+
+  test('Native mode shows each hero in its own currency', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p1', displayCurrency: 'native' } as unknown as Person })
+    renderPage(['bank', 'credit_card'])
+    const card = (await screen.findByText('DBS Multiplier')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).toContain('S$ 12,840.00')
+  })
+
+  test('a display currency with no rate falls back to the native value', async () => {
+    // EUR is not in the currencies fixture → no rate_to_base → render native, never NaN.
+    useAuthStore.setState({ currentPerson: { personId: 'p1', displayCurrency: 'EUR' } as unknown as Person })
+    renderPage(['bank', 'credit_card'])
+    const card = (await screen.findByText('DBS Multiplier')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).toContain('S$ 12,840.00')
+  })
 })

@@ -86,8 +86,10 @@ describe('ProfileTab', () => {
     // The trigger's accessible name is its <Label> ("Display currency"); pre-set to SGD.
     const trigger = await screen.findByRole('button', { name: 'Display currency' })
     fireEvent.click(trigger)
-    // NZD is display-active → offered; EUR is not → excluded.
-    expect(screen.getByRole('option', { name: 'NZD (NZ$)' })).toBeTruthy()
+    // Native (Story 4.9) is offered first, then NZD (display-active); EUR is not → excluded.
+    expect(screen.getByRole('option', { name: 'Native' })).toBeTruthy()
+    // NZD is an async (query-loaded) option — await it so the assertion doesn't race the fetch.
+    expect(await screen.findByRole('option', { name: 'NZD (NZ$)' })).toBeTruthy()
     expect(screen.queryByRole('option', { name: '€' })).toBeNull()
   })
 
@@ -101,7 +103,7 @@ describe('ProfileTab', () => {
     )
     renderProfile()
     fireEvent.click(await screen.findByRole('button', { name: 'Display currency' }))
-    fireEvent.click(screen.getByRole('option', { name: 'NZD (NZ$)' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'NZD (NZ$)' }))
 
     await waitFor(() => expect(lastPatchBody()).toEqual({ displayCurrency: 'NZD' }))
     await waitFor(() =>

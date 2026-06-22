@@ -81,23 +81,28 @@ async def update_profile(db: AsyncSession, person: Person, data: ProfileUpdate) 
             )
         person.display_format = fields["display_format"]
     if fields.get("display_currency") is not None:
-        # Must be a display-active currency in the person's own household (FR-CU-004). The picker
-        # only offers those; the API is the trust boundary, so re-check here (404/cross-hh codes
-        # never resolve).
         code = fields["display_currency"].strip().upper()
-        match = await db.scalar(
-            select(Currency.id).where(
-                Currency.household_id == person.household_id,
-                Currency.code == code,
-                Currency.is_display_active.is_(True),
+        if code == "NATIVE":
+            # 'native' is a display MODE, not a currency (each figure in its own account currency,
+            # FR-CU-004 / Story 4.9) — stored lowercase, no Currency lookup.
+            person.display_currency = "native"
+        else:
+            # Otherwise must be a display-active currency in the person's own household (FR-CU-004).
+            # The picker only offers those; the API is the trust boundary, so re-check here (404/
+            # cross-hh codes never resolve).
+            match = await db.scalar(
+                select(Currency.id).where(
+                    Currency.household_id == person.household_id,
+                    Currency.code == code,
+                    Currency.is_display_active.is_(True),
+                )
             )
-        )
-        if match is None:
-            errors.bad_request(
-                "Invalid display currency",
-                f"'{fields['display_currency']}' is not a display-active currency",
-            )
-        person.display_currency = code
+            if match is None:
+                errors.bad_request(
+                    "Invalid display currency",
+                    f"'{fields['display_currency']}' is not a display-active currency",
+                )
+            person.display_currency = code
     if fields.get("reduce_motion") is not None:
         person.reduce_motion = fields["reduce_motion"]
     if fields.get("display_name") is not None:

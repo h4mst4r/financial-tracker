@@ -255,14 +255,16 @@ export function DesignSystem() {
         {/* ─────────────────────────── Composites (bible #shell) ─────────────────────────── */}
         <GroupHeading>Composites</GroupHeading>
 
-        {/* AppShell — the persistent authenticated chrome (Sidebar + Topbar). Reserved slots for
-            view-context (Epic 9), search + alerts (Epic 10). Clipped to a preview box so the
-            full-height shell doesn't take over the page. Bible #shell. */}
+        {/* AppShell — the persistent authenticated chrome (Sidebar + Topbar). The topbar now hosts the
+            real display-currency picker (§8.4, Story 4.9); Household/Individual + member (Story 9.7),
+            search + alerts (Epic 10) are reserved slots. Clipped to a preview box so the full-height
+            shell doesn't take over the page. Bible #shell. */}
         <section id="app-shell" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">AppShell</h2>
           <p className="text-sm text-text-secondary mb-md">
-            Sidebar (grouped nav · bottom Settings) · Topbar avatar menu (profile + sign out).
-            View-context (Epic 9), search &amp; alerts (Epic 10) are reserved slots.
+            Sidebar (grouped nav · bottom Settings) · Topbar display-currency picker (Native or any
+            currency, §8.4) + avatar menu (profile + sign out). Household/Individual + member (Story 9.7),
+            search &amp; alerts (Epic 10) are reserved slots.
           </p>
           <div className="h-appshell-demo overflow-hidden rounded-lg border border-border">
             <AppShell>

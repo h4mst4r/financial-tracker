@@ -2,13 +2,15 @@ import { useNavigate } from 'react-router-dom'
 import { User, LogOut } from 'lucide-react'
 import { Avatar, ContextMenu } from '../primitives'
 import type { ContextMenuEntry } from '../primitives'
+import { DisplayCurrencyPicker } from './DisplayCurrencyPicker'
 import { useAuthStore } from '../../stores/authStore'
 import { useLogout } from '../../hooks/useLogout'
 
-/** Persistent topbar (UX §1.1). The avatar menu is the sole user menu (profile + sign out). The
- *  left view-context cluster (Epic 9), search/command-palette and alerts bell (Epic 10) are reserved
- *  layout slots — NOT built here (P0). The persisted theme/font controls live in the Settings →
- *  Profile tab (Story 2.9); the §3.357 inline avatar quick-pickers are a deferred enhancement. */
+/** Persistent topbar (UX §1.1). The avatar menu is the sole user menu (profile + sign out). The left
+ *  view-context cluster holds the display-currency picker (§8.4, Story 4.9); its Household/Individual +
+ *  member controls are Story 9.7, and the search/command-palette + alerts bell (Epic 10) are still
+ *  reserved layout slots — NOT built here (P0). The persisted theme/font controls live in the
+ *  Settings → Profile tab (Story 2.9); the §3.357 inline avatar quick-pickers are a deferred enhancement. */
 export function Topbar() {
   const currentPerson = useAuthStore((s) => s.currentPerson)
   const navigate = useNavigate()
@@ -32,8 +34,9 @@ export function Topbar() {
       data-testid="topbar"
       className="flex items-center justify-between border-b border-border bg-surface px-md py-sm"
     >
-      {/* Left — reserved view-context slot (Household/Individual + display currency, Epic 9). */}
-      <div />
+      {/* Left view-context cluster — display-currency picker (§8.4, Story 4.9); Household/Individual +
+          member controls are Story 9.7. */}
+      <DisplayCurrencyPicker />
       {/* Right cluster — reserved search/command-palette + alerts bell slots (Epic 10), then avatar. */}
       <div className="flex items-center gap-sm">
         <ContextMenu

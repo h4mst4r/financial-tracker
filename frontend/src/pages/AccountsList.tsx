@@ -12,6 +12,8 @@ import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import type { ContextMenuEntry } from '../components/primitives'
 import { useEntityManager } from '../hooks/useEntityManager'
 import { useAlertStore } from '../stores/alertStore'
+import { useAuthStore } from '../stores/authStore'
+import { convertForDisplay } from '../lib/currency'
 import { api, ApiError } from '../api/client'
 import type { EntityListResponse } from '../types/entity'
 import type { Currency } from '../types/currency'
@@ -49,6 +51,8 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
   // The bank/credit-card type filter (UX §1.2) — only meaningful on the multi-subtype /accounts route.
   const [typeFilter, setTypeFilter] = useState<'all' | AccountType>('all')
   const pushToast = useAlertStore((s) => s.pushToast)
+  // The active display lens (topbar picker, Story 4.9) — 'native' (default) or an ISO code; drives heroFor.
+  const displayCurrency = useAuthStore((s) => s.currentPerson?.displayCurrency ?? 'native')
 
   const manager = useEntityManager<Account>({ entityType: 'accounts', basePath: '/api/accounts' })
 
@@ -175,12 +179,18 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
   const symbolFor = (code: string | null | undefined) =>
     currencies.find((c) => c.code === code)?.symbol ?? code ?? ''
 
-  // The computed current value in its own NATIVE currency (Story 4.4) — no base/display conversion
-  // (that is the Story 4.9 toggle). `null` → '—'.
+  // The computed current value, rendered in the active display currency (Story 4.9). In Native mode
+  // (the default) the value stays in its own currency; a chosen currency converts it display-only via
+  // rate_to_base (the native code always stays in the card meta). `null` → '—'.
   const heroFor = (a: Account) => {
-    if (a.current_value == null) return '—'
-    const n = Number(a.current_value)
-    return `${symbolFor(a.current_value_currency)} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    if (a.current_value == null || a.current_value_currency == null) return '—'
+    const { value, code } = convertForDisplay(
+      a.current_value,
+      a.current_value_currency,
+      displayCurrency,
+      currencies,
+    )
+    return `${symbolFor(code)} ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   // The next future occurrence of a credit-card due day: this month if due_day ≥ today's day, else

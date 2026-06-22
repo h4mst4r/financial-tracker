@@ -8,7 +8,14 @@ import {
   isStale,
   relativeAge,
   staleHours,
+  convertForDisplay,
 } from '../src/lib/currency'
+
+const RATES = [
+  { code: 'SGD', rate_to_base: '1.0' }, // base
+  { code: 'USD', rate_to_base: '1.35' }, // 1 USD = 1.35 SGD
+  { code: 'NZD', rate_to_base: '0.78' },
+]
 
 describe('currency lib', () => {
   test('isoCurrencyCodes returns a non-empty ISO list including USD', () => {
@@ -61,6 +68,32 @@ describe('currency lib', () => {
   test('staleHours is the whole-hours count since the timestamp', () => {
     const fiftyHoursAgo = new Date(Date.now() - 50 * 60 * 60 * 1000).toISOString()
     expect(staleHours(fiftyHoursAgo)).toBe(50)
+  })
+
+  test('convertForDisplay: native mode + same-currency pass through unchanged (Story 4.9)', () => {
+    expect(convertForDisplay('12840', 'SGD', 'native', RATES)).toEqual({ value: 12840, code: 'SGD' })
+    // Display currency == native currency is a no-op convert.
+    expect(convertForDisplay('100', 'USD', 'USD', RATES)).toEqual({ value: 100, code: 'USD' })
+  })
+
+  test('convertForDisplay: converts native → display via rate_to_base (native × rateN ÷ rateD)', () => {
+    // 12840 SGD shown in USD: 12840 × (1.0 / 1.35) = 9511.11…
+    const r = convertForDisplay('12840', 'SGD', 'USD', RATES)
+    expect(r.code).toBe('USD')
+    expect(r.value).toBeCloseTo(9511.111, 2)
+    // base identity: a base-currency value shown in base is itself.
+    expect(convertForDisplay('500', 'SGD', 'SGD', RATES)).toEqual({ value: 500, code: 'SGD' })
+  })
+
+  test('convertForDisplay: missing/zero rate falls back to native (never NaN)', () => {
+    // EUR has no rate row → fall back to the native value.
+    expect(convertForDisplay('12840', 'SGD', 'EUR', RATES)).toEqual({ value: 12840, code: 'SGD' })
+    // A zero display rate would divide-by-zero → native fallback.
+    expect(convertForDisplay('12840', 'SGD', 'ZED', [...RATES, { code: 'ZED', rate_to_base: '0' }]))
+      .toEqual({ value: 12840, code: 'SGD' })
+    // A zero NATIVE rate would multiply to 0 (not native) — guard both sides per the docstring.
+    expect(convertForDisplay('12840', 'ZED', 'USD', [...RATES, { code: 'ZED', rate_to_base: '0' }]))
+      .toEqual({ value: 12840, code: 'ZED' })
   })
 
   test('naive backend timestamps (no tz, as SQLite round-trips) are parsed as UTC — no skew', () => {

@@ -56,7 +56,10 @@ class Person(BaseEntity):
     display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     picture_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
-    display_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="SGD")
+    # Per-person display lens (FR-CU-004): an ISO code (converts every figure to it, display-only)
+    # OR the 'native' sentinel — each figure in its own account currency (the default). Widened past
+    # String(3) to hold 'native'; conversion is render-time via Currency.rate_to_base (§3.11 #4).
+    display_currency: Mapped[str] = mapped_column(String(16), nullable=False, default="native")
     default_view: Mapped[str] = mapped_column(String(20), nullable=False, default="household")
     google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

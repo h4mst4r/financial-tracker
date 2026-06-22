@@ -48,6 +48,33 @@ export function colourForCode(code: string): string {
   return PALETTE[hash % PALETTE.length]
 }
 
+/** The per-person "Native" display mode sentinel (Story 4.9) — each figure in its own account
+ *  currency, no conversion. Stored in `Person.display_currency` alongside ISO codes. */
+export const NATIVE_DISPLAY = 'native'
+
+/** Convert a native account value into the active display currency (Story 4.9, display-only).
+ *
+ *  `displayCode === 'native'` (or a missing/zero `rate_to_base` for either side) → the native value
+ *  is returned unchanged. Otherwise `display = native × rate_to_base[native] ÷ rate_to_base[display]`
+ *  (native → base → display, ARCH §3.8/§3.11 #4). The money of record stays on the Decimal
+ *  `rate_to_base`; this is a render-time number (format to 2 dp at the call site). Never throws —
+ *  any non-finite result falls back to native, so a stale/zero rate can't render garbage. */
+export function convertForDisplay(
+  value: string | number,
+  nativeCode: string,
+  displayCode: string,
+  currencies: { code: string; rate_to_base: string }[],
+): { value: number; code: string } {
+  const native = { value: Number(value), code: nativeCode }
+  if (displayCode === NATIVE_DISPLAY || displayCode === nativeCode) return native
+  const rateNative = Number(currencies.find((c) => c.code === nativeCode)?.rate_to_base)
+  const rateDisplay = Number(currencies.find((c) => c.code === displayCode)?.rate_to_base)
+  if (!Number.isFinite(rateNative) || !Number.isFinite(rateDisplay) || rateNative === 0 || rateDisplay === 0)
+    return native
+  const converted = native.value * (rateNative / rateDisplay)
+  return Number.isFinite(converted) ? { value: converted, code: displayCode } : native
+}
+
 /** The human-readable rate (UX §10 / bible §10): the base row reads "base"; others show the
  *  **inverse** of the stored `rate_to_base` as "1 {base} = N {target}". Display only — storage and
  *  all money math stay on `rate_to_base` (`amount_base = amount × rate_to_base`, ARCH §3.8). */

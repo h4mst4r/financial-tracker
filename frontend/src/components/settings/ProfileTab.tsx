@@ -14,6 +14,7 @@ import { api } from '../../api/client'
 import { FONT_OPTIONS } from '../../theme/palettes'
 import type { ThemeId, FontId } from '../../theme/palettes'
 import type { DisplayFormat } from '../../lib/date'
+import { NATIVE_DISPLAY } from '../../lib/currency'
 import type { Person, NotificationPrefs } from '../../types/auth'
 import type { Currency } from '../../types/currency'
 import type { ListResponse } from '../../types/household'
@@ -77,9 +78,14 @@ export function ProfileTab() {
     queryKey: ['currencies'],
     queryFn: async () => (await api.get<ListResponse<Currency>>('/api/currencies')).data,
   })
-  const currencyOptions = (currencies?.items ?? [])
-    .filter((c) => c.is_display_active)
-    .map((c) => ({ value: c.code, label: `${c.code} (${c.symbol})` }))
+  // Native (each figure in its own account currency) is the first option — same lens the topbar picker
+  // offers (Story 4.9); both write Person.display_currency, so the profile picker must render 'native'.
+  const currencyOptions = [
+    { value: NATIVE_DISPLAY, label: 'Native' },
+    ...(currencies?.items ?? [])
+      .filter((c) => c.is_display_active)
+      .map((c) => ({ value: c.code, label: `${c.code} (${c.symbol})` })),
+  ]
 
   const save = useMutation({
     mutationFn: async (body: ProfilePatch) => (await api.patch<Person>('/api/profile', body)).data,
@@ -119,8 +125,8 @@ export function ProfileTab() {
   }
   function pickDisplayCurrency(next: string) {
     // Render-time preference only (FR-P-004) — never touches stored amount_base. onSuccess refreshes
-    // currentPerson; the dashboard render + topbar switcher are Epic 9 / Story 9.7 consumers. It has
-    // no live visual effect yet, so toast on save (else picking feels like a no-op).
+    // currentPerson; the topbar picker (Story 4.9) is the twin control and the accounts hero now
+    // converts live to this. Same value space as the topbar — 'native' or a display-active code.
     save.mutate(
       { displayCurrency: next },
       { onSuccess: () => pushToast({ message: 'Display currency updated', variant: 'success' }) },

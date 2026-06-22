@@ -350,7 +350,32 @@ async def test_patch_profile_display_currency_invalid_400(monkeypatch, code):
         assert resp.json()["status"] == 400
 
         async with factory() as db:
-            assert (await db.get(Person, person_id)).display_currency == "SGD"  # unchanged
+            # Default is now 'native' (Story 4.9) and the 400 left it untouched.
+            assert (await db.get(Person, person_id)).display_currency == "native"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("sent", ["native", "NATIVE", "Native"])
+async def test_patch_profile_display_currency_native_mode(monkeypatch, sent):
+    """The 'native' sentinel (any case) is a display MODE — accepted without a Currency lookup,
+    stored lowercase (Story 4.9, FR-CU-004)."""
+    engine, factory = await _make_factory()
+    try:
+        person_id = await _seed_person_with_currencies(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # Move off the default first so the assertion proves the native write, not the seed default.
+        assert client.patch("/api/profile", json={"displayCurrency": "NZD"}).status_code == 200
+
+        resp = client.patch("/api/profile", json={"displayCurrency": sent})
+        assert resp.status_code == 200
+        assert resp.json()["displayCurrency"] == "native"
+
+        async with factory() as db:
+            assert (await db.get(Person, person_id)).display_currency == "native"
     finally:
         await engine.dispose()
 
