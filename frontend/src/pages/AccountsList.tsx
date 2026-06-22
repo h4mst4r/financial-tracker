@@ -212,6 +212,23 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       }
       return parts.length ? parts.join(' · ') : undefined
     }
+    if (a.account_type === 'capital') {
+      // Derived ROI = current value − cost basis (Story 4.8). Same-ccy guard: the current value's
+      // currency must match the account's native code, else the subtraction is meaningless (cross-ccy
+      // conversion is the Story 4.9 toggle). Gain green / loss red; on a vivid card fall back to the
+      // contrast pole (semantic colour breaks the pole on a saturated fill).
+      if (a.cost_basis == null || a.current_value == null || a.current_value_currency !== a.currency)
+        return undefined
+      // Round to cents once — JS float subtraction can leave a near-zero artifact that would
+      // misclassify a break-even ROI as a red −0.00 loss; the rounded value drives sign, zero, colour.
+      const delta = Math.round((Number(a.current_value) - Number(a.cost_basis)) * 100) / 100
+      const text = `ROI ${delta < 0 ? '−' : '+'}${symbolFor(a.currency)} ${Math.abs(delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      const tone = a.vivid || delta === 0 ? '' : delta > 0 ? 'text-success' : 'text-error'
+      return <span className={tone}>{text}</span>
+    }
+    if (a.account_type === 'insurance') {
+      return a.policy_type ? `coverage · ${a.policy_type}` : undefined
+    }
     return undefined
   }
 

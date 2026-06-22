@@ -102,6 +102,44 @@ const accounts: Account[] = [
     opening_balance: '8000.0000', opening_balance_date: '2026-06-01',
     account_number: '1234567890', interest_rate: '2.5000', interest_frequency: 'annual', reserved_amount: null,
   },
+  // Story 4.8 fixtures — capital with a gain ROI (same ccy), capital with a cross-ccy current value
+  // (no ROI), an asset, and an insurance policy.
+  {
+    id: 'cap-roi', account_type: 'capital', name: 'Growth Fund', currency: 'SGD', institution: null, notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '44200.0000', current_value_currency: 'SGD',
+    value_series: ['40000.0000', '44200.0000'],
+    investment_type: 'ETF', cost_basis: '40000.0000',
+  },
+  {
+    id: 'cap-xccy', account_type: 'capital', name: 'Overseas Fund', currency: 'SGD', institution: null, notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    // Current value reported in USD while the account is native SGD → the same-ccy guard suppresses ROI.
+    current_value: '44200.0000', current_value_currency: 'USD',
+    value_series: [],
+    investment_type: null, cost_basis: '40000.0000',
+  },
+  {
+    id: 'ast1', account_type: 'asset', name: 'Family Home', currency: 'SGD', institution: null, notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '1450000.0000', current_value_currency: 'SGD',
+    value_series: [],
+    asset_type: 'property', registration_no: 'LOT-12345', purchase_date: '2015-03-01', purchase_value: '900000.0000',
+  },
+  {
+    id: 'ins1', account_type: 'insurance', name: 'Life Policy', currency: 'SGD', institution: null, notes: null,
+    colour: null, vivid: false, status: 'active', created_by: 'p1', updated_at: '2026-06-01T00:00:00',
+    owner_ids: ['p1'], can_delete: true, delete_blocked_reason: null,
+    current_value: '250000.0000', current_value_currency: 'SGD',
+    value_series: [],
+    policy_no: 'LIFE-90213', insurer: 'Prudential', policy_type: 'life', policy_status: 'active',
+    premium_frequency: 'annual', coverage_death: '250000.0000', coverage_tpd: '250000.0000',
+    coverage_ci: '100000.0000', coverage_early_ci: null, coverage_personal_accident: null,
+    coverage_hospital: 'Private', surrender_value: '12400.0000', surrender_inquiry_date: null,
+  },
 ]
 
 function renderPage(subtypes: Account['account_type'][] = ['bank', 'credit_card']) {
@@ -453,6 +491,133 @@ describe('AccountsList', () => {
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '0' } })
     fireEvent.change(screen.getByLabelText(/Due day/), { target: { value: '40' } })
     expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  // ── Capital / asset / insurance details (Story 4.8) ──
+
+  test('a capital card shows the gain-green ROI sub-line (same-ccy)', async () => {
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    const roi = screen.getByText('ROI +S$ 4,200.00')
+    expect(roi).toBeTruthy()
+    expect(roi.className).toContain('text-success')
+  })
+
+  test('a capital card hides ROI when the current value is in a different currency', async () => {
+    renderPage(['capital'])
+    const card = (await screen.findByText('Overseas Fund')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).not.toContain('ROI')
+  })
+
+  test('an insurance card shows the coverage · policy_type sub-line', async () => {
+    renderPage(['insurance'])
+    const card = (await screen.findByText('Life Policy')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).toContain('coverage · life')
+  })
+
+  test('an asset card shows the value hero and no ROI/coverage sub-line', async () => {
+    renderPage(['asset'])
+    const card = (await screen.findByText('Family Home')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    expect(card.textContent).toContain('S$ 1,450,000.00')
+    expect(card.textContent).not.toContain('ROI')
+    expect(card.textContent).not.toContain('coverage')
+  })
+
+  test('the subtype slot swaps to capital, then to insurance fields', async () => {
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Capital' }))
+    expect(await screen.findByLabelText(/Investment type/)).toBeTruthy()
+    expect(screen.getByLabelText(/Cost basis/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Death cover/)).toBeNull()
+    fireEvent.click(screen.getByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Insurance' }))
+    expect(await screen.findByLabelText(/Death cover/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Cost basis/)).toBeNull()
+  })
+
+  test('saving a capital POSTs cost_basis as a string and no cross-subtype keys', async () => {
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Capital' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Fund' } })
+    fireEvent.change(screen.getByLabelText(/Investment type/), { target: { value: 'ETF' } })
+    fireEvent.change(screen.getByLabelText(/Cost basis/), { target: { value: '40000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const body = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.account_type).toBe('capital')
+    expect(body.cost_basis).toBe('40000') // Decimal → wire string
+    expect(body.investment_type).toBe('ETF')
+    expect('opening_balance' in body).toBe(false) // asset-like — no ledger fields
+    expect('credit_limit' in body).toBe(false)
+  })
+
+  test('saving an insurance POSTs coverage decimals as strings, empty optionals as null', async () => {
+    renderPage(['insurance'])
+    await screen.findByText('Life Policy')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Insurance' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Policy' } })
+    fireEvent.click(screen.getByLabelText(/Policy type/))
+    fireEvent.click(screen.getByRole('option', { name: 'life' }))
+    fireEvent.change(screen.getByLabelText(/Death cover/), { target: { value: '250000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const body = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.coverage_death).toBe('250000') // Decimal → wire string
+    expect(body.policy_type).toBe('life')
+    expect(body.coverage_tpd).toBeNull() // empty optional → null
+    expect(body.surrender_inquiry_date).toBeNull() // empty date → null
+    expect('interest_rate' in body).toBe(false) // no cross-subtype keys
+  })
+
+  test('a negative cost basis blocks Save', async () => {
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Capital' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Fund' } })
+    fireEvent.change(screen.getByLabelText(/Cost basis/), { target: { value: '-5000' } })
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('editing an insurance prefills policy type + coverage fields (AC4)', async () => {
+    renderPage(['insurance'])
+    await screen.findByText('Life Policy')
+    fireEvent.click(screen.getAllByLabelText('Actions')[0]) // ins1
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    expect(screen.getByLabelText(/Policy type/)).toHaveTextContent('life')
+    expect((screen.getByLabelText(/Death cover/) as HTMLInputElement).value).toBe('250000.0000')
+  })
+
+  test('editing a capital prefills investment type + cost basis (AC4)', async () => {
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    // c1 (Stocks) is first on the capital route — cost_basis '5000.0000'.
+    fireEvent.click(screen.getAllByLabelText('Actions')[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    expect((screen.getByLabelText(/Cost basis/) as HTMLInputElement).value).toBe('5000.0000')
   })
 
   test('the card renders the value-history sparkline, or a placeholder when there is no history', async () => {

@@ -423,7 +423,9 @@ renders its instances through it.
 
 | Variant | Difference |
 |---|---|
-| capital / asset / insurance | entity icon + default entity colour; hero = balance/value + sparkline |
+| **asset** | entity icon + default entity colour; hero = value + sparkline |
+| **capital** | as asset; **ROI** (`current − cost_basis`, when set, same-ccy) shows in the sub-line as `ROI {±}{symbol} {amount}` — **gain green / loss red** (`text-success`/`text-error`), neutral at zero, contrast-pole on vivid |
+| **insurance** | as asset; **`coverage · {policy_type}`** in the sub-line when the policy type is set |
 | **bank** | as above; **interest rate** (when set) shows in the sub-line as `{rate}% · {frequency}` |
 | **credit card** | leads with **Debt owing** (semantic red), shows due date + limit; debt-trend may replace the balance sparkline |
 | archived | desaturated, **dashed** border, `Archived` badge, **`opacity-60`** (the named token — same value used by CategoryTree archived rows, CLAUDE.md §5.11) |
@@ -839,6 +841,28 @@ as rows — `date · value · source` (+ a note affordance when present). Each r
 (confirm, then `DELETE`) actions — **Admin/Owner only** (members see a read-only list). Editing or
 deleting recomputes the account's current value + sparkline and writes an **audit** row (snapshots
 are **mutable corrections**, not append-only; ARCH §3.5). Empty state: a muted "No snapshots yet".
+
+### 8.2b Account detail view (flip-to-back) — Story 4.11
+
+The **read** surface a card flips to (the §0.7 `Flip ↔` / §2 "tap = flip-expand to detail"). A card
+front shows only its hero + one sub-line (§2.2); the **detail view** is where the rest lives. Added by
+SCP 2026-06-22 to give FR-A-015's "every account's detail view" + FR-A-016's "labelled coverage rows"
+a real home (they were assumed but never scheduled).
+
+- **Subtype detail rows** — labelled `label → value` rows for the subtype's columns, **empty rows
+  hidden** so each instance shows only its real data: insurance per-coverage amounts
+  (`Death · TPD · Critical Illness · Early CI · Personal Accident · Hospital · Surrender value`);
+  credit-card `rewards · billing day · annual fee · bonus limit · points expiry`; bank
+  `account number · reserved amount · interest`; capital `cost basis · ROI`; asset
+  `purchase date · purchase value · registration no.`
+- **Value-history table** — the §8.2a snapshot list (newest-first `date · value · source`, per-row
+  edit/delete, Admin/Owner) renders **here** (one history surface). The rich **charts** stay the §9
+  Viewer (the sparkline → Viewer expand) — the detail view is **tabular** history only.
+- **Read-only** — this surface does not edit; the **⋮ → Edit** / card-edit still opens the §8.2
+  EntityModal (one edit surface). 
+- **Opening motion** — the real **rotateY flip-expand** (§0.7, `--duration-flip` 800ms; reduced-motion
+  → cross-fade), with the §8.2 modal scale-in as the graceful fallback (the flip must not gate the
+  surface). The bible renders both the surface and the flip before Story 4.11 dev (P5).
 
 ### 8.3 EmojiIconPicker
 

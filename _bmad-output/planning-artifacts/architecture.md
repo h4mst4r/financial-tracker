@@ -1018,7 +1018,7 @@ running balance, FR-A-008); NULL for asset-like types.
 | Subtype | Columns |
 |---|---|
 | bank | `account_number, interest_rate(8,4), interest_frequency, reserved_amount(15,4, null)` — `reserved_amount` is the bank-held emergency reserve, excluded from available balance |
-| credit_card | `credit_limit(15,4), billing_day(int), due_day(int), reward_points(int), annual_fee(10,2), reward_type(enum points\|cashback\|miles\|none), bonus_limit(15,4, null), points_expiry(DATE, null)` |
+| credit_card | `credit_limit(15,4), billing_day(int), due_day(int), reward_type(enum points\|cashback\|miles\|none), reward_points(int, null — count for points/miles), reward_rate(6,4, null — cashback %), annual_fee(10,2), bonus_limit(15,4, null), points_expiry(DATE, null — MVP "next expiry" reminder; rolling-expiry is post-MVP)` |
 | capital | `investment_type, cost_basis(15,4)` — current value derives from the latest `account_snapshot` (no `current_value` column) |
 | asset | `asset_type, registration_no(str, null), purchase_date, purchase_value(15,4), depreciation_formula_id(FK formulas)` — `registration_no` = strata-title no. (property) / plate no. (vehicle) |
 | insurance | `policy_no(str, null), insurer(str), policy_type(enum life\|term\|health), policy_status(enum active\|cancelled — domain status, distinct from record lifecycle), purchase_date, premium_frequency, coverage_death(15,4, null), coverage_tpd(15,4, null), coverage_ci(15,4, null), coverage_early_ci(15,4, null), coverage_personal_accident(15,4, null), coverage_hospital(str, null — ward type or excess text, e.g. "Private" / "$2,000 excess"), surrender_value(15,4, null — life policies), surrender_inquiry_date(DATE, null)` |

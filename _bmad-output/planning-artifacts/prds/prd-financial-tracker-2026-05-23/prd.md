@@ -328,9 +328,11 @@ and used by relevant EntityFormulas.
 
 **FR-A-010 — CreditCard: Limit and Billing**
 A CreditCard must capture `credit_limit`, `billing_day`, `due_day`, and optionally
-`rewards_type` and `annual_fee`.
+`reward_type`, `annual_fee`, and a reward amount whose shape follows `reward_type`.
 *Acceptance:* `billing_day` and `due_day` are used to compute the next billing cycle
-date shown on the CreditCard card view.
+date shown on the CreditCard card view. The reward-amount input **adapts to `reward_type`**:
+**points / miles** capture a count in `reward_points`; **cashback** captures a percentage in
+`reward_rate` (NUMERIC, architecture §3.5); **none** shows no reward-amount field.
 
 **FR-A-011 — CreditCard: Computed Debt Display**
 The computed debt balance (from EntityDebt) is shown directly on the CreditCard
@@ -355,9 +357,11 @@ using FR-F-004 formula hover reveal.
 **FR-A-014 — Add Manual Value Snapshot (all account types)**
 Any Admin or Owner may add a manual `AccountSnapshot` to any account at any time (FR-A-008).
 For asset-like accounts this is the primary way value is recorded; for ledger-backed accounts
-it acts as a balance correction/anchor.
+it acts as a balance correction/anchor. **At account creation, an asset-like account may be given
+an optional initial value** — written as the first `manual` snapshot so the card hero shows a value
+immediately (rather than `—` until a snapshot is added separately).
 *Acceptance:* Snapshot persists; current value recomputed per FR-A-008; appears in the
-value-history chart immediately.
+value-history chart immediately. An initial value supplied on create produces the first snapshot.
 
 **FR-A-015 — Account Value History Chart (all account types)**
 Every account's detail view (and a mini-chart on its card) shows its value over time,
@@ -371,8 +375,9 @@ An InsuranceAccount captures `policy_no`, `insurer`, `policy_type` (life/term/he
 (`coverage_death`, `coverage_tpd`, `coverage_ci`, `coverage_early_ci`,
 `coverage_personal_accident`), `coverage_hospital` (text), and `surrender_value` /
 `surrender_inquiry_date`. These are individual typed columns, not a JSON blob (architecture §3.5).
-*Acceptance:* All populated fields visible on InsuranceCard; the per-coverage amounts render as
-labelled rows/tags. Empty coverages are hidden.
+*Acceptance:* The InsuranceCard front shows the `coverage · {policy_type}` sub-line; the per-coverage
+amounts render as **labelled rows on the account detail view** (the FR-A-015 detail view, built in
+Story 4.11). Empty coverages are hidden. All fields remain editable in the subtype-adaptive EntityModal.
 
 **FR-A-017 — Account-Linked Recurring Payment**
 For Asset, Capital, and Insurance accounts, Admin or Owner may enable a recurring payment.

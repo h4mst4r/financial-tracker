@@ -84,8 +84,10 @@ function OwnerPicker({
 // The single create/edit surface for accounts (UX §8.2), shared by all four ACCOUNTS routes. The type
 // Dropdown swaps the subtype field slot; ledger-backed types (bank/credit_card) require an opening
 // balance + date. Accounts use the type-default icon — NO EmojiIconPicker (UX §8.2). The deep
-// per-subtype fields: bank + credit-card columns are wired here (Story 4.7); capital/asset/insurance
-// remain the Story 4.8 seam. `account_type` is immutable on edit (the STI discriminator).
+// per-subtype fields are all wired here: bank + credit-card (Story 4.7), capital/asset/insurance
+// (Story 4.8). The only remaining seam is the Epic-7 formula-FK columns (depreciation_formula_id /
+// interest_formula_id / fx_formula_id) and the deferred insurance coverage-rows read view (Story
+// 4.11 detail surface). `account_type` is immutable on edit (the STI discriminator).
 
 const TODAY_ISO = () => new Date().toISOString().slice(0, 10)
 
@@ -101,6 +103,11 @@ const INTEREST_FREQUENCY_OPTIONS = ['monthly', 'quarterly', 'semi-annual', 'annu
   label: v,
 }))
 const REWARD_TYPE_OPTIONS = ['points', 'cashback', 'miles', 'none'].map((v) => ({ value: v, label: v }))
+// Insurance option sets (Story 4.8). `policy_type`/`policy_status` are backend Literals; the
+// premium frequency reuses INTEREST_FREQUENCY_OPTIONS (a free-form column, locked like 4.7's
+// interest_frequency so the stored value is deterministic).
+const POLICY_TYPE_OPTIONS = ['life', 'term', 'health'].map((v) => ({ value: v, label: v }))
+const POLICY_STATUS_OPTIONS = ['active', 'cancelled'].map((v) => ({ value: v, label: v }))
 
 interface FormState {
   account_type: AccountType
@@ -127,6 +134,28 @@ interface FormState {
   annual_fee: string
   bonus_limit: string
   points_expiry: string
+  // Capital subtype (Story 4.8).
+  investment_type: string
+  cost_basis: string
+  // Asset subtype (Story 4.8).
+  asset_type: string
+  registration_no: string
+  purchase_date: string
+  purchase_value: string
+  // Insurance subtype (Story 4.8).
+  policy_no: string
+  insurer: string
+  policy_type: string
+  policy_status: string
+  premium_frequency: string
+  coverage_death: string
+  coverage_tpd: string
+  coverage_ci: string
+  coverage_early_ci: string
+  coverage_personal_accident: string
+  coverage_hospital: string
+  surrender_value: string
+  surrender_inquiry_date: string
 }
 
 const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
@@ -152,6 +181,25 @@ const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
   annual_fee: '',
   bonus_limit: '',
   points_expiry: '',
+  investment_type: '',
+  cost_basis: '',
+  asset_type: '',
+  registration_no: '',
+  purchase_date: '',
+  purchase_value: '',
+  policy_no: '',
+  insurer: '',
+  policy_type: '',
+  policy_status: '',
+  premium_frequency: '',
+  coverage_death: '',
+  coverage_tpd: '',
+  coverage_ci: '',
+  coverage_early_ci: '',
+  coverage_personal_accident: '',
+  coverage_hospital: '',
+  surrender_value: '',
+  surrender_inquiry_date: '',
 })
 
 // Subtype field validators (Story 4.7) — all optional, so empty is always valid; only a non-empty
@@ -211,6 +259,9 @@ export function AccountModal({
       const str = (v: string | number | null | undefined) => (v == null ? '' : String(v))
       const bank = editing.account_type === 'bank' ? editing : null
       const cc = editing.account_type === 'credit_card' ? editing : null
+      const cap = editing.account_type === 'capital' ? editing : null
+      const ast = editing.account_type === 'asset' ? editing : null
+      const ins = editing.account_type === 'insurance' ? editing : null
       setForm({
         account_type: editing.account_type,
         name: editing.name,
@@ -234,6 +285,25 @@ export function AccountModal({
         annual_fee: str(cc?.annual_fee),
         bonus_limit: str(cc?.bonus_limit),
         points_expiry: str(cc?.points_expiry),
+        investment_type: str(cap?.investment_type),
+        cost_basis: str(cap?.cost_basis),
+        asset_type: str(ast?.asset_type),
+        registration_no: str(ast?.registration_no),
+        purchase_date: str(ast?.purchase_date),
+        purchase_value: str(ast?.purchase_value),
+        policy_no: str(ins?.policy_no),
+        insurer: str(ins?.insurer),
+        policy_type: str(ins?.policy_type),
+        policy_status: str(ins?.policy_status),
+        premium_frequency: str(ins?.premium_frequency),
+        coverage_death: str(ins?.coverage_death),
+        coverage_tpd: str(ins?.coverage_tpd),
+        coverage_ci: str(ins?.coverage_ci),
+        coverage_early_ci: str(ins?.coverage_early_ci),
+        coverage_personal_accident: str(ins?.coverage_personal_accident),
+        coverage_hospital: str(ins?.coverage_hospital),
+        surrender_value: str(ins?.surrender_value),
+        surrender_inquiry_date: str(ins?.surrender_inquiry_date),
       })
     } else {
       setForm(emptyForm(currentPersonId ? [currentPersonId] : [], baseCurrency))
@@ -253,6 +323,15 @@ export function AccountModal({
     billing_day: dayOk(form.billing_day),
     due_day: dayOk(form.due_day),
     reward_points: countOk(form.reward_points),
+    // Capital/asset/insurance money fields — all non-negative (Story 4.8).
+    cost_basis: nonNegOk(form.cost_basis),
+    purchase_value: nonNegOk(form.purchase_value),
+    coverage_death: nonNegOk(form.coverage_death),
+    coverage_tpd: nonNegOk(form.coverage_tpd),
+    coverage_ci: nonNegOk(form.coverage_ci),
+    coverage_early_ci: nonNegOk(form.coverage_early_ci),
+    coverage_personal_accident: nonNegOk(form.coverage_personal_accident),
+    surrender_value: nonNegOk(form.surrender_value),
   }
   const subtypeInvalid =
     (form.account_type === 'bank' && (!fieldOk.interest_rate || !fieldOk.reserved_amount)) ||
@@ -262,7 +341,16 @@ export function AccountModal({
         !fieldOk.bonus_limit ||
         !fieldOk.billing_day ||
         !fieldOk.due_day ||
-        !fieldOk.reward_points))
+        !fieldOk.reward_points)) ||
+    (form.account_type === 'capital' && !fieldOk.cost_basis) ||
+    (form.account_type === 'asset' && !fieldOk.purchase_value) ||
+    (form.account_type === 'insurance' &&
+      (!fieldOk.coverage_death ||
+        !fieldOk.coverage_tpd ||
+        !fieldOk.coverage_ci ||
+        !fieldOk.coverage_early_ci ||
+        !fieldOk.coverage_personal_accident ||
+        !fieldOk.surrender_value))
 
   // Opening balance must be a decimal (a credit card's may be negative) — block non-numeric input
   // client-side instead of letting it round-trip to a generic backend 422.
@@ -310,7 +398,35 @@ export function AccountModal({
               bonus_limit: dec(form.bonus_limit),
               points_expiry: form.points_expiry || null,
             }
-          : {}
+          : form.account_type === 'capital'
+            ? {
+                investment_type: form.investment_type.trim() || null,
+                cost_basis: dec(form.cost_basis),
+              }
+            : form.account_type === 'asset'
+              ? {
+                  asset_type: form.asset_type.trim() || null,
+                  registration_no: form.registration_no.trim() || null,
+                  purchase_date: form.purchase_date || null,
+                  purchase_value: dec(form.purchase_value),
+                }
+              : form.account_type === 'insurance'
+                ? {
+                    policy_no: form.policy_no.trim() || null,
+                    insurer: form.insurer.trim() || null,
+                    policy_type: form.policy_type || null,
+                    policy_status: form.policy_status || null,
+                    premium_frequency: form.premium_frequency || null,
+                    coverage_death: dec(form.coverage_death),
+                    coverage_tpd: dec(form.coverage_tpd),
+                    coverage_ci: dec(form.coverage_ci),
+                    coverage_early_ci: dec(form.coverage_early_ci),
+                    coverage_personal_accident: dec(form.coverage_personal_accident),
+                    coverage_hospital: form.coverage_hospital.trim() || null,
+                    surrender_value: dec(form.surrender_value),
+                    surrender_inquiry_date: form.surrender_inquiry_date || null,
+                  }
+                : {}
     if (editing) {
       // PATCH — no `account_type` (immutable STI discriminator); owners go via the owner PUT.
       // Currency only when it actually changed (the backend locks it once the account has history).
@@ -553,6 +669,212 @@ export function AccountModal({
               id="acct-points-expiry"
               value={form.points_expiry}
               onChange={(v) => set('points_expiry', v)}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Capital subtype fields (Story 4.8, ARCH §3.5) — all optional. */}
+      {form.account_type === 'capital' && (
+        <>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-investment-type">Investment type</Label>
+            <Input
+              id="acct-investment-type"
+              value={form.investment_type}
+              onChange={(e) => set('investment_type', e.target.value)}
+              placeholder="e.g. ETF, stock, fund"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-cost-basis">Cost basis ({form.currency})</Label>
+            <Input
+              id="acct-cost-basis"
+              inputMode="decimal"
+              value={form.cost_basis}
+              error={!fieldOk.cost_basis}
+              onChange={(e) => set('cost_basis', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+        </>
+      )}
+
+      {/* Asset subtype fields (Story 4.8, ARCH §3.5) — all optional. */}
+      {form.account_type === 'asset' && (
+        <>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-asset-type">Asset type</Label>
+            <Input
+              id="acct-asset-type"
+              value={form.asset_type}
+              onChange={(e) => set('asset_type', e.target.value)}
+              placeholder="e.g. property, vehicle"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-registration-no">Registration no.</Label>
+            <Input
+              id="acct-registration-no"
+              value={form.registration_no}
+              onChange={(e) => set('registration_no', e.target.value)}
+              placeholder="strata-title / plate no."
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-purchase-date">Purchase date</Label>
+            <DatePicker
+              id="acct-purchase-date"
+              value={form.purchase_date}
+              onChange={(v) => set('purchase_date', v)}
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-purchase-value">Purchase value ({form.currency})</Label>
+            <Input
+              id="acct-purchase-value"
+              inputMode="decimal"
+              value={form.purchase_value}
+              error={!fieldOk.purchase_value}
+              onChange={(e) => set('purchase_value', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+        </>
+      )}
+
+      {/* Insurance subtype fields (Story 4.8, ARCH §3.5) — all optional. */}
+      {form.account_type === 'insurance' && (
+        <>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-policy-no">Policy no.</Label>
+            <Input
+              id="acct-policy-no"
+              value={form.policy_no}
+              onChange={(e) => set('policy_no', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-insurer">Insurer</Label>
+            <Input
+              id="acct-insurer"
+              value={form.insurer}
+              onChange={(e) => set('insurer', e.target.value)}
+              placeholder="e.g. Prudential"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-policy-type">Policy type</Label>
+            <Dropdown
+              id="acct-policy-type"
+              value={form.policy_type}
+              placeholder="Select…"
+              options={POLICY_TYPE_OPTIONS}
+              onChange={(v) => set('policy_type', v)}
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-policy-status">Policy status</Label>
+            <Dropdown
+              id="acct-policy-status"
+              value={form.policy_status}
+              placeholder="Select…"
+              options={POLICY_STATUS_OPTIONS}
+              onChange={(v) => set('policy_status', v)}
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-premium-frequency">Premium frequency</Label>
+            <Dropdown
+              id="acct-premium-frequency"
+              value={form.premium_frequency}
+              placeholder="Select…"
+              options={INTEREST_FREQUENCY_OPTIONS}
+              onChange={(v) => set('premium_frequency', v)}
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-coverage-death">Death cover ({form.currency})</Label>
+            <Input
+              id="acct-coverage-death"
+              inputMode="decimal"
+              value={form.coverage_death}
+              error={!fieldOk.coverage_death}
+              onChange={(e) => set('coverage_death', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-coverage-tpd">TPD cover ({form.currency})</Label>
+            <Input
+              id="acct-coverage-tpd"
+              inputMode="decimal"
+              value={form.coverage_tpd}
+              error={!fieldOk.coverage_tpd}
+              onChange={(e) => set('coverage_tpd', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-coverage-ci">Critical illness cover ({form.currency})</Label>
+            <Input
+              id="acct-coverage-ci"
+              inputMode="decimal"
+              value={form.coverage_ci}
+              error={!fieldOk.coverage_ci}
+              onChange={(e) => set('coverage_ci', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-coverage-early-ci">Early CI cover ({form.currency})</Label>
+            <Input
+              id="acct-coverage-early-ci"
+              inputMode="decimal"
+              value={form.coverage_early_ci}
+              error={!fieldOk.coverage_early_ci}
+              onChange={(e) => set('coverage_early_ci', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-coverage-pa">Personal accident cover ({form.currency})</Label>
+            <Input
+              id="acct-coverage-pa"
+              inputMode="decimal"
+              value={form.coverage_personal_accident}
+              error={!fieldOk.coverage_personal_accident}
+              onChange={(e) => set('coverage_personal_accident', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-coverage-hospital">Hospital cover</Label>
+            <Input
+              id="acct-coverage-hospital"
+              value={form.coverage_hospital}
+              onChange={(e) => set('coverage_hospital', e.target.value)}
+              placeholder="e.g. Private / $2,000 excess"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-surrender-value">Surrender value ({form.currency})</Label>
+            <Input
+              id="acct-surrender-value"
+              inputMode="decimal"
+              value={form.surrender_value}
+              error={!fieldOk.surrender_value}
+              onChange={(e) => set('surrender_value', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <Label htmlFor="acct-surrender-inquiry-date">Surrender inquiry date</Label>
+            <DatePicker
+              id="acct-surrender-inquiry-date"
+              value={form.surrender_inquiry_date}
+              onChange={(v) => set('surrender_inquiry_date', v)}
             />
           </div>
         </>
