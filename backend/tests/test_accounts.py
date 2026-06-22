@@ -381,6 +381,10 @@ async def test_patch_edits_and_audits(monkeypatch):
         after = json.loads(rows[0].after_state)
         assert after["account_number"] == "****3210"
         assert after["name"] == "POSB"
+        # A bare-`date` column (opening_balance_date) serializes to ISO in the audit snapshot —
+        # locks the audit `_serialize_scalar` date branch (Story 4.10); a regression would 500 the
+        # PATCH (json.dumps on a raw date) and fail the 200 assert above.
+        assert after["opening_balance_date"] == "2026-06-01"
     finally:
         await engine.dispose()
 
@@ -457,14 +461,16 @@ async def test_ledger_backed_missing_opening_balance_422(monkeypatch):
 # ── Archive / restore (Story 4.2) ──
 
 
-async def _audit_count(factory, entity_id: str, action: str) -> int:
+async def _audit_count(
+    factory, entity_id: str, action: str, *, entity_type: str = "account"
+) -> int:
     async with factory() as db:
         return (
             await db.execute(
                 select(func.count())
                 .select_from(AuditLog)
                 .where(
-                    AuditLog.entity_type == "account",
+                    AuditLog.entity_type == entity_type,
                     AuditLog.entity_id == entity_id,
                     AuditLog.action == action,
                 )
@@ -1183,6 +1189,210 @@ async def test_snapshot_member_403_and_cross_household_404(monkeypatch):
         _auth(client_b, sid_b, csrf_b)
         assert client_b.post(f"/api/accounts/{acct_id}/snapshots", json=snap).status_code == 404
         assert client_b.get(f"/api/accounts/{acct_id}/snapshots").status_code == 404
+    finally:
+        await engine.dispose()
+
+
+# ── Edit & delete value snapshots (Story 4.10) ──
+
+
+async def test_snapshot_create_is_audited(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        snap_id = client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("100")).json()["id"]
+
+        # Snapshots are mutable corrections now → create writes a `create` audit row (Story 4.10).
+        assert await _audit_count(factory, snap_id, "create", entity_type="account_snapshot") == 1
+    finally:
+        await engine.dispose()
+
+
+async def test_update_snapshot_rederives_value_base_and_audits(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        snap_id = client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("100")).json()["id"]
+
+        # Edit the value → value changes and value_base re-derives (SGD rate 1.0).
+        resp = client.patch(f"/api/accounts/{acct_id}/snapshots/{snap_id}", json={"value": "250"})
+        assert resp.status_code == 200, resp.text
+        assert Decimal(resp.json()["value"]) == Decimal("250")
+        assert Decimal(resp.json()["value_base"]) == Decimal("250.0000")
+
+        # Edit the currency → value_base re-derives at the new rate (250 × 1.35).
+        resp = client.patch(
+            f"/api/accounts/{acct_id}/snapshots/{snap_id}", json={"currency": "USD"}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["currency"] == "USD"
+        assert Decimal(resp.json()["value_base"]) == Decimal("337.5000")
+
+        # Two edits → two `update` audit rows.
+        assert await _audit_count(factory, snap_id, "update", entity_type="account_snapshot") == 2
+    finally:
+        await engine.dispose()
+
+
+async def test_update_snapshot_partial_fields_leave_value_base(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        snap = client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("100")).json()
+        snap_id, base_before = snap["id"], snap["value_base"]
+
+        # Editing only note/source/date never touches value_base.
+        resp = client.patch(
+            f"/api/accounts/{acct_id}/snapshots/{snap_id}",
+            json={"note": "year-end", "source": "appraisal", "snapshot_date": "2026-06-20"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["note"] == "year-end"
+        assert resp.json()["source"] == "appraisal"
+        assert resp.json()["snapshot_date"] == "2026-06-20"
+        assert resp.json()["value_base"] == base_before
+    finally:
+        await engine.dispose()
+
+
+async def test_update_snapshot_unknown_currency_400_and_system_source_422(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        snap = client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("100")).json()
+        snap_id = snap["id"]
+
+        # Unknown currency → 400, the row is untouched.
+        resp = client.patch(
+            f"/api/accounts/{acct_id}/snapshots/{snap_id}", json={"value": "5", "currency": "XYZ"}
+        )
+        assert resp.status_code == 400
+        unchanged = client.get(f"/api/accounts/{acct_id}/snapshots").json()["items"][0]
+        assert Decimal(unchanged["value"]) == Decimal("100")
+        assert unchanged["currency"] == "SGD"
+
+        # System source → 422 (Pydantic Literal).
+        resp = client.patch(
+            f"/api/accounts/{acct_id}/snapshots/{snap_id}", json={"source": "formula"}
+        )
+        assert resp.status_code == 422
+    finally:
+        await engine.dispose()
+
+
+async def test_delete_snapshot_recomputes_current_value_and_audits(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        acct_id = client.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("100", on="2026-06-10"))
+        latest_id = client.post(
+            f"/api/accounts/{acct_id}/snapshots", json=_snap("200", on="2026-06-14")
+        ).json()["id"]
+        assert Decimal(client.get(f"/api/accounts/{acct_id}").json()["current_value"]) == Decimal(
+            "200"
+        )
+
+        # Delete the latest → 204, current value falls back to the remaining (earlier) snapshot.
+        resp = client.delete(f"/api/accounts/{acct_id}/snapshots/{latest_id}")
+        assert resp.status_code == 204
+        items = client.get(f"/api/accounts/{acct_id}/snapshots").json()["items"]
+        assert all(i["id"] != latest_id for i in items)
+        assert Decimal(client.get(f"/api/accounts/{acct_id}").json()["current_value"]) == Decimal(
+            "100"
+        )
+        assert await _audit_count(factory, latest_id, "delete", entity_type="account_snapshot") == 1
+    finally:
+        await engine.dispose()
+
+
+async def test_snapshot_mutation_perms_and_wrong_account_404(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        admin_id, hh_id = await _seed_household(factory)
+        sid_a, csrf_a = await _seed_session(factory, admin_id)
+        client_a = _client_with_db(factory, monkeypatch)
+        _auth(client_a, sid_a, csrf_a)
+
+        acct_id = client_a.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
+        ).json()["id"]
+        other_id = client_a.post(
+            "/api/accounts", json={"account_type": "capital", "name": "Two", "currency": "SGD"}
+        ).json()["id"]
+        snap_id = client_a.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("100")).json()[
+            "id"
+        ]
+
+        # A real snapshot id but the wrong (sibling) account → 404 on both verbs.
+        assert (
+            client_a.patch(
+                f"/api/accounts/{other_id}/snapshots/{snap_id}", json={"value": "5"}
+            ).status_code
+            == 404
+        )
+        assert (
+            client_a.delete(f"/api/accounts/{other_id}/snapshots/{snap_id}").status_code == 404
+        )
+
+        # Plain member → 403 on both verbs.
+        member_id = await _add_member(factory, hh_id, role="member")
+        sid_m, csrf_m = await _seed_session(factory, member_id)
+        client_m = _client_with_db(factory, monkeypatch)
+        _auth(client_m, sid_m, csrf_m)
+        assert (
+            client_m.patch(
+                f"/api/accounts/{acct_id}/snapshots/{snap_id}", json={"value": "5"}
+            ).status_code
+            == 403
+        )
+        assert (
+            client_m.delete(f"/api/accounts/{acct_id}/snapshots/{snap_id}").status_code == 403
+        )
+
+        # Admin of another household → 404.
+        other_admin, _ = await _seed_household(factory)
+        sid_b, csrf_b = await _seed_session(factory, other_admin)
+        client_b = _client_with_db(factory, monkeypatch)
+        _auth(client_b, sid_b, csrf_b)
+        assert (
+            client_b.delete(f"/api/accounts/{acct_id}/snapshots/{snap_id}").status_code == 404
+        )
     finally:
         await engine.dispose()
 

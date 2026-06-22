@@ -10,6 +10,7 @@ import { ColourPicker } from '../components/primitives/ColourPicker'
 import { DatePicker } from '../components/primitives/DatePicker'
 import { MonetaryValueInput } from '../components/primitives/MonetaryValueInput'
 import { api } from '../api/client'
+import { cleanAmount } from '../lib/currency'
 import { useAuthStore } from '../stores/authStore'
 import type { ListResponse, Member } from '../types/household'
 import { ACCOUNT_TYPE_LABEL, ACCOUNT_DEFAULT_COLOUR } from '../config/accountIcons'
@@ -257,6 +258,9 @@ export function AccountModal({
       // Repopulate every subtype field from the discriminated-union response (`'x' in editing` narrows
       // the union; nullable columns → '' so the inputs are controlled). Decimals/ints → String().
       const str = (v: string | number | null | undefined) => (v == null ? '' : String(v))
+      // Money fields prefill WITHOUT dead trailing zeros ("50000.0000" → "50000"); text/id fields
+      // keep verbatim (leading zeros in an account number matter).
+      const money = (v: string | number | null | undefined) => (v == null ? '' : cleanAmount(String(v)))
       const bank = editing.account_type === 'bank' ? editing : null
       const cc = editing.account_type === 'credit_card' ? editing : null
       const cap = editing.account_type === 'capital' ? editing : null
@@ -270,39 +274,39 @@ export function AccountModal({
         notes: editing.notes ?? '',
         colour: editing.colour ?? ACCOUNT_DEFAULT_COLOUR,
         vivid: editing.vivid,
-        opening_balance: ledger ?? '',
+        opening_balance: ledger != null ? cleanAmount(ledger) : '',
         opening_balance_date: ledgerDate ?? TODAY_ISO(),
         ownerIds: editing.owner_ids,
         account_number: str(bank?.account_number),
-        interest_rate: str(bank?.interest_rate),
+        interest_rate: money(bank?.interest_rate),
         interest_frequency: str(bank?.interest_frequency),
-        reserved_amount: str(bank?.reserved_amount),
-        credit_limit: str(cc?.credit_limit),
+        reserved_amount: money(bank?.reserved_amount),
+        credit_limit: money(cc?.credit_limit),
         billing_day: str(cc?.billing_day),
         due_day: str(cc?.due_day),
         reward_type: str(cc?.reward_type),
         reward_points: str(cc?.reward_points),
-        annual_fee: str(cc?.annual_fee),
-        bonus_limit: str(cc?.bonus_limit),
+        annual_fee: money(cc?.annual_fee),
+        bonus_limit: money(cc?.bonus_limit),
         points_expiry: str(cc?.points_expiry),
         investment_type: str(cap?.investment_type),
-        cost_basis: str(cap?.cost_basis),
+        cost_basis: money(cap?.cost_basis),
         asset_type: str(ast?.asset_type),
         registration_no: str(ast?.registration_no),
         purchase_date: str(ast?.purchase_date),
-        purchase_value: str(ast?.purchase_value),
+        purchase_value: money(ast?.purchase_value),
         policy_no: str(ins?.policy_no),
         insurer: str(ins?.insurer),
         policy_type: str(ins?.policy_type),
         policy_status: str(ins?.policy_status),
         premium_frequency: str(ins?.premium_frequency),
-        coverage_death: str(ins?.coverage_death),
-        coverage_tpd: str(ins?.coverage_tpd),
-        coverage_ci: str(ins?.coverage_ci),
-        coverage_early_ci: str(ins?.coverage_early_ci),
-        coverage_personal_accident: str(ins?.coverage_personal_accident),
+        coverage_death: money(ins?.coverage_death),
+        coverage_tpd: money(ins?.coverage_tpd),
+        coverage_ci: money(ins?.coverage_ci),
+        coverage_early_ci: money(ins?.coverage_early_ci),
+        coverage_personal_accident: money(ins?.coverage_personal_accident),
         coverage_hospital: str(ins?.coverage_hospital),
-        surrender_value: str(ins?.surrender_value),
+        surrender_value: money(ins?.surrender_value),
         surrender_inquiry_date: str(ins?.surrender_inquiry_date),
       })
     } else {

@@ -22,6 +22,7 @@ import { Checkbox } from '../primitives/Checkbox'
 import type { Category } from '../../types/category'
 import { CATEGORY_TYPE_META } from '../../types/category'
 import { resolveMove, ROOT_DROPPABLE, PARENT_PREFIX } from './resolveMove'
+import { useEntityColour } from '../../theme/useEntityColour'
 
 // CategoryTree (UX §6 / frontend.md §2.11) — the ONE sanctioned EntityCard exception: a flat
 // flex-strip tree, not a card grid. Parent rows carry a calm colour-tint fill; sub rows a lighter
@@ -41,6 +42,13 @@ function fillVar(colour: string): CSSProperties {
   return { '--entity-colour': colour } as CSSProperties
 }
 
+// Theme the row's tint colour through the resolver (SCP 2026-06-22) so a user-picked category colour
+// ramp-snaps on immersive themes. Calm surface → use the remapped `.colour`; the sub-tint (9% via
+// `bg-entity-fill-sub`) is derived in CSS off this same resolved value.
+function useRowFill(colour: string): CSSProperties {
+  return fillVar(useEntityColour(colour)?.colour ?? colour)
+}
+
 function isArchived(c: Category): boolean {
   return c.status === 'archived'
 }
@@ -52,7 +60,7 @@ function TypeBadge({ type }: { type: Category['category_type'] }) {
 
 function SubCountPill({ count }: { count: number }) {
   return (
-    <span className="inline-block text-2xs px-2 py-px rounded-full bg-surface-active text-text-secondary shrink-0">
+    <span className="inline-block text-2xs px-2 py-px rounded-full bg-entity-chip-calm text-entity shrink-0">
       {count} {count === 1 ? 'sub' : 'subs'}
     </span>
   )
@@ -65,7 +73,7 @@ function RowMenu({ items, label }: { items: ContextMenuEntry[]; label: string })
         <MoreVertical
           size={14}
           aria-label={label}
-          className="text-text-muted opacity-60 hover:opacity-100 shrink-0"
+          className="text-entity opacity-60 hover:opacity-100 shrink-0"
         />
       }
       items={items}
@@ -120,7 +128,7 @@ function DragHandle({
       type="button"
       ref={setActivatorNodeRef}
       aria-label={label}
-      className="shrink-0 cursor-grab active:cursor-grabbing text-text-muted opacity-40 group-hover:opacity-100 transition-opacity focus:outline-none focus:opacity-100"
+      className="shrink-0 cursor-grab active:cursor-grabbing text-entity opacity-40 group-hover:opacity-100 transition-opacity focus:outline-none focus:opacity-100"
       {...attributes}
       {...listeners}
     >
@@ -159,12 +167,12 @@ function ParentRow({
       ref={setNodeRef}
       data-testid="category-tree-row"
       data-selected={selected || undefined}
-      className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md transition-all duration-100 ${
-        selected ? 'bg-surface-active ring-2 ring-accent' : 'bg-entity-fill-calm'
+      className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md transition-all duration-100 bg-entity-fill-calm ${
+        selected ? 'ring-2 ring-accent' : ''
       } ${
         archived ? 'opacity-60 grayscale border border-dashed border-border-strong' : ''
       } ${isDragging ? 'opacity-40' : ''}`}
-      style={fillVar(color)}
+      style={useRowFill(color)}
     >
       <Checkbox
         checked={selected}
@@ -188,16 +196,16 @@ function ParentRow({
         >
           <ChevronRight
             size={14}
-            className={`text-text-secondary transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}
+            className={`text-entity transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}
           />
         </button>
       ) : (
-        <Minus size={14} className="text-text-muted shrink-0" />
+        <Minus size={14} className="text-entity opacity-50 shrink-0" />
       )}
       <span className="flex items-center justify-center size-6 shrink-0">
         {category.icon ? <GlyphView glyph={category.icon} size={20} /> : null}
       </span>
-      <span className="text-sm font-medium text-text-primary flex-1 truncate min-w-0">
+      <span className="text-sm font-medium text-entity-fg flex-1 truncate min-w-0">
         {category.name}
       </span>
       {archived && <Badge variant="neutral">Archived</Badge>}
@@ -219,12 +227,12 @@ function SubRow({ category, draggable, color, menu, selected, onToggleSelect }: 
       ref={setNodeRef}
       data-testid="category-tree-row"
       data-selected={selected || undefined}
-      className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md transition-all duration-100 ${
-        selected ? 'bg-surface-active ring-2 ring-accent' : 'bg-entity-fill-sub'
+      className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md transition-all duration-100 bg-entity-fill-sub ${
+        selected ? 'ring-2 ring-accent' : ''
       } ${
         archived ? 'opacity-60 grayscale border border-dashed border-border-strong' : ''
       } ${isDragging ? 'opacity-40' : ''}`}
-      style={fillVar(color)}
+      style={useRowFill(color)}
     >
       <Checkbox
         checked={selected}
@@ -240,7 +248,7 @@ function SubRow({ category, draggable, color, menu, selected, onToggleSelect }: 
         />
       )}
       {/* Sub rows carry no glyph — name only (UX §6 / bible CategoryTree). */}
-      <span className="text-sm text-text-primary flex-1 truncate min-w-0">{category.name}</span>
+      <span className="text-sm text-entity-fg flex-1 truncate min-w-0">{category.name}</span>
       {archived && <Badge variant="neutral">Archived</Badge>}
       <TypeBadge type={category.category_type} />
       <RowMenu items={menu} label={`Actions for ${category.name}`} />

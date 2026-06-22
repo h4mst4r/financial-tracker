@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { addMonths, format, getDaysInMonth, setDate } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
-import { Wallet, Pencil, Copy, LineChart, Archive, RotateCcw, Trash2 } from 'lucide-react'
+import { Wallet, Pencil, Copy, Archive, RotateCcw, Trash2 } from 'lucide-react'
 import { EntityPage } from '../components/entity'
 import { EntityCard } from '../components/entity/EntityCard'
 import { Dropdown } from '../components/primitives/Dropdown'
@@ -14,6 +14,8 @@ import { useEntityManager } from '../hooks/useEntityManager'
 import { useAlertStore } from '../stores/alertStore'
 import { useAuthStore } from '../stores/authStore'
 import { convertForDisplay } from '../lib/currency'
+import { computeRoi } from '../lib/accountRoi'
+import { semanticTextClass } from '../theme/semantic'
 import { api, ApiError } from '../api/client'
 import type { EntityListResponse } from '../types/entity'
 import type { Currency } from '../types/currency'
@@ -21,15 +23,16 @@ import type { ListResponse, Member } from '../types/household'
 import { ACCOUNT_TYPE_ICON, ACCOUNT_TYPE_LABEL } from '../config/accountIcons'
 import { type Account, type AccountType } from '../types/account'
 import { AccountModal } from './AccountModal'
-import { AccountSnapshotModal } from './AccountSnapshotModal'
+import { AccountDetailView } from './AccountDetailView'
 
 // The accounts list page (UX §1/§2/§2.5) — the locked EntityCard reference screen. ONE component,
 // mounted at the four ACCOUNTS routes filtered by `subtypes` (/accounts=bank+credit, /capital,
-// /assets, /insurance). Create/edit + the full lifecycle ⋮ set (Edit · Duplicate · Add value
-// snapshot · — · Archive/Restore · Delete-if-empty) are wired here. The hero is the computed
-// current value in the account's NATIVE currency (Story 4.4); the card carries the value-history
-// MiniSparkline from its snapshot series (Story 4.5, presentational — the click→Viewer expand
-// affordance is the Epic-9 seam). The Native/any-currency conversion toggle (Story 4.9) is out of scope.
+// /assets, /insurance). Create/edit + the full lifecycle ⋮ set (Edit · Duplicate · — ·
+// Archive/Restore · Delete-if-empty) are wired here. Tapping a card flips to the §8.2b read detail view
+// (Story 4.11, AccountDetailView) — value snapshots are added/edited inline there now (the old
+// Add-value-snapshot modal is retired). The hero is the computed current value in the active display
+// currency (Story 4.9); the card carries the value-history MiniSparkline from its snapshot series
+// (Story 4.5, presentational — the click→Viewer expand affordance is the Epic-9 seam).
 
 interface AccountsListProps {
   subtypes: AccountType[]
@@ -47,7 +50,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
   const [editing, setEditing] = useState<Account | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Account | null>(null)
   const [confirmArchive, setConfirmArchive] = useState<Account | null>(null)
-  const [snapshotFor, setSnapshotFor] = useState<Account | null>(null)
+  const [detailFor, setDetailFor] = useState<Account | null>(null)
   // The bank/credit-card type filter (UX §1.2) — only meaningful on the multi-subtype /accounts route.
   const [typeFilter, setTypeFilter] = useState<'all' | AccountType>('all')
   const pushToast = useAlertStore((s) => s.pushToast)
@@ -217,23 +220,22 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       const parts: string[] = []
       if (a.due_day != null) parts.push(`due ${nextDueDate(a.due_day)}`)
       if (a.credit_limit != null) {
-        const n = Number(a.credit_limit)
-        parts.push(`limit ${symbolFor(a.currency)} ${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
+        // Convert the limit to the active display currency (Story 4.11 pickup) — the hero already
+        // converts; the sub-line must too, or a non-Native lens shows a mixed-currency card.
+        const { value, code } = convertForDisplay(a.credit_limit, a.currency, displayCurrency, currencies)
+        parts.push(`limit ${symbolFor(code)} ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
       }
       return parts.length ? parts.join(' · ') : undefined
     }
     if (a.account_type === 'capital') {
-      // Derived ROI = current value − cost basis (Story 4.8). Same-ccy guard: the current value's
-      // currency must match the account's native code, else the subtraction is meaningless (cross-ccy
-      // conversion is the Story 4.9 toggle). Gain green / loss red; on a vivid card fall back to the
-      // contrast pole (semantic colour breaks the pole on a saturated fill).
-      if (a.cost_basis == null || a.current_value == null || a.current_value_currency !== a.currency)
-        return undefined
-      // Round to cents once — JS float subtraction can leave a near-zero artifact that would
-      // misclassify a break-even ROI as a red −0.00 loss; the rounded value drives sign, zero, colour.
-      const delta = Math.round((Number(a.current_value) - Number(a.cost_basis)) * 100) / 100
-      const text = `ROI ${delta < 0 ? '−' : '+'}${symbolFor(a.currency)} ${Math.abs(delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      const tone = a.vivid || delta === 0 ? '' : delta > 0 ? 'text-success' : 'text-error'
+      // Derived ROI = current value − cost basis, both in native then shown in the display currency
+      // (Story 4.8/4.11). The same-ccy guard is relaxed (Story 4.11): a cross-currency current value is
+      // converted to native first, so ROI renders instead of being suppressed. Gain green / loss red;
+      // on a vivid card fall back to the contrast pole (semantic colour breaks the pole on a fill).
+      const roi = computeRoi(a, currencies, displayCurrency)
+      if (!roi) return undefined
+      const text = `ROI ${roi.delta < 0 ? '−' : '+'}${symbolFor(roi.code)} ${Math.abs(roi.delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      const tone = semanticTextClass(roi.delta === 0 ? null : roi.delta > 0 ? 'success' : 'error', a.vivid)
       return <span className={tone}>{text}</span>
     }
     if (a.account_type === 'insurance') {
@@ -252,7 +254,6 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       onClick: () =>
         runAction(() => manager.duplicate(a.id), 'Could not duplicate the account.', 'Account duplicated'),
     },
-    { label: 'Add value snapshot', icon: LineChart, onClick: () => setSnapshotFor(a) },
     { divider: true },
     a.status === 'archived'
       ? {
@@ -271,6 +272,28 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       onClick: () => setConfirmDelete(a),
     },
   ]
+
+  // Tap a card → open the §8.2b read detail view.
+  const openDetail = (a: Account) => setDetailFor(a)
+  const closeDetail = () => setDetailFor(null)
+
+  const renderCard = (a: Account) => (
+    <EntityCard
+      key={a.id}
+      colour={a.colour ?? undefined}
+      vivid={a.vivid}
+      archived={a.status === 'archived'}
+      icon={<Icon icon={ACCOUNT_TYPE_ICON[a.account_type]} size={18} />}
+      name={a.name}
+      hero={heroFor(a)}
+      subtitle={subtitleFor(a)}
+      sparkline={<MiniSparkline data={a.value_series.map(Number)} />}
+      meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${a.currency}`}
+      owners={ownersSlot(a)}
+      menuItems={rowMenu(a)}
+      onClick={() => openDetail(a)}
+    />
+  )
 
   const typeFilterControl = subtypes.length > 1 && (
     <div className="w-account-filter">
@@ -309,23 +332,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
         emptyTitle={`No ${plural(newLabel)} yet`}
         emptyDescription={`Add ${newLabel === 'account' ? 'an' : 'a'} ${newLabel} to start tracking it.`}
       >
-        {visible.map((a) => (
-          <EntityCard
-            key={a.id}
-            colour={a.colour ?? undefined}
-            vivid={a.vivid}
-            archived={a.status === 'archived'}
-            icon={<Icon icon={ACCOUNT_TYPE_ICON[a.account_type]} size={18} />}
-            name={a.name}
-            hero={heroFor(a)}
-            subtitle={subtitleFor(a)}
-            sparkline={<MiniSparkline data={a.value_series.map(Number)} />}
-            meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${a.currency}`}
-            owners={ownersSlot(a)}
-            menuItems={rowMenu(a)}
-            onClick={() => openEdit(a)}
-          />
-        ))}
+        {visible.map((a) => renderCard(a))}
       </EntityPage>
 
       <AccountModal
@@ -337,11 +344,12 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
         onSubmit={handleSubmit}
       />
 
-      <AccountSnapshotModal
-        open={snapshotFor !== null}
-        onClose={() => setSnapshotFor(null)}
-        account={snapshotFor}
-        currencyOptions={displayCurrencyCodes}
+      <AccountDetailView
+        open={detailFor !== null}
+        onClose={closeDetail}
+        account={detailFor}
+        currencies={currencies}
+        displayCurrency={displayCurrency}
         onError={(err) => toastError(err, 'Could not save the snapshot.')}
       />
 

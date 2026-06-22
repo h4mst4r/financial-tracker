@@ -106,6 +106,8 @@ Entity identity is a **colour fill** of the instance's own `colour` (calm tint d
 
 **All colour — including the interaction/feedback tokens** (focus ring, selection halo, border, selection-fill: `accent-primary`, `accent-secondary`, `ring-glow-*`, error) — are **theme tokens**, never literals. Under an `immersive` palette they remap through the palette's `tint` ramp automatically (Game Boy → green rings, green selection). Because you always read tokens/variables, this is free — **hardcoding any hex breaks theming.**
 
+> **⚠️ Caveat — this "for free" remap holds ONLY for tokens defined in CSS** (the interaction/feedback tokens above, and entity-*type* defaults). A **runtime, user-picked per-instance colour** (`Account.colour`, `Category.color`, …) is NOT remapped by CSS — `color-mix` can't snap an arbitrary hex to a ramp slot. It must pass through the JS resolver (`remapEntityColour` → `enforceFloor`) at the point `--entity-colour` is set (SCP 2026-06-22 colour-system-contract; UX §0.2). Do **not** assume an instance colour themes itself on immersive — wire it through the resolver. See §2.5.
+
 ### 1.7 No Magic Values (governance P4 — full enforcement here)
 
 All hardcoded colour, opacity, size, z-index, transition duration, or breakpoint values must be named tokens in `index.css`. Never use:
@@ -235,7 +237,7 @@ utility — NOT a flat neutral `border-border`. (The colour still never goes on 
 
 - Use the themed utilities (`bg-entity-fill-calm` / `bg-entity-fill-vivid` for the fill, `border-entity-calm` for the edge) that read `--entity-colour`; never inline a raw hex.
 - **Selection** is NOT conveyed by the fill — use the §2.4 ring + corner check + lift (tint alone is insufficient on vivid fills).
-- Under an **immersive** theme the instance colour is remapped through the palette's tint ramp (UX §0.2) — because you read it from the token/variable, this happens for free. Never hardcode the hex.
+- Under an **immersive** theme the instance colour is remapped through the palette's tint ramp (UX §0.2). This does **NOT** happen for free in CSS — a runtime instance hex is resolved in JS (`remapEntityColour` → `enforceFloor`) at the point `--entity-colour` is set, so route every `--entity-colour` setter through the shared resolver / `useEntityColour` hook (SCP 2026-06-22 colour-system-contract; reopened Story 1.6). Never hardcode the hex; never assume the bare CSS variable self-themes on immersive.
 
 ### 2.6 Nested Button Rule — Never Button Inside Button
 

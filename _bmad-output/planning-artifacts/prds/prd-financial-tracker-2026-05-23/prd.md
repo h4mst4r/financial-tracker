@@ -428,8 +428,19 @@ event appears in ledger; budget actuals recomputed. Context defaults reflect the
 hand-entered transactions persist `source = manual`.
 
 **FR-E-002 — Edit Transaction/s**
-Any Admin or Owner may edit any transaction. Member may edit their own.
+Any Admin or Owner may edit any transaction. Member may edit their own. Visible columns are edited
+**inline in the row** (FR-E-024); the non-column rich fields (flags, tags, status, duplicate-link, FX
+breakdown) are edited in the modal.
 *Acceptance:* Changes persist; audit log entry created; budget actuals recomputed.
+
+**FR-E-024 — Inline Cell Editing (tabular surfaces)**
+Tabular surfaces — the transaction ledger, the account snapshot history (FR-A-018), and recurring
+occurrence timelines (FR-E-013) — support **inline cell editing** of their visible columns:
+double-click a cell to edit in place, Enter/blur commit, Esc cancel, with optimistic update and
+rollback on failure. Editing the ledger's base-currency cell inline performs the FX manual override
+(FR-E-009). The **EntityModal is reserved** for entity creation, subtype-adaptive config, and the
+non-column rich fields. Per-row permission applies (a Member edits only rows they created; Admin/Owner
+any). Desktop/tablet only; mobile uses the sheet/modal. (UX §8.2/§12.3a/§8.2b; SCP 2026-06-22-inline-editing.)
 
 **FR-E-003 — Duplicate Transaction/s**
 Any Admin or Owner may duplicate a transaction. This copies all values and opens the edit modal.

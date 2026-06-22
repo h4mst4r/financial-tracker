@@ -9,7 +9,7 @@ Writes `flush` but **never** `commit` — the request's `get_db` owns the bounda
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +46,9 @@ def _serialize_scalar(value) -> object | None:
         return None
     if isinstance(value, Decimal):
         return str(value)
-    if isinstance(value, datetime):
+    if isinstance(value, datetime):  # must precede `date` — datetime subclasses date
+        return value.isoformat()
+    if isinstance(value, date):  # bare date columns, e.g. account_snapshots.snapshot_date
         return value.isoformat()
     return value
 

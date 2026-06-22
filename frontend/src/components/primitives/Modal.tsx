@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Icon } from './Icon'
@@ -13,9 +13,34 @@ interface ModalProps {
    *  backdrop-click dismissals are all suppressed (e.g. a mandatory Accept/Decline choice with no
    *  surface behind it). Defaults to true. */
   dismissible?: boolean
+  /** Override the panel appearance (width + bg + border + any layout). Defaults to the standard surface
+   *  modal; the detail view passes the card's fill + border + a big card-ratio size + flex/overflow so
+   *  its body scrolls (§8.2b). */
+  panelClassName?: string
+  /** Override the body wrapper — default `px-md py-md`. The detail view adds `flex-1 overflow-y-auto`
+   *  (kept OUT of the default so form modals' dropdowns/pickers are never clipped). */
+  bodyClassName?: string
+  /** Inline panel style — e.g. the `--entity-colour` for the detail modal's card fill. */
+  panelStyle?: CSSProperties
+  /** When the panel itself carries an entity fill (the §8.2b detail view), the header chrome rides the
+   *  card's contrast pole instead of the neutral theme tokens: the title/X inherit `--entity-on-colour`
+   *  (the X mutes via opacity) and the header divider is the entity-tinted edge. Off by default — every
+   *  form modal keeps the plain neutral frame. */
+  framePoled?: boolean
 }
 
-export function Modal({ open, onClose, title, children, footer, dismissible = true }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  dismissible = true,
+  panelClassName = 'w-full max-w-modal bg-surface-raised border border-border',
+  bodyClassName = 'px-md py-md',
+  panelStyle,
+  framePoled = false,
+}: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const previousFocus = useRef<HTMLElement | null>(null)
   // Where the most recent press started — so a drag that begins inside the panel (e.g. selecting text
@@ -122,30 +147,41 @@ export function Modal({ open, onClose, title, children, footer, dismissible = tr
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
+        style={panelStyle}
         className={`
-          relative z-modal bg-surface-raised border border-border rounded-lg shadow-xl
-          w-full max-w-modal origin-center
-          transition-all duration-base
+          relative z-modal rounded-lg shadow-xl origin-center transition-all duration-base
+          ${panelClassName}
           ${entered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}
         `}
       >
         {title && (
-          <div className="flex items-center justify-between px-md py-sm border-b border-border">
-            <h2 id={titleId} className="text-lg font-medium text-text-primary">
+          <div
+            className={`flex shrink-0 items-center justify-between px-md py-sm border-b ${
+              framePoled ? 'border-entity-edge' : 'border-border'
+            }`}
+          >
+            <h2
+              id={titleId}
+              className={`text-lg font-medium ${framePoled ? '' : 'text-text-primary'}`}
+            >
               {title}
             </h2>
             {dismissible && (
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="text-text-secondary hover:text-text-primary transition-colors"
+                className={
+                  framePoled
+                    ? 'opacity-70 hover:opacity-100 transition-opacity'
+                    : 'text-text-secondary hover:text-text-primary transition-colors'
+                }
               >
                 <Icon icon={X} size={18} />
               </button>
             )}
           </div>
         )}
-        <div className="px-md py-md">{children}</div>
+        <div className={bodyClassName}>{children}</div>
         {footer && (
           // Cancel left / primary right (§4.2): footer children are direct flex children so
           // justify-between splits them (a single footer element falls to the left, generically).

@@ -121,11 +121,14 @@ describe('CategoryTree', () => {
     expect(onToggleSelect).toHaveBeenCalledWith('p1')
   })
 
-  test('a selected row takes the selected fill + accent ring (3.4)', () => {
+  test('a selected row keeps the entity fill + adds the accent ring (3.4)', () => {
+    // Selection no longer swaps in a neutral surface fill (owner exec decision 2026-06-22 — no neutral
+    // theme tokens on an entity surface); it keeps the entity tint and layers the accent ring on top.
     render(<CategoryTree items={items} {...noop} selectedIds={new Set(['p1'])} />)
     const row = rowOf('Food')
     expect(row.getAttribute('data-selected')).toBe('true')
-    expect(row.className).toContain('bg-surface-active')
+    expect(row.className).toContain('bg-entity-fill-calm')
+    expect(row.className).not.toContain('bg-surface-active')
     expect(row.className).toContain('ring-accent')
   })
 

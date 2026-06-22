@@ -17,8 +17,10 @@ describe('EntityCard (story 1.9b)', () => {
     expect(card).toHaveClass('bg-entity-fill-calm')
     expect(card).not.toHaveClass('bg-entity-fill-vivid')
     expect(card.style.getPropertyValue('--entity-colour')).toBe('#6366f1')
-    // Calm keeps the normal text colour (no contrast-aware override).
-    expect(card).toHaveClass('text-text-primary')
+    // Calm foreground is the entity-derived text (owner exec decision 2026-06-22 — calm is no longer the
+    // neutral theme pole); children inherit this hue. Vivid swaps to the contrast pole (text-on-entity).
+    expect(card).toHaveClass('text-entity-fg')
+    expect(card).not.toHaveClass('text-text-primary')
   })
 
   it('applies the vivid fill with contrast-aware text + on-colour variable', () => {
@@ -78,10 +80,11 @@ describe('EntityCard (story 1.9b)', () => {
     expect(screen.getByLabelText('Actions')).toBeInTheDocument()
   })
 
-  it('⋮ trigger follows the contrast pole on a vivid card (not the fixed muted token)', () => {
-    // On a light vivid fill (e.g. cyan) the contrast pole is dark; the dots must inherit it (opacity
-    // mute), NOT text-text-secondary which would render light-on-light. Regression for the white-dots
-    // -on-cyan bug.
+  it('⋮ trigger tints to the entity colour on calm, and the on-entity pole on vivid', () => {
+    // Every element on an entity surface tints to the instance colour (icons included) — no flat
+    // neutral token. Calm: text-entity (the instance colour). Vivid: inherits the root on-entity pole,
+    // muted via opacity (NOT text-text-secondary, which would render light-on-light on a light vivid
+    // fill — the white-dots-on-cyan regression).
     const { rerender } = render(
       <EntityCard
         name="Calm"
@@ -89,8 +92,9 @@ describe('EntityCard (story 1.9b)', () => {
         menuItems={[{ label: 'Edit', icon: Pencil, onClick: vi.fn() }]}
       />,
     )
-    // Calm: muted neutral token.
-    expect(screen.getByLabelText('Actions')).toHaveClass('text-text-secondary')
+    // Calm: entity-tinted, never the flat neutral token.
+    expect(screen.getByLabelText('Actions')).toHaveClass('text-entity')
+    expect(screen.getByLabelText('Actions')).not.toHaveClass('text-text-secondary')
 
     rerender(
       <EntityCard

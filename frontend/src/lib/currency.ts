@@ -52,6 +52,12 @@ export function colourForCode(code: string): string {
  *  currency, no conversion. Stored in `Person.display_currency` alongside ISO codes. */
 export const NATIVE_DISPLAY = 'native'
 
+/** Strip dead trailing zeros from a stored decimal string for an edit input: "50000.0000" → "50000",
+ *  "2.50" → "2.5". A non-numeric string passes through untouched. */
+export function cleanAmount(v: string): string {
+  return /^-?\d+(\.\d+)?$/.test(v) ? String(Number(v)) : v
+}
+
 /** Convert a native account value into the active display currency (Story 4.9, display-only).
  *
  *  `displayCode === 'native'` (or a missing/zero `rate_to_base` for either side) → the native value

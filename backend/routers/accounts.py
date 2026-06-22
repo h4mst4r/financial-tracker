@@ -31,6 +31,7 @@ from backend.schemas.account import (
     AccountSnapshotCreate,
     AccountSnapshotListOut,
     AccountSnapshotResponse,
+    AccountSnapshotUpdate,
     AccountUpdate,
     response_for,
 )
@@ -197,6 +198,37 @@ async def list_snapshots(
     snaps = await account_service.list_snapshots(db, household_id, account_id)
     items = [AccountSnapshotResponse.model_validate(s) for s in snaps]
     return AccountSnapshotListOut(items=items, total=len(items))
+
+
+@router.patch("/accounts/{account_id}/snapshots/{snapshot_id}")
+async def update_snapshot(
+    account_id: str,
+    snapshot_id: str,
+    data: AccountSnapshotUpdate,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> AccountSnapshotResponse:
+    """Edit a value snapshot (admin/owner; FR-A-018). Unknown currency → 400, system source → 422
+    (before any write); audited. 404 cross-household or a snapshot not on this account."""
+    snap = await account_service.update_snapshot(
+        db, household_id, person.id, account_id, snapshot_id, data
+    )
+    return AccountSnapshotResponse.model_validate(snap)
+
+
+@router.delete("/accounts/{account_id}/snapshots/{snapshot_id}", status_code=204)
+async def delete_snapshot(
+    account_id: str,
+    snapshot_id: str,
+    person: Person = Depends(_require_admin),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Delete a value snapshot (admin/owner; FR-A-018). Audited; current value recomputes from the
+    remaining snapshots. 404 cross-household or a snapshot not on this account."""
+    await account_service.delete_snapshot(db, household_id, person.id, account_id, snapshot_id)
+    return Response(status_code=204)
 
 
 @router.get("/accounts/{account_id}/events")

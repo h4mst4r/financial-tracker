@@ -23,23 +23,34 @@
   --color-border-focus:     #6366f1;
   --color-error:            #ef4444;
   --color-border-error:     #ef4444;
-  --color-accent-subtle:  color-mix(in oklab, #6366f1 16%, transparent);
-  --color-control-active: color-mix(in oklab, #6366f1 22%, transparent);
-  --color-accent-active:  color-mix(in oklab, #06b6d4 20%, transparent);
-  --color-primary-muted:  color-mix(in oklab, #6366f1 18%, transparent);
-  --color-ring-glow-primary: color-mix(in oklab, #6366f1 35%, transparent);
-  --color-ring-glow-accent:  color-mix(in oklab, #06b6d4 35%, transparent);
-  --color-ring-glow-error:   color-mix(in oklab, #ef4444 35%, transparent);
+  /* Derived interaction-fill tokens — written ONCE (SCP 2026-06-22 colour-system-contract): each is a
+     color-mix of the theme's own accent/error anchor + a per-theme alpha INPUT (--alpha-*). A [data-theme]
+     block sets anchors (+ any alpha that differs) only — never a re-pasted color-mix (the failure signal).
+     Defaults = the dark-theme alphas; light themes lower them (see the [data-theme] blocks). */
+  --alpha-accent-subtle:  16%;
+  --alpha-control-active: 22%;
+  --alpha-accent-active:  20%;
+  --alpha-primary-muted:  18%;
+  --alpha-ring-glow:      35%;
+  --color-accent-subtle:  color-mix(in oklab, var(--color-accent-primary)   var(--alpha-accent-subtle),  transparent);
+  --color-control-active: color-mix(in oklab, var(--color-accent-primary)   var(--alpha-control-active), transparent);
+  --color-accent-active:  color-mix(in oklab, var(--color-accent-secondary) var(--alpha-accent-active),  transparent);
+  --color-primary-muted:  color-mix(in oklab, var(--color-accent-primary)   var(--alpha-primary-muted),  transparent);
+  --color-ring-glow-primary: color-mix(in oklab, var(--color-accent-primary)   var(--alpha-ring-glow), transparent);
+  --color-ring-glow-accent:  color-mix(in oklab, var(--color-accent-secondary) var(--alpha-ring-glow), transparent);
+  --color-ring-glow-error:   color-mix(in oklab, var(--color-error)            var(--alpha-ring-glow), transparent);
   --color-backdrop:          rgb(0 0 0 / 0.7);
 
   /* ── Colour · semantic (UX §0.1/§0.9 status + inflow/outflow) ── */
   --color-success:       #22c55e;
   --color-warning:       #f59e0b;
   --color-info:          #3b82f6;
-  --color-success-muted: color-mix(in oklab, #22c55e 70%, var(--color-surface));
-  --color-warning-muted: color-mix(in oklab, #f59e0b 70%, var(--color-surface));
-  --color-info-muted:    color-mix(in oklab, #3b82f6 70%, var(--color-surface));
-  --color-error-muted:   color-mix(in oklab, #ef4444 70%, var(--color-surface));
+  /* *-muted = a constant 70% series tone over surface — derived ONCE off the semantic anchors, so the
+     per-theme overrides are deleted (the formula re-resolves against each theme's own hue + surface). */
+  --color-success-muted: color-mix(in oklab, var(--color-success) 70%, var(--color-surface));
+  --color-warning-muted: color-mix(in oklab, var(--color-warning) 70%, var(--color-surface));
+  --color-info-muted:    color-mix(in oklab, var(--color-info)    70%, var(--color-surface));
+  --color-error-muted:   color-mix(in oklab, var(--color-error)   70%, var(--color-surface));
 
   /* Subtle low-alpha semantic FILLS for chips/badges/toasts (UX §0.1 — distinct from *-muted, which is
      a 70% series tone). Reference var(--color-*) so they re-skin per palette automatically (no per-theme
@@ -136,7 +147,6 @@
   --duration-emphatic:500ms;   /* error bounce, hard-delete drift         */
   --duration-archive: 550ms;   /* archive desaturate                      */
   --duration-rollup:  650ms;   /* number roll-up (JS count; token for parity) */
-  --duration-flip:    800ms;   /* account card flip ↔                     */
   --duration-shimmer:1500ms;   /* skeleton shimmer loop                   */
   --duration-float:  4000ms;   /* pie idle float                          */
 
@@ -169,10 +179,19 @@
 /* ── Entity colour-fill identity (UX §0.1, frontend.md §2.5) — backgrounds only; text/contrast = 1.6 ── */
 @utility bg-entity-fill-calm  { background-color: color-mix(in oklab, var(--entity-colour) 18%, transparent); }
 @utility bg-entity-fill-vivid { background-color: var(--entity-colour); }
+/* OPAQUE calm fill — the same 18% entity tint, but over the raised surface instead of `transparent`,
+   so it reads on a modal panel (where a transparent fill would let the backdrop bleed through). Falls
+   back to the bare surface when no --entity-colour is set. (Account detail view, §8.2b.) */
+@utility bg-entity-fill-calm-solid { background-color: color-mix(in oklab, var(--entity-colour, var(--color-surface-raised)) 18%, var(--color-surface-raised)); }
 /* EntityCard border — a tint of the instance colour blended into the neutral border (design bible
    .ecard: color-mix(--ec 30%, --border)). The fill is the 18% tint above; the border is a stronger
    30% so the card edge reads as the entity's colour, not a flat neutral box (UX §2.1). */
 @utility border-entity-calm { border-color: color-mix(in srgb, var(--entity-colour) 30%, var(--color-border)); }
+/* Surface-aware divider: an entity colour-fill panel (EntityCard / detail view §8.2b) sets --entity-edge
+   ONCE — on calm = the entity-tinted edge above, on vivid = the contrast pole over the fill (matching the
+   poled text/chip/scrollbar, NOT a neutral border mix that reads as a foreign line). Every divider inside
+   the panel reads this one var. Falls back to the neutral border when no panel sets it. */
+@utility border-entity-edge { border-color: var(--entity-edge, var(--color-border)); }
 /* Subcategory rows: a lighter tint of the parent's colour (CategoryTree, UX §6 / frontend.md §2.11). */
 @utility bg-entity-fill-sub   { background-color: color-mix(in oklab, var(--entity-colour) 9%, transparent); }
 /* Contrast-aware text for the vivid fill (calm keeps text-text-primary). --entity-on-colour is set
@@ -181,6 +200,18 @@
 /* Icon-chip backdrop on a vivid fill: an 18% wash of the on-colour → translucent white on dark fills,
    translucent dark on light fills (the bible's chip effect), contrast-aware for free. Vivid only. */
 @utility bg-entity-chip { background-color: color-mix(in srgb, var(--entity-on-colour) 18%, transparent); }
+/* CALM entity foreground (UX §2.5): on a calm entity surface (card / detail view) every non-text
+   element takes the instance colour so nothing reads as flat neutral. text-entity colours lucide
+   icons (currentColor) — emoji glyphs ignore it and stay full-colour (the intended exception); text
+   stays the theme's contrast pole. bg-entity-chip-calm is the icon-chip backdrop (opaque tint over
+   the raised surface). NOT for vivid (there the fill IS the colour → use text-on-entity/bg-entity-chip). */
+@utility text-entity { color: var(--entity-colour); }
+@utility bg-entity-chip-calm { background-color: color-mix(in srgb, var(--entity-colour) 16%, var(--color-surface-raised)); }
+/* Calm entity FOREGROUND text (owner exec decision 2026-06-22 — calm is NO LONGER the neutral theme pole).
+   The readable text pole pulled toward the instance hue, so a calm entity surface reads in the entity's
+   colour family, never flat grey. The panel sets this as its `color`; children inherit and mute via opacity
+   (works calm AND vivid). Vivid surfaces set text-on-entity instead. Anchored 60% to the pole for contrast. */
+@utility text-entity-fg { color: color-mix(in srgb, var(--color-text-primary) 75%, var(--entity-colour)); }
 
 /* ── Monetary figures in columnar contexts only (UX §0.3) ── */
 @utility monetary-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -201,6 +232,14 @@
 [data-theme="base-light"] *,
 [data-theme="retro"],
 [data-theme="retro"] * { scrollbar-color: var(--color-border-strong) transparent; }
+
+/* Entity-tinted scrollbar — a scroll region inside an entity colour-fill panel (account detail view,
+   §8.2b) tints its thumb with the instance colour so the chrome matches the tinted surface instead of
+   reading as flat neutral. Pairs with --entity-colour on an ancestor. Placed after the theme overrides
+   so it wins on every theme. */
+.scrollbar-entity { scrollbar-color: color-mix(in srgb, var(--entity-on-colour, var(--entity-colour)) 45%, transparent) transparent; }
+.scrollbar-entity::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--entity-on-colour, var(--entity-colour)) 45%, transparent); }
+.scrollbar-entity::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--entity-on-colour, var(--entity-colour)) 70%, transparent); }
 
 /* Reserve the scrollbar gutter so a scroll region's content box width is constant whether or not the
    scrollbar is showing — without this, a centred (mx-auto) column re-centres by ~half the scrollbar
@@ -286,7 +325,6 @@
 @utility duration-slide    { --tw-duration: calc(var(--duration-slide)    * var(--motion-factor)); transition-duration: calc(var(--duration-slide)    * var(--motion-factor)); }
 @utility duration-emphatic { --tw-duration: calc(var(--duration-emphatic) * var(--motion-factor)); transition-duration: calc(var(--duration-emphatic) * var(--motion-factor)); }
 @utility duration-archive  { --tw-duration: calc(var(--duration-archive)  * var(--motion-factor)); transition-duration: calc(var(--duration-archive)  * var(--motion-factor)); }
-@utility duration-flip     { --tw-duration: calc(var(--duration-flip)     * var(--motion-factor)); transition-duration: calc(var(--duration-flip)     * var(--motion-factor)); }
 
 /* ── Themed focus ring — global floor. Lives in @layer base so component utilities (which sit in
    @layer utilities, a later layer) win: an element with its own ring uses `focus:outline-none` to
@@ -328,6 +366,9 @@
 /* Searchable Dropdown (§7 variant): caps the filtered option list so a long list (e.g. the full
    IANA timezone set, ~340 zones) scrolls inside the panel instead of growing past the modal. P4. */
 @utility max-h-dropdown-panel { max-height: 15rem; }
+/* Snapshot mini-ledger scroll cap (§8.2b) — the value history accumulates ~monthly, so the row region
+   scrolls past ~8 rows instead of growing the detail view. */
+@utility max-h-ledger { max-height: 18rem; }
 
 /* ── AppShell sidebar widths (UX §1.1, bible #shell). Fixed layout widths → tokens, not inline px
    (P4, D-SIZE): expanded column + the ~62px icon-rail (≤ lg). ── */
@@ -355,6 +396,10 @@
    Same dodge as max-w-input/max-w-tooltip above. Values track the design bible (.pubpage 380, .modal 440). ── */
 @utility max-w-empty-state { max-width: 380px; }
 @utility max-w-modal       { max-width: 440px; }
+/* Account detail modal (§8.2b) — a roomy read panel (~2× the entity card) so the subtype rows + value
+   history don't wrap. A solid surface with a subtle entity-tinted border (applied in TSX). */
+@utility w-detail          { width: 41.5rem; }
+@utility h-detail          { height: 26rem; }
 /* ── PublicPage column (UX §3, bible .pubpage 380) — same spacing-scale dodge as max-w-empty-state ── */
 @utility max-w-public-page { max-width: 380px; }
 
@@ -459,22 +504,17 @@
   --color-border-focus:     #4f46e5;
   --color-error:            #dc2626;
   --color-border-error:     #dc2626;
-  --color-accent-subtle:  color-mix(in oklab, #4f46e5 12%, transparent);
-  --color-control-active: color-mix(in oklab, #4f46e5 16%, transparent);
-  --color-accent-active:  color-mix(in oklab, #0891b2 16%, transparent);
-  --color-primary-muted:  color-mix(in oklab, #4f46e5 14%, transparent);
-  --color-ring-glow-primary: color-mix(in oklab, #4f46e5 30%, transparent);
-  --color-ring-glow-accent:  color-mix(in oklab, #0891b2 30%, transparent);
-  --color-ring-glow-error:   color-mix(in oklab, #dc2626 30%, transparent);
+  /* Light surfaces need lower tint alphas than the dark default (the color-mix formula lives in @theme). */
+  --alpha-accent-subtle:  12%;
+  --alpha-control-active: 16%;
+  --alpha-accent-active:  16%;
+  --alpha-primary-muted:  14%;
+  --alpha-ring-glow:      30%;
   --color-backdrop:          rgb(0 0 0 / 0.4);
   --color-on-primary:      #ffffff;
   --color-success:       #16a34a;
   --color-warning:       #d97706;
   --color-info:          #2563eb;
-  --color-success-muted: color-mix(in oklab, #16a34a 70%, var(--color-surface));
-  --color-warning-muted: color-mix(in oklab, #d97706 70%, var(--color-surface));
-  --color-info-muted:    color-mix(in oklab, #2563eb 70%, var(--color-surface));
-  --color-error-muted:   color-mix(in oklab, #dc2626 70%, var(--color-surface));
   --color-chart-1: #4f46e5; --color-chart-2: #0891b2; --color-chart-3: #16a34a; --color-chart-4: #d97706;
   --color-chart-5: #db2777; --color-chart-6: #7c3aed; --color-chart-7: #0d9488; --color-chart-8: #e11d48;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
@@ -504,22 +544,17 @@
   --color-border-focus:     #d2691e;
   --color-error:            #c0392b;
   --color-border-error:     #c0392b;
-  --color-accent-subtle:  color-mix(in oklab, #d2691e 14%, transparent);
-  --color-control-active: color-mix(in oklab, #d2691e 18%, transparent);
-  --color-accent-active:  color-mix(in oklab, #2a9d8f 18%, transparent);
-  --color-primary-muted:  color-mix(in oklab, #d2691e 16%, transparent);
-  --color-ring-glow-primary: color-mix(in oklab, #d2691e 30%, transparent);
-  --color-ring-glow-accent:  color-mix(in oklab, #2a9d8f 30%, transparent);
-  --color-ring-glow-error:   color-mix(in oklab, #c0392b 30%, transparent);
+  /* Light surfaces need lower tint alphas than the dark default (the color-mix formula lives in @theme). */
+  --alpha-accent-subtle:  14%;
+  --alpha-control-active: 18%;
+  --alpha-accent-active:  18%;
+  --alpha-primary-muted:  16%;
+  --alpha-ring-glow:      30%;
   --color-backdrop:          rgb(58 42 24 / 0.45);
   --color-on-primary:      #3a2a18; /* dark text on chocolate-orange accent for contrast (white fails AA) */
   --color-success:       #5b8c3a;
   --color-warning:       #cc8a2c;
   --color-info:          #3d7b8c;
-  --color-success-muted: color-mix(in oklab, #5b8c3a 70%, var(--color-surface));
-  --color-warning-muted: color-mix(in oklab, #cc8a2c 70%, var(--color-surface));
-  --color-info-muted:    color-mix(in oklab, #3d7b8c 70%, var(--color-surface));
-  --color-error-muted:   color-mix(in oklab, #c0392b 70%, var(--color-surface));
   --color-chart-1: #d2691e; --color-chart-2: #2a9d8f; --color-chart-3: #c0392b; --color-chart-4: #e9c46a;
   --color-chart-5: #8a5a44; --color-chart-6: #6a994e; --color-chart-7: #bc6c25; --color-chart-8: #457b9d;
   --shadow-sm: 0 1px 2px rgb(58 42 24 / 0.10);
@@ -549,22 +584,12 @@
   --color-border-focus:     #b08968;
   --color-error:            #d9534f;
   --color-border-error:     #d9534f;
-  --color-accent-subtle:  color-mix(in oklab, #b08968 16%, transparent);
-  --color-control-active: color-mix(in oklab, #b08968 22%, transparent);
-  --color-accent-active:  color-mix(in oklab, #9c6644 20%, transparent);
-  --color-primary-muted:  color-mix(in oklab, #b08968 18%, transparent);
-  --color-ring-glow-primary: color-mix(in oklab, #b08968 35%, transparent);
-  --color-ring-glow-accent:  color-mix(in oklab, #9c6644 35%, transparent);
-  --color-ring-glow-error:   color-mix(in oklab, #d9534f 35%, transparent);
+  /* Interaction-fill + *-muted tokens inherit the @theme formula (brown's alphas == the dark defaults). */
   --color-backdrop:          rgb(0 0 0 / 0.7);
   --color-on-primary:      #1f1a16; /* dark text on warm-brown accent for contrast */
   --color-success:       #7fa05a;
   --color-warning:       #d99a4e;
   --color-info:          #6a9bb0;
-  --color-success-muted: color-mix(in oklab, #7fa05a 70%, var(--color-surface));
-  --color-warning-muted: color-mix(in oklab, #d99a4e 70%, var(--color-surface));
-  --color-info-muted:    color-mix(in oklab, #6a9bb0 70%, var(--color-surface));
-  --color-error-muted:   color-mix(in oklab, #d9534f 70%, var(--color-surface));
   --color-chart-1: #b08968; --color-chart-2: #9c6644; --color-chart-3: #7fa05a; --color-chart-4: #d9a441;
   --color-chart-5: #c97b5a; --color-chart-6: #6a9bb0; --color-chart-7: #a8855f; --color-chart-8: #cf6b4a;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.30);
@@ -597,26 +622,20 @@
   --color-border-focus:     #8bac0f;
   --color-error:            #9bbc0f;   /* meaning via icon; lightest = attention */
   --color-border-error:     #9bbc0f;
-  --color-accent-subtle:  color-mix(in oklab, #8bac0f 16%, transparent);
-  --color-control-active: color-mix(in oklab, #8bac0f 22%, transparent);
-  /* Active picker tab. The standard "subtle accent tint" reads as a *lighter glow* on a dark surface;
-     in Game Boy the accent-secondary tint is darker-than-surface and muddy, so the active tab is a
-     *recessed dark well* (blend toward the page bg) instead — clearly darker than the panel (~1.6:1)
-     with crisp accent-fg text on it (~4.6:1, AA). The fill metaphor flips per palette; legibility wins. */
+  /* Interaction-fill + *-muted inherit the @theme formula (gameboy's alphas == the dark defaults). Two
+     stay bespoke below — they are anchor-level legibility decisions, not the re-pasted-derivation failure signal. */
+  /* Active picker tab: the standard subtle accent tint reads as a *lighter glow* on a dark surface, but
+     in Game Boy the accent-secondary tint is darker-than-surface and muddy — so the active tab is a
+     *recessed dark well* (blend toward the page bg), clearly darker than the panel (~1.6:1) with crisp
+     accent-fg text (~4.6:1, AA). The fill metaphor flips per palette; legibility wins. */
   --color-accent-active:  color-mix(in oklab, var(--color-bg) 65%, var(--color-surface-raised));
-  --color-primary-muted:  color-mix(in oklab, #8bac0f 18%, transparent);
-  --color-ring-glow-primary: color-mix(in oklab, #8bac0f 35%, transparent);
+  /* ring-glow-accent pinned to the lightest slot — the @theme default uses accent-secondary (== surface here) and would vanish. */
   --color-ring-glow-accent:  color-mix(in oklab, #9bbc0f 35%, transparent);
-  --color-ring-glow-error:   color-mix(in oklab, #9bbc0f 35%, transparent);
   --color-backdrop:          rgb(15 56 15 / 0.7);
   --color-on-primary:      #0f380f; /* dark text on light-green accent for contrast */
   --color-success:       #9bbc0f;   /* lightest = income/success (§0.2) */
   --color-warning:       #8bac0f;
-  --color-info:          #306230;
-  --color-success-muted: color-mix(in oklab, #9bbc0f 70%, var(--color-surface));
-  --color-warning-muted: color-mix(in oklab, #8bac0f 70%, var(--color-surface));
-  --color-info-muted:    color-mix(in oklab, #306230 70%, var(--color-surface));
-  --color-error-muted:   color-mix(in oklab, #9bbc0f 70%, var(--color-surface));
+  --color-info:          #8bac0f;   /* was #306230 == --color-surface → info-toned chips/badges invisible; legible ramp slot (meaning via icon §0.2) */
   --color-entity-account:  #8bac0f;   /* fallbacks → ramp slots (per-instance remapped in JS) */
   --color-entity-category: #306230;
   --color-entity-currency: #9bbc0f;

@@ -94,14 +94,41 @@ export function enforceFloor(bg: string, opts?: { large?: boolean }): { fill: st
 
 /**
  * Effective background of a calm fill: the entity colour composited over the surface at
- * the calm alpha (same 0.14 as the CSS `bg-entity-fill-calm` utility). Vivid fill = the
+ * the calm alpha (same 0.18 as the CSS `bg-entity-fill-calm` utility). Vivid fill = the
  * colour itself (no composite). Use the result as the `bg` arg to contrastText/enforceFloor.
  */
-export function compositeCalm(entityHex: string, surfaceHex: string, alpha = 0.14): string {
+export function compositeCalm(entityHex: string, surfaceHex: string, alpha = 0.18): string {
   const [er, eg, eb] = hexToRgb(entityHex)
   const [sr, sg, sb] = hexToRgb(surfaceHex)
   const ch = (e: number, s: number): number => Math.round(e * alpha + s * (1 - alpha))
   return rgbToHex(ch(er, sr), ch(eg, sg), ch(eb, sb))
+}
+
+const textOnSurfaceCache = new Map<string, string>()
+
+/**
+ * A colour used as TEXT on a surface (not as a fill): step it toward the surface's opposite luminance
+ * pole until it meets the §0.11 contrast floor against that surface. Mirror of `enforceFloor`, but it
+ * nudges the FOREGROUND colour instead of the fill — for a colour-as-text identity (the Currencies code
+ * cell) sitting on a neutral surface. `surface` is the live theme value (read via getComputedStyle); a
+ * non-hex value (jsdom returns '' for custom props) passes the colour through untouched. Memoized.
+ */
+export function enforceTextOnSurface(colour: string, surface: string, opts?: { large?: boolean }): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(surface)) return colour
+  const large = opts?.large ?? false
+  const key = `${colour}|${surface}|${large}`
+  const cached = textOnSurfaceCache.get(key)
+  if (cached) return cached
+  const floor = large ? 3 : 4.5
+  const pole = relativeLuminance(surface) >= 0.5 ? DARK : LIGHT
+  let c = colour
+  let steps = 0
+  while (contrastRatio(c, surface) < floor && steps < 10) {
+    c = mixHex(c, pole, 0.08)
+    steps++
+  }
+  textOnSurfaceCache.set(key, c)
+  return c
 }
 
 /** Stable FNV-1a string hash → unsigned int, for the collision nudge. */
@@ -150,4 +177,25 @@ export function remapEntityColour(
     takenSlots.add(idx)
   }
   return ramp[idx]
+}
+
+export interface ResolvedEntityColour {
+  /** Themed entity colour — immersive ramp-snapped, else the input hex. Drives `--entity-colour` on a CALM surface. */
+  colour: string
+  /** Floor-enforced fill for a VIVID surface (the colour nudged until its text pole passes §0.11). */
+  vividFill: string
+  /** The contrast text pole for the vivid fill — drives `--entity-on-colour`. */
+  on: typeof LIGHT | typeof DARK
+}
+
+/**
+ * The single entity-colour resolution seam (SCP 2026-06-22 colour-system-contract): compose the
+ * immersive remap with the contrast floor. A consumer that sets `--entity-colour` calls this (via
+ * `useEntityColour`) so a runtime user-picked hex is themed — CSS cannot ramp-snap an arbitrary hex.
+ * Calm surfaces use `.colour`; vivid surfaces use `.vividFill` + `.on`.
+ */
+export function resolveEntityColour(hex: string, entityId: string, theme: ResolvedThemeId): ResolvedEntityColour {
+  const colour = remapEntityColour(hex, entityId, theme)
+  const { fill, text } = enforceFloor(colour)
+  return { colour, vividFill: fill, on: text }
 }

@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { useThemeStore } from '../stores/themeStore'
 import type { ThemeId, ResolvedThemeId, FontId, DensityId } from './palettes'
 
-function resolveTheme(theme: ThemeId): ResolvedThemeId {
+/** Resolve the stored theme id to a concrete palette — `'base'` follows the OS light/dark setting. */
+export function resolveTheme(theme: ThemeId): ResolvedThemeId {
   if (theme !== 'base') return theme
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'base-light' : 'base-dark'
 }

@@ -159,6 +159,7 @@ From the brief and PRD, non-negotiable:
   classes; **no raw hex/px/opacity/z-index in components** (the P4 rule).
 - **Why:** C7 + the design-ambiguity failure mode — a single token source of truth is what
   makes the UX spec enforceable and a coding agent's output checkable.
+- **Colour is a derivation system, not per-theme values (SCP 2026-06-22 colour-system-contract, UX §0.2):** a palette declares **anchors only**; all other tokens derive once via `color-mix`. CSS handles chrome; a **JS resolver** (`remapEntityColour` → `enforceFloor`) themes a runtime user-picked `--entity-colour` (immersive ramp-snap + contrast floor) — CSS can't ramp an arbitrary hex. Invariant: a *derived* value inside a `[data-theme]` block is the failure signal.
 - **Alternatives rejected:** CSS-in-JS (runtime cost, weaker token discipline); component
   libraries like MUI/Chakra (impose their own design language, fighting the custom token
   system and the entity-design philosophy in §3.0a).
@@ -197,7 +198,19 @@ date display/input ⇄ ISO storage, FR-V-010 / FR-P-009) · `@dnd-kit/core` (dra
 CategoryTree re-parent/promote, and the future Dashboard widget board §17 — chosen after native
 HTML5 DnD proved unreliable for nested rows; gives pointer **and keyboard** dragging. Install with
 `--legacy-peer-deps` per the repo's standing `@eslint/js`↔`eslint` peer resolution. SCP
-2026-06-20 has the post-mortem) · `httpx` (server HTTP) ·
+2026-06-20 has the post-mortem) ·
+**Charts — `d3-scale` + `d3-shape` now (the shared math layer), `@visx/*` for the Epic-9 Viewer
+engine.** `d3-scale`/`d3-shape` are tiny, framework-agnostic, DOM-free (scales + line/area/arc
+generators); **Story 4.5's MiniSparkline uses `d3-shape` immediately** so it shares the math with
+whatever the Viewer becomes and **cannot fork** (the small consumer ships in Epic 4, the engine in
+Epic 9 — this is the deliberate de-risk). The Viewer (UX §9) + Dashboard-L widgets (UX §17) build
+on **visx** (low-level d3 primitives as React SVG components — axis/tooltip/brush/shapes), which
+both sit on the same d3 math. **Hard constraint: SVG only, never canvas** — charts must reskin via
+`var(--color-chart-1..8)` under immersive themes, which canvas cannot do (rules out Chart.js / Nivo
+canvas modes). **Animation is the app's, not the library's:** visx renders *static* SVG and imposes
+no animation, so all chart motion is the §0.7 motion vocabulary applied by us (no library
+animation to override or fight). MiniSparkline stays a separate hand-rolled SVG atom — it is the
+click-to-open affordance for the real Viewer, not the engine. · `httpx` (server HTTP) ·
 `slowapi` (per-IP rate limiting). Test/quality: `pytest`/`pytest-asyncio`,
 `vitest` + Testing Library, `playwright` (E2E), `ruff` (lint/format), `eslint`
 (JS/TS correctness — flat config: no-`any`, import order, rules-of-hooks), `stylelint`
@@ -2242,10 +2255,26 @@ updates all flow through Query, with `api/client.ts` underneath. Every entity ho
 | `useEntityManager<T>` | `items, isLoading, create, update, archive, restore, deletePermanently, duplicate, detectDuplicate, showArchived` |
 | `EntityPage<T>` | action bar + filter slot + content slot |
 | `EntityCard<T>` | colour-fill identity (calm/vivid), favourite star, context menu, archived state, value-history sparkline |
-| `EntityModal<T>` | two-column create/edit form |
+| `EntityModal<T>` | two-column create/edit form — entity **create** + rich/subtype/FX-breakdown config |
+| `Table<T>` (inline-editable) | tabular rows with **inline cell editing** — see below |
 | `BulkActionBar` + `useMultiSelect` | multi-select bulk ops (FR-E-020) |
 
 Any new entity feature **extends this layer** — it does not hand-roll a CRUD page.
+
+**Inline-editable `Table<T>` (SCP 2026-06-22-inline-editing, FR-E-024).** Tabular surfaces edit
+**inline**, not via `EntityModal` (UX §12.3a). The `Table<T>` primitive provides typed cell editors
+(**text · money · date · dropdown/account-picker**) with **Enter / blur commit, Esc cancel**,
+**optimistic update + rollback** on a failed `PATCH` (the same Query optimistic path above — no new
+mechanism), per-field validation, and **per-row permission** (Member edits own `created_by`, Admin/
+Owner any). The **modal stays** for entity *create* and the **non-column rich fields** (flags, tags,
+status/reconciliation, duplicate-link, FX breakdown). **No DB or endpoint change** — the existing
+per-entity `PATCH` endpoints serve both inline and modal edits identically; this is presentation only.
+**Per-surface inline-vs-modal split:** ledger = all visible columns incl. **base-SGD (inline = manual
+FX override, §3.8)** inline / flags·tags·status·dup-link·FX-breakdown modal; snapshot history = date·
+value·source·note (insurance → surrender value) inline; recurring occurrences = date·amount·status
+inline. **First consumer = Story 4.11** (the snapshot mini-ledger pilot, bespoke-but-pattern-aligned);
+**generalized into the shared primitive in Epic 5** (the just-in-time-primitive convention). Formulas
+(AST editor) and entity creation stay modal/drawer.
 
 **Dashboard widget data loading (UX §17).** Each dashboard widget fetches **its own**
 read-only data via TanStack Query, keyed `['widget', widget_type, scope, filter]`, against the

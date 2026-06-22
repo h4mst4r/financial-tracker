@@ -5,7 +5,7 @@ import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { Badge } from '../primitives/Badge'
 import { Icon } from '../primitives/Icon'
 import { FavouriteStar } from '../primitives/FavouriteStar'
-import { contrastText } from '../../theme/colour'
+import { useEntityColour } from '../../theme/useEntityColour'
 
 // The generic entity card (UX §2, FR-SYS-016) — colour-fill identity (calm/vivid via --entity-colour),
 // header (icon chip · name · favourite star · ⋮), hero/sparkline/footer slots, and the
@@ -38,7 +38,7 @@ export interface EntityCardProps {
   archived?: boolean
   /** Presentational selection treatment only (offset ring + check + lift); multi-select is 1.9c. */
   selected?: boolean
-  /** Tap-to-open (flip-expand into the EntityModal, §0.7 — the Modal's scale entrance is the flip). */
+  /** Tap-to-open the detail view (§8.2b). */
   onClick?: () => void
 }
 
@@ -60,10 +60,22 @@ export function EntityCard({
   onClick,
 }: EntityCardProps) {
   // §2.5: the per-instance colour is an inline CSS variable (data, not a design-token literal); the fill
-  // utilities read it. On vivid we also pin --entity-on-colour to the WCAG-chosen text pole (theme/colour.ts).
-  const onColour = vivid && colour ? contrastText(colour) : undefined
+  // utilities read it. The resolver (SCP 2026-06-22) themes the runtime hex — immersive ramp-snap + the
+  // §0.11 contrast floor — so the card recolours correctly on Game Boy (CSS can't ramp an arbitrary hex).
+  const resolved = useEntityColour(colour)
+  // Calm uses the (remapped) colour as-is; vivid uses the floor-enforced fill + its WCAG text pole.
+  const entityFill = vivid ? resolved?.vividFill : resolved?.colour
+  const onColour = vivid ? resolved?.on : undefined
+  // The card's divider/edge reads --entity-edge (border-entity-edge): vivid → the contrast pole over the
+  // fill (matches text/chip), calm → the entity-tinted edge into the neutral border. Set once here.
+  const edge = entityFill
+    ? vivid
+      ? `color-mix(in srgb, ${onColour} 25%, transparent)`
+      : `color-mix(in srgb, ${entityFill} 30%, var(--color-border))`
+    : undefined
   const style: CSSProperties = {
-    ...(colour ? { '--entity-colour': colour } : {}),
+    ...(entityFill ? { '--entity-colour': entityFill } : {}),
+    ...(edge ? { '--entity-edge': edge } : {}),
     ...(onColour ? { '--entity-on-colour': onColour } : {}),
     // On a vivid fill the MiniSparkline switches to the contrast pole (else it'd be drawn in the fill
     // colour and vanish — UX §9.2). Calm cards leave it unset → the atom keeps the identity colour.
@@ -71,13 +83,13 @@ export function EntityCard({
   } as CSSProperties
 
   const fillClass = vivid ? 'bg-entity-fill-vivid' : 'bg-entity-fill-calm'
-  const textClass = onColour ? 'text-on-entity' : 'text-text-primary'
+  const textClass = onColour ? 'text-on-entity' : 'text-entity-fg'
   // The ⋮ trigger must follow the same contrast pole as the rest of the card. On a vivid fill with a
   // known on-colour, inherit it (text-on-entity from the root) and mute via opacity — NOT a fixed
   // text-text-secondary, which renders light-on-light on a light vivid fill (e.g. cyan → white dots).
   const controlClass = onColour
     ? 'opacity-70 hover:opacity-100'
-    : 'text-text-secondary hover:text-text-primary'
+    : 'text-entity opacity-80 hover:opacity-100'
   // Default border is a tint of the instance colour (design bible .ecard: color-mix(--ec 30%, --border)),
   // so the card edge carries the entity identity — NOT a flat neutral border. Archived → dashed neutral;
   // selected → transparent (the §2.4 offset ring is the edge instead).
@@ -85,7 +97,7 @@ export function EntityCard({
     ? 'border-dashed border-border-strong'
     : selected
       ? 'border-transparent'
-      : 'border-entity-calm'
+      : 'border-entity-edge'
 
   return (
     <div
@@ -130,7 +142,7 @@ export function EntityCard({
         {icon != null && (
           <span
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg ${
-              vivid ? 'bg-entity-chip' : 'bg-surface-raised'
+              vivid ? 'bg-entity-chip' : 'bg-entity-chip-calm text-entity'
             }`}
           >
             {icon}

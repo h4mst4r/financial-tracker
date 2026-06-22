@@ -23,8 +23,13 @@ from backend.models.account import Account, AccountOwner, AccountSnapshot
 from backend.models.currency import Currency
 from backend.models.event import FinancialEvent
 from backend.models.identity import Person
-from backend.schemas.account import AccountCreate, AccountSnapshotCreate, AccountUpdate
-from backend.services.audit import audit
+from backend.schemas.account import (
+    AccountCreate,
+    AccountSnapshotCreate,
+    AccountSnapshotUpdate,
+    AccountUpdate,
+)
+from backend.services.audit import _scalar_snapshot, audit
 from backend.services.base import assert_no_dependencies
 
 logger = logging.getLogger(__name__)
@@ -364,8 +369,8 @@ async def create_snapshot(
 ) -> AccountSnapshot:
     """Record a value snapshot (AC2). 404-scope-guards the account, resolves the snapshot currency's
     `rate_to_base` (400 unknown → no row), caches `value_base = value × rate` (4dp, ROUND_HALF_UP —
-    a convenience, not canonical, AC4b), and appends an `account_snapshots` row. Append-only history
-    fact → **no audit** (like `fx_rate_history`). Caller's `get_db` commits."""
+    a convenience, not canonical, AC4b), and appends an `account_snapshots` row. Snapshots are
+    **mutable corrections** (ARCH §3.5, Story 4.10) — create/update/delete are all audited."""
     await get_or_404(db, Account, account_id, household_id=household_id)  # scope guard
     rate = await _resolve_rate(db, household_id, data.currency)  # 400 before any write (AC4b)
     value_base = (data.value * rate).quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
@@ -382,6 +387,90 @@ async def create_snapshot(
     )
     db.add(snap)
     await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="create",
+        entity_type="account_snapshot",
+        entity_id=str(snap.id),
+        before=None,
+        after=_scalar_snapshot(snap),
+    )
+    return snap
+
+
+async def update_snapshot(
+    db: AsyncSession,
+    household_id: str,
+    actor_id: str,
+    account_id: str,
+    snapshot_id: str,
+    data: AccountSnapshotUpdate,
+) -> AccountSnapshot:
+    """Edit a value snapshot (AC2). Scope-guards by household **and** account (a snap on another
+    account → 404 here), applies the set fields, re-derives `value_base` when `value`/`currency`
+    changed (400 unknown currency **before** any mutation), and audits the change."""
+    snap = await _scoped_snapshot(db, household_id, account_id, snapshot_id)
+    before = _scalar_snapshot(snap)
+    fields = data.model_dump(exclude_unset=True)
+    if "value" in fields or "currency" in fields:
+        currency = fields.get("currency", snap.currency)
+        value = fields.get("value", snap.value)
+        rate = await _resolve_rate(db, household_id, currency)  # 400 before any write
+        for key, val in fields.items():
+            setattr(snap, key, val)
+        snap.value_base = (value * rate).quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+    else:
+        for key, val in fields.items():
+            setattr(snap, key, val)
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="update",
+        entity_type="account_snapshot",
+        entity_id=str(snap.id),
+        before=before,
+        after=_scalar_snapshot(snap),
+    )
+    return snap
+
+
+async def delete_snapshot(
+    db: AsyncSession,
+    household_id: str,
+    actor_id: str,
+    account_id: str,
+    snapshot_id: str,
+) -> None:
+    """Delete a value snapshot (AC3). Same scope guard as `update_snapshot`; nothing references a
+    snapshot, so no dependency scan. Audited; current value recomputes from the remaining rows."""
+    snap = await _scoped_snapshot(db, household_id, account_id, snapshot_id)
+    before = _scalar_snapshot(snap)
+    await db.delete(snap)
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="delete",
+        entity_type="account_snapshot",
+        entity_id=str(snapshot_id),
+        before=before,
+        after=None,
+    )
+
+
+async def _scoped_snapshot(
+    db: AsyncSession, household_id: str, account_id: str, snapshot_id: str
+) -> AccountSnapshot:
+    """A household-scoped snapshot that also belongs to `account_id` (else 404). `get_or_404` only
+    scopes by household, so the account match is asserted explicitly (Story 4.10)."""
+    snap = await get_or_404(db, AccountSnapshot, snapshot_id, household_id=household_id)
+    if snap.account_id != account_id:
+        errors.not_found("account_snapshot", snapshot_id)
     return snap
 
 

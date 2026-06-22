@@ -13,6 +13,9 @@ import { Dropdown } from '../components/primitives/Dropdown'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { useAlertStore } from '../stores/alertStore'
+import { useThemeStore } from '../stores/themeStore'
+import { resolveTheme } from '../theme/useAppearance'
+import { resolveEntityColour, enforceTextOnSurface } from '../theme/colour'
 import { api, ApiError } from '../api/client'
 import type { EntityListResponse } from '../types/entity'
 import type { Currency } from '../types/currency'
@@ -67,6 +70,24 @@ export function Currencies() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<Currency | null>(null)
   const pushToast = useAlertStore((s) => s.pushToast)
+  // A currency's own colour is role-4 entity identity (UX §0.1), so it must theme like any other
+  // entity colour: remapped onto the active palette's ramp under an immersive theme (SCP 2026-06-22
+  // colour-system-contract). The code is rendered as TEXT on the page surface, so after the remap it
+  // also gets the §0.11 contrast floor against that surface — the remap alone can leave a pale colour
+  // unreadable. The surface hex is the live theme value, read once per theme.
+  const theme = resolveTheme(useThemeStore((s) => s.theme))
+  // `theme` IS the real dependency — it drives the live --color-surface value that getComputedStyle
+  // reads off <html>; eslint can't see that cross-the-DOM link, so the dep is intentional, not unused.
+  const surfaceHex = useMemo(
+    () => getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme],
+  )
+  const currencyColour = (c: Currency) =>
+    enforceTextOnSurface(
+      resolveEntityColour(c.colour ?? colourForCode(c.code), c.id, theme).colour,
+      surfaceHex,
+    )
 
   // ISO-4217 options for the searchable code picker — value = code, label = "USD — US Dollar",
   // searchText lets typing either the code or the name filter. Derived from the runtime `Intl`.
@@ -273,10 +294,11 @@ export function Currencies() {
                     className="border-b border-border last:border-0 hover:bg-surface-hover"
                   >
                     {/* Code in its own colour — text colour, not a dot (§0.1 anti-rainbow). The
-                        currency's own colour is entity-identity DATA, applied via inline style. */}
+                        currency's own colour is entity-identity DATA, resolved through the theme
+                        (immersive ramp-snap) before being applied via inline style. */}
                     <td
                       className="px-md py-sm font-mono font-semibold"
-                      style={{ color: c.colour ?? colourForCode(c.code) }}
+                      style={{ color: currencyColour(c) }}
                     >
                       {c.code}
                     </td>
@@ -324,7 +346,7 @@ export function Currencies() {
                       ) : (
                         <MiniSparkline
                           data={c.rate_history}
-                          colour={c.colour ?? colourForCode(c.code)}
+                          colour={currencyColour(c)}
                           variant="line"
                           className="w-sparkline"
                           aria-label={`${c.code} rate history`}

@@ -139,6 +139,35 @@ surface-hover, border, border-light, text, text-secondary, text-muted), `accent-
 `immersive` flag. **Immersive palettes additionally define `tint` + `tint_ramp`** (the entity/
 semantic colour remap, above).
 
+**Colour system contract — the derivation model (locked: anchors-in, everything derives).**
+A palette is a set of **anchor inputs only**; every other colour token is **derived from those
+anchors by a named rule that is written once — never re-authored per theme**. Two engines apply
+the rules universally, on every palette:
+
+- **CSS (chrome).** The structural / accent / semantic / viz anchors above, plus everything
+  derived from them — the surface & border ladders, `*-muted`, the 18% `*-fill`s,
+  `accent-subtle`, `accent-active`, `ring-glow-*`, `primary-muted`, the calm/vivid entity fills,
+  chip backdrops, the entity-tinted border & scrollbar — are `color-mix` of the anchors, defined
+  **once** in a shared `:root` layer. A `[data-theme]` block sets **anchors only**.
+- **JS resolver (runtime entity colour).** A user's per-instance colour
+  (account / category / currency / person) is not known at build time, so it is resolved in JS at
+  the point `--entity-colour` is set: **remap** (immersive → snap to the palette's `tint_ramp`
+  slot by OKLab lightness; non-immersive → pass through unchanged) → **enforce the §0.11 contrast
+  floor**. This is the *only* path that can theme an arbitrary runtime hex. Entity-**type**
+  defaults may be pre-snapped in CSS (a fixed handful), but per-**instance** colours MUST go
+  through the resolver. **Semantics on a vivid fill** drop to the contrast pole by this rule (not a
+  per-component branch); under immersive they ride the ramp like everything else (§0.1).
+
+**The invariant (failure signal):** a *derived* value hand-written inside a `[data-theme]` block.
+The surface/border/text ladders are *authored* per palette for MVP, but every consumer only ever
+*reads* a token — so any token can later move from "authored" to "derived" (e.g. compute the
+ladders from `bg`/`surface`/`text`) with **zero consumer change**.
+
+This contract is what makes **custom user palettes (post-MVP) cheap**: a "create theme" modal that
+captures the **anchor set + (if immersive) a `tint_ramp`** is sufficient — every derived token and
+every existing account / category / currency / person colour re-skins automatically, because the
+rules run on whatever anchors they are handed. No per-theme code.
+
 **Starter palettes (signed-off directions — exact hex tuned at build):**
 
 | Palette | bg | surface | text | accent-1 | accent-2 | immersive |
@@ -154,7 +183,8 @@ semantic colour remap, above).
 > `accent-secondary` to be visibly distinct even inside a 4-shade monochrome ramp, so the accents
 > are pulled from clearly different luminance positions — never two adjacent near-identical greens.
 
-Custom user palettes = post-MVP.
+**Custom user palettes = post-MVP** — and by the contract above they reduce to a modal capturing
+the **anchor set + (if immersive) a `tint_ramp`**; nothing else is authored, everything else derives.
 
 ### 0.3 Typography
 
@@ -177,6 +207,26 @@ Weights: 400 / 500 / 600 / 700. **Monetary font is contextual:** `.monetary-valu
 (JetBrains Mono, tabular nums) **only in columnar contexts** — ledgers, tables, any list where
 figures stack and must align. **Standalone hero figures on cards** use the **sans** face at the
 same weight (no alignment need there; it reads warmer).
+
+### 0.3a MonetaryValue — the one money-display atom
+
+**Every rendered money figure is the `MonetaryValue` atom — never ad-hoc formatting.** It is the
+display counterpart to `MonetaryValueInput` (§7), and it *embodies* the §0.3 contextual-font rule
+so no surface re-decides it. Formatting comes from the browser's native `Intl.NumberFormat` (the
+same no-maintained-table approach as §10) — symbol, decimals, and grouping per currency.
+
+- **`variant` encodes the §0.3 rule:** `columnar` → the `.monetary-value` mono/tabular treatment,
+  right-aligned, for ledgers/tables/any stacked list; `hero` → the **sans** face for standalone
+  card/headline figures. The variant *is* the font decision — callers never pick the face.
+- **`signColour`** (opt-in): outflow **red** / inflow **green** by sign (the §12.1 rule). Off for
+  neutral contexts (a balance, a limit).
+- **`dual`** (opt-in): the cross-currency **"S$ 500 → NZD 568"** form — one place owns the arrow
+  glyph, spacing, and which side leads. Used by Transfers (§15), FX rows (§10), and any foreign
+  row whose base differs from its native amount.
+- **Layer is the caller's choice, not the atom's.** The native / base (FX-pivot) / display triple
+  lives in the data; `MonetaryValue` renders whichever amount+currency it's handed (e.g. account
+  hero = native, ledger **Base SGD** = base, Viewer = display currency). The atom only owns
+  *how* money looks, never *which* layer.
 
 ### 0.4 Spacing & density — 8px-based
 
@@ -209,7 +259,6 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 |---|---|---|---|
 | Hover-lift | hover card/row | translateY −2px + soft shadow · 130ms ease-out | none |
 | Press-scale | press any tappable | scale 0.97 · 80ms | kept (subtle) |
-| Flip ↔ | tap account card | rotateY to detail + expand; **toggles open AND close** · 800ms ease-in-out | cross-fade |
 | Error bounce | failed validate/action | horizontal shake · 500ms spring | red flash, no move |
 | Merge slide | category merge/dedup | sub-item **collapses into a line that points at the target (horizontal or vertical by the merge direction), slides toward it, then fades — the scale → move → fade phases run sequentially (organic), not at once** · 420ms ease-out | cross-fade |
 | Delete | hard delete | **scale down + drift to bottom-right + fade; NO rotate** · 500ms ease-in | fade only |
@@ -217,7 +266,7 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 | Number roll-up | balances load/change | count to value, tabular · 650ms ease-out | set instantly |
 | Viz idle float | **pie charts only** | subtle idle bob **~4.0s** (calm) — the only chart that floats at idle | static |
 | Viz rebuild | **any** chart re-rendered (filter/update/open) | **CRT saturation pop** — a quick over-bright/over-saturated flash that settles; signals "updated". Applies to the **series / data-ink layer only** (saturate 1→1.7→1 + brightness 1→1.32→1, ~280ms ease-out); the panel background, gridlines, and axes stay static. No opacity change, no flicker | instant |
-| Pie drill-down | click a pie slice | **cross-zoom + breadcrumb** — the donut cross-fades/zooms into a sub-donut of that slice's subcategories (sub-slice colours are tints of the parent colour); a persistent breadcrumb (`All ▸ {category}`) shows state. Sub-slice click → its transactions; breadcrumb / centre / empty space → zoom back. (Supersedes the earlier "slice explodes outward" idea, which mis-read as broken.) | cross-fade |
+| Pie drill-down | click a pie slice | **cross-zoom + breadcrumb** — the donut cross-fades/zooms into a sub-donut of that slice's subcategories (sub-slice colours are tints of the parent colour); the **`DrillBreadcrumb`** (§9.0a, `All ▸ {category}`) shows state. Sub-slice click → its transactions; breadcrumb / centre / empty space → zoom back. (Supersedes the earlier "slice explodes outward" idea, which mis-read as broken.) | cross-fade |
 | Modal / drawer | open/close | modal scale 0.96→1 + fade 200ms · drawer slide-from-edge 250ms | fade |
 | Expand / collapse | tree, accordion | height + opacity · 200ms | instant |
 | Pin-pop / check-draw | favourite / save | scale-pop + star · checkmark draw 300ms | instant |
@@ -230,7 +279,7 @@ Every motion maps to a duration + easing token and has a `prefers-reduced-motion
 - **Star = favourite** (favourites sort first); **drag = reorder** cards on the grid
   (drag-follow motion).
 - **Hover-reveal** — drag handles / row affordances appear on hover (desktop).
-- **Tap = flip-open** a card to its detail.
+- **Tap = open** a card's detail view.
 - **Mobile / tablet swipe** — **swipe-left → archive**, **swipe-right → edit**;
   **long-press → multi-select / context menu**. Touch targets ≥ 44px.
 
@@ -269,6 +318,34 @@ but not identical; don't render one as a hard outline and the other as a blurry 
 The visualization filter selectors (time range, person, category, account, currency mode,
 chart type, metric, group-by) reuse these open/selected states; their layout is specified with
 the viewer (§later).
+
+### 0.9a StatusBadge — the one traffic-light convention
+
+**Every status indicator in the app is one component, `StatusBadge` — never a per-surface badge.**
+"Status chip", "freshness badge", "status badge", "alert badge", and the ledger "status dot" all
+resolve to this single element. It is a thin composite over the `Badge` primitive (§7): a coloured
+dot + optional label, driven by a **tone** drawn from the traffic-light scale (§0.1) — the colours
+are theme tokens, so they reskin per palette.
+
+- **Tones (the only five):** `positive` (green) · `warning` (amber) · `critical` (`error` red) ·
+  `neutral` (grey) · `info` (`accent-secondary`). No surface invents a sixth.
+- **Variants:** `chip` (dot + label, the default) · `dot` (dot only — the ledger row, §12) ·
+  with an optional leading icon/spinner (e.g. backup "In progress").
+- **The status registry is the binding.** `StatusBadge` is dumb; a **central registry** maps each
+  domain's status enum → `{ tone, label, icon? }`. The registry below is authoritative — a surface
+  consumes `StatusBadge` and a registry key, it does **not** restyle. Adding a status = one registry
+  row, not a new badge.
+
+| Domain (FR / §) | Status → tone |
+|---|---|
+| Currency freshness (§10) | fresh → positive · stale > 48 h → warning · never → neutral |
+| FX provider (§5.2) | ok → positive · stale → warning · down → critical · unknown → neutral |
+| Backup (§5.3) | Success → positive · In progress → warning (spinner) · Failed → critical |
+| Recurring occurrence (§13) | processed → positive · upcoming → neutral · skipped → neutral · missed → critical · failed → critical |
+| Transaction status (§12, `dot`) | paid → positive · pending → warning · cancelled → neutral |
+| Invitation (§5.2) | accepted → positive · pending → warning · declined/expired/revoked → neutral |
+| Budget health (§14) | under → positive · near (≥ `alert_threshold_pct`) → warning · over 100 % → critical |
+| Presence (§0.1) | online → positive · away → warning · offline → neutral · error → critical |
 
 ### 0.10 Layering, breakpoints, iconography
 
@@ -388,6 +465,25 @@ One header region, in order:
 - **Responsive:** below `md`, the right cluster collapses into a single **Filters** popover +
   the New button (breakpoints, §0.10).
 
+### 1.2a FilterBar (descriptor-driven — the one filter row)
+
+**Every module's filter row is one component, `FilterBar` — never bespoke per module.** Like
+`Table`/`ColumnDef`, the reuse unit is a **filter descriptor**, not the bar: a module supplies a
+list of `{ key, control, options }` (control ∈ `search │ dateRange │ dropdown │ segmented │
+popover`) and `FilterBar` owns the layout, the **responsive collapse into the "Filters" popover**
+(§1.2), and the **clear-all** — once. Adding a filter = one descriptor, not a new bar.
+
+- **State serializes to `VisualizationFilter`.** A `FilterBar`'s active state *is* a
+  `VisualizationFilter` (the same shape that seeds the Viewer and every drill, §9 / §16). This is
+  what makes the ledger's **"Visualize the current set"** (§12.8) free — it hands its filter state
+  straight to the Viewer with no translation — and ties the filter row to the drill contract.
+- **Two profiles, one component (the Table A/B split, applied to filters):**
+  - **Record-list profile** — Transactions (§12), Recurring (§13), Budgets (§14), Currencies
+    (§10). Filters *rows*.
+  - **Aggregation profile** — the Viewer **control bar** (§9: date range · group-by · metric ·
+    raw/converted). Same `FilterBar`, a different descriptor set; filters *aggregation*. Their
+    semantics are **not fused** — same primitive, different profile.
+
 ### 1.3 Content area
 
 - **Grid (default) or list** (view toggle). Responsive card grid: `auto-fit, minmax(~160px,1fr)`.
@@ -407,6 +503,13 @@ renders its instances through it.
 - **Colour fill** — `calm` default (a soft tint of the instance colour) or `vivid` (full
   saturated fill, per-instance opt-in). Colour = the instance's own `colour` (default =
   entity-type colour, §0.1). Contrast-aware text on vivid fills.
+- **Everything on an entity surface carries the instance colour (calm AND vivid; cards + their
+  detail view).** No foreground element reads as flat neutral: **icons** render in the instance
+  colour (lucide `currentColor`); **borders, dividers, scrollbar, and chrome** are entity-tinted
+  (`border-entity-calm` etc.); **text** uses the theme's contrast pole (white/dark by luminance —
+  legible, not hue-shifted). **Exceptions:** **emoji** category glyphs stay full-colour (they ignore
+  `color`), and the **favourite star** stays gold (§2.3, the one semantic exception). On vivid this is
+  the contrast-pole treatment; on calm icons/chrome take the colour directly while text stays the pole.
 - **Header row:** colour **icon chip** · **name** (flex) · **favourite star** · **⋮** context menu.
 - **Hero figure:** the primary value (balance / current value), **sans face** (§0.3), large.
   Rendered in the **active display currency** (the topbar picker, §8.4): in a chosen currency the
@@ -442,8 +545,8 @@ renders its instances through it.
 
 ### 2.4 Interactions (gestures, §0.8)
 
-`tap` = **flip-expand directly into the EntityModal** (§8.2 / §0.7) — the flip animation *is* the
-modal opening; there is **no separate intermediate "card detail" state** · `star` = favourite
+`tap` = **open the read detail view** (§8.2b) — editing the account stays in the EntityModal via
+**⋮ → Edit** (§8.2) · `star` = favourite
 (sorts first) · `drag` = reorder on grid ·
 `⋮` = context menu (Edit · Duplicate · Archive · Delete-if-empty) · mobile `swipe-left` =
 archive / `swipe-right` = edit · `long-press` = multi-select.
@@ -614,12 +717,12 @@ Single column of personal preferences:
   when the row reports **`canDelete=false`** — the members list carries a per-row `canDelete` emptiness
   signal, mirroring the §8.1 "Delete-if-empty" rule (a referenced Person can only be Archived, not
   deleted; ARCH §3.0a tenet 5 / §4). The owner is **not removable, archivable, or deletable**.
-- **Invitations:** **+ Invite** → modal (Google email). Rows: email · status
-  (pending/accepted/declined/expired/revoked) · expiry. Actions: Copy join link (`/join/<id>`),
+- **Invitations:** **+ Invite** → modal (Google email). Rows: email · `StatusBadge` (§0.9a:
+  pending/accepted/declined/expired/revoked) · expiry. Actions: Copy join link (`/join/<id>`),
   Resend, Revoke (pending) / Delete (terminal) (FR-HH-003/004).
 - **Integrations** (owner-editable; read-only for others):
   - **FX rate providers** — an **ordered list** (priority = fallback chain, §arch 5.7). Each row:
-    provider name · type (e.g. Open Exchange Rates) · **enabled** toggle · status chip
+    provider name · type (e.g. Open Exchange Rates) · **enabled** toggle · `StatusBadge` (§0.9a)
     (ok / stale / down, or **unknown** until the first Story 3.7 fetch runs) · ⋮ (move up/down to
     reorder, edit, remove). **+ Add provider** → modal: **type** (a fixed registry: Open Exchange
     Rates · ExchangeRate-API · Frankfurter/ECB — keyless) · **base URL** · **API-key secret
@@ -685,8 +788,9 @@ tabular list in the app — not a bespoke layout.
   `financial-tracker-export-{YYYY-MM-DD}.csv` (FR-IE-006).
 **Backup** *(separate section)*
 
-- **Backup** — last-backup **timestamp** + a **status chip**: **Success** (green), **In progress**
-  (amber, spinner), or **Failed** (red, with a retry affordance). Manual **Back up now** is
+- **Backup** — last-backup **timestamp** + a **`StatusBadge`** (§0.9a): **Success** (green),
+  **In progress** (amber, spinner), or **Failed** (red, with a retry affordance). Manual
+  **Back up now** is
   **admin/owner only** (FR-SYS-008).
 
 ---
@@ -764,15 +868,22 @@ Every UI element resolves to a library component; **every component appears on `
 - **Primitives:** Button · Input · Label · Checkbox · Toggle · Dropdown *(+ optional **searchable** mode — a filter text input at the top of the open panel for long option lists; typing filters the options, ↑/↓ move the roving highlight, ↵ selects, Esc closes; same themed panel + picker focus ring (§0.9) as the base Dropdown — used by the currency-code picker (§10) and the timezone picker (§4.5/§5.2). NOT a native `<datalist>`)* · SegmentedControl ·
   DatePicker · ColourPicker · EmojiIconPicker · Badge · Avatar · Card · Divider · Spinner ·
   Skeleton · ProgressBar · Tooltip · **ContextMenu** · **Modal** · Drawer · Toast · Accordion ·
-  Table · TagInput *(transaction tags — assign + create + inline rename/recolour/archive/delete; §12.7)* ·
+  **Table** *(the tabular primitive — `Table<T>` + `ColumnDef<T>`, §8.7)* · TagInput *(transaction tags — assign + create + inline rename/recolour/archive/delete; §12.7)* ·
   EmptyState · AlertBanner · ConfirmationDialog · Icon (wrapper) ·
   MonetaryValueInput · RecurringDateInput.
 - **Composites:** AppShell (Sidebar · Topbar) · EntityPage · **EntityCard** · **EntityModal** ·
-  BulkActionBar · CategoryTree · PendingInvitationDialog · HouseholdConflictDialog.
+  BulkActionBar · CategoryTree · **StatusBadge** *(Badge + the §0.9a status registry — the single
+  traffic-light element behind every status chip / freshness badge / status dot / alert badge)* ·
+  **FilterBar** *(descriptor-driven filter row, §1.2a; state serializes to `VisualizationFilter`)* ·
+  **DrillBreadcrumb** *(the one in-Viewer drill-stack breadcrumb, §9.0a)* ·
+  **DashboardGrid** + **DashboardWidget** *(the widget board + tile, §17; drag reuses the §6
+  drag-a11y contract, content reuses Card / MiniSparkline / the Viewer renderer)* ·
+  PendingInvitationDialog · HouseholdConflictDialog.
 - **New (Phase-3):** AlertPanel *(Popover + rows)* · ViewContextSwitcher *(SegmentedControl +
   Dropdowns)* · ThemePicker *(Dropdown + swatches)* · FontPicker *(Dropdown)* · CommandPalette
   *(Modal + Input + rows)* · DensityToggle · **MiniSparkline** *(new atom)* · **FilledChip**
-  *(new atom)* · **FavouriteStar** *(new atom)* · Watermark/Branding *(new atom)*.
+  *(new atom)* · **FavouriteStar** *(new atom)* · **MonetaryValue** *(new atom — the money-display
+  counterpart to MonetaryValueInput, §0.3a)* · Watermark/Branding *(new atom)*.
 
 > The **ContextMenu**, **EntityModal**, **EmojiIconPicker**, **ViewContextSwitcher**,
 > **CommandPalette**, and **BulkActionBar** are specced in detail in §8.
@@ -801,11 +912,17 @@ Open · — · Archive/Restore · Delete**.
 
 ### 8.2 EntityModal (create / edit)
 
-The single create/edit surface for every entity.
+The create/edit surface for entity **creation** and **rich / subtype / FX-breakdown** config.
+**Tabular surfaces edit inline, not in the modal** — the ledger (§12), the snapshot history
+(§8.2a/§8.2b), and recurring occurrences (§13) support **inline cell editing** of their visible
+columns (§12.3a). On those surfaces the modal is reserved for **create** and the **non-column rich
+fields** (shared/GST flags, tags, status/reconciliation, duplicate-link, the FX breakdown). Entity
+*creation* and subtype-adaptive config (accounts, categories, currencies) stay modal; the formula
+editor stays a side-drawer (§11). (SCP 2026-06-22-inline-editing.)
 - **Layout:** centered **two-column modal** by default; a **side drawer** only when a form is
   genuinely tall (e.g. Insurance). Footer: **Cancel left / primary right** (locked convention, §4.2).
-- **Opens from a card via the flip-expand animation** (§0.7): tapping a card flips it and expands
-  into this modal — the card's "detail" **is** the EntityModal.
+- **Opens from ⋮ → Edit** (or the New button) with the standard modal scale-in (§0.7 Modal). A card
+  **tap** opens the read **detail view** (§8.2b), not this modal — editing is the ⋮ → Edit path.
 - **Subtype-adaptive:** changing the type swaps in that subtype's fields (FR-A-001).
 - **Controls:** name · **type** *(a **Dropdown** for an enumerated type — e.g. category
   income/expense/both, account subtype; **SegmentedControl is reserved for 2-option toggles**, §0.9.
@@ -835,16 +952,22 @@ the choice is only a **provenance label** for audit/history (typed by hand / pro
 The header shows the account's latest snapshot for reference; **Cancel** left / **Save snapshot**
 right (§4.2). Writes an `account_snapshots` row (architecture §3.6).
 
-**Snapshot history list (FR-A-018):** below the form, the account's snapshots render **newest-first**
-as rows — `date · value · source` (+ a note affordance when present). Each row carries **Edit**
-(re-opens the Add form populated with that snapshot's values, saving via `PATCH`) and **Delete**
-(confirm, then `DELETE`) actions — **Admin/Owner only** (members see a read-only list). Editing or
-deleting recomputes the account's current value + sparkline and writes an **audit** row (snapshots
-are **mutable corrections**, not append-only; ARCH §3.5). Empty state: a muted "No snapshots yet".
+**Snapshot history — an inline-editable mini-ledger (FR-A-018):** snapshots are **not sparse** —
+they're entered ~monthly (and a future bank-API sync would also be ~monthly), so the history
+**accumulates into a real ledger** and is rendered as one. Below the Add form (in 4.10's interim
+modal; **re-hosted in the §8.2b detail view by Story 4.11**) the snapshots render **newest-first** as
+table rows — `date · value · source` (+ note; **insurance → the surrender value** is the only history
+column). Per the §12.3a pattern, **Admin/Owner edit a cell in place** (double-click → `PATCH`),
+with an **inline add-row** and **per-row delete** (confirm → `DELETE`); members see it read-only.
+Editing or deleting recomputes current value + sparkline and writes an **audit** row (snapshots are
+**mutable corrections**, not append-only; ARCH §3.5). Sorted newest-first with scroll for long
+histories. Empty state: a muted "No snapshots yet". (Story 4.10 ships the backend + an **interim**
+modal Edit/Delete list; the inline mini-ledger is **Story 4.11**, the pilot for §12.3a — SCP
+2026-06-22-inline-editing.)
 
-### 8.2b Account detail view (flip-to-back) — Story 4.11
+### 8.2b Account detail view — Story 4.11
 
-The **read** surface a card flips to (the §0.7 `Flip ↔` / §2 "tap = flip-expand to detail"). A card
+The **read** surface a card opens on tap (§2 "tap = open detail"). A card
 front shows only its hero + one sub-line (§2.2); the **detail view** is where the rest lives. Added by
 SCP 2026-06-22 to give FR-A-015's "every account's detail view" + FR-A-016's "labelled coverage rows"
 a real home (they were assumed but never scheduled).
@@ -855,14 +978,21 @@ a real home (they were assumed but never scheduled).
   credit-card `rewards · billing day · annual fee · bonus limit · points expiry`; bank
   `account number · reserved amount · interest`; capital `cost basis · ROI`; asset
   `purchase date · purchase value · registration no.`
-- **Value-history table** — the §8.2a snapshot list (newest-first `date · value · source`, per-row
-  edit/delete, Admin/Owner) renders **here** (one history surface). The rich **charts** stay the §9
-  Viewer (the sparkline → Viewer expand) — the detail view is **tabular** history only.
+- **Value-history mini-ledger** — the §8.2a snapshot history (newest-first `date · value`
+  (`MonetaryValue` columnar, §0.3a) `· source`;
+  insurance → surrender value) renders **here** as an **inline-editable mini-ledger** (§12.3a:
+  double-click a cell → `PATCH`, inline add-row, per-row delete, Admin/Owner; members read-only),
+  one history surface. **This is the pilot for the inline-cell-edit pattern** (the first Table-primitive
+  consumer; Epic 5 generalizes it) — it replaces Story 4.10's interim modal Edit/Delete list. The rich
+  **charts** stay the §9 Viewer (the sparkline → Viewer expand) — the detail view is **tabular** history
+  only. (SCP 2026-06-22-inline-editing.)
 - **Read-only** — this surface does not edit; the **⋮ → Edit** / card-edit still opens the §8.2
   EntityModal (one edit surface). 
-- **Opening motion** — the real **rotateY flip-expand** (§0.7, `--duration-flip` 800ms; reduced-motion
-  → cross-fade), with the §8.2 modal scale-in as the graceful fallback (the flip must not gate the
-  surface). The bible renders both the surface and the flip before Story 4.11 dev (P5).
+- **Opening motion** — the **standard modal scale-in + fade** (§0.7 Modal). *(A rotateY flip-expand
+  was prototyped and **dropped 2026-06-22** — the detail view opens as a plain modal.)*
+- **Surface** — the **calm entity colour-fill made OPAQUE** (the 18% instance-colour tint over the
+  raised surface, not over `transparent`) + an entity-tinted border. Tinted like the card, but solid —
+  **not translucent** (a translucent panel let the backdrop bleed through).
 
 ### 8.3 EmojiIconPicker
 
@@ -979,6 +1109,67 @@ Transactions ledger **and** the CategoryTree (§12.4, §6), extensible to any en
   affected item writes its own audit entry**; for events, **budget actuals recompute once** after
   the batch (FR-E-020 acceptance).
 
+### 8.7 Table — the one tabular primitive
+
+**Every tabular surface is `Table<T>` — never a bespoke row layout.** Ledger (§12), Transfers
+(§15), Debt drill (§16), snapshot mini-ledger (§8.2a), recurring occurrences (§13), view-as-table
+(§9), Currencies (§10), Members/Invitations/FX-providers (§5.2) are all this one component with
+different columns + flags. **Pilot: Story 4.11** (snapshot mini-ledger). Pre-existing bespoke tables
+(Currencies/Members/FX) are **retrofitted later in a dedicated story** — acceptable to leave them
+un-migrated until then.
+
+**Boundary — Table is only the row-grid.** It does not own the page (EntityPage §1), the filters
+(FilterBar §1.2a), the create/rich-edit surface (EntityModal §8.2), or data fetching
+(`useEntityManager` / `useMultiSelect` supply data + selection). This boundary is load-bearing — it
+is what stops Table from re-absorbing every surface.
+
+**Two layers.** (1) `Table<T>` — the dumb shell: fixed-width column grid + alignment (§12.1),
+sortable headers, density (§0.4), responsive collapse-to-cards (§12.6), loading Skeleton, and a
+pinned-row slot (quick-add top / totals bottom). (2) **`ColumnDef<T>` is the reuse unit** —
+`{ key, header, align, sortable?, width, render(row), editable?, editControl }`. Surfaces share
+**column descriptors**, not "the table".
+
+**Column vocabulary (each bundles its display atom + inline editor):** `dateColumn` (DatePicker) ·
+`textColumn` (Input) · `moneyColumn` (**`MonetaryValue`** §0.3a / `MonetaryValueInput`, right/mono) ·
+`categoryColumn` (**`FilledChip`** / category picker) · `currencyColumn` (chip / currency Dropdown) ·
+`accountColumn` ("Paid with" account Dropdown + Cash) · `personColumn` (Avatar / person Dropdown) ·
+`statusColumn` (**`StatusBadge`** dot §0.9a; not inline-editable) · `metricColumn` /
+`dimensionColumn` (aggregation, read-only) · `selectColumn` (checkbox / `＋` on quick-add) ·
+`actionsColumn` (⋮ ContextMenu §8.1). Table is the spine; these unified atoms are the cells.
+
+**Three profiles = presets of the same flags (no subclasses):**
+- **Record-ledger** — `selectable` (checkbox + BulkActionBar §8.6) · `inlineEdit` · `quickAdd` ·
+  `expandableRows` (recurring only). Ledger / Transfers / snapshots / recurring / debt-drill
+  (read-only = the same minus the edit flags).
+- **Aggregation** — `onRowClick` (drill via `openWithFilter` §9.0a) · `totalsRow` · `matrix`
+  (2-dimension stacked → bucket rows × series cols). Read-only by construction (no inline edit).
+  View-as-table (§9).
+- **Config** — custom control cells (toggle / spark / ⋮) · optional `reorderable` (**`@dnd-kit`**
+  row drag, §6 contract — FX providers). Currencies / Members / Invitations / FX-providers.
+
+**Inline cell edit (the §12.3a mechanism, generalised):** double-click a visible cell → swaps the
+display render for that column's `editControl`. **Commit = Enter/blur → optimistic** (cell updates
+instantly) → `onCellCommit(row, key, value)` → caller sends a **single-field `PATCH`** → **rolls
+back + toasts on failure**. **Esc cancels.** **Per-row permission** via a `canEditRow(row)`
+predicate (Member edits own `created_by` only; Admin/Owner any) — non-editable rows never enter
+edit mode. **Rich / non-column fields are never inline** (flags, tags, reconciliation, FX
+breakdown) — they live in the EntityModal via ⋮ → Edit details. **Mobile (< md):** inline edit is
+off; a tap opens the modal/sheet (responsive collapse, §12.6).
+
+**Sorting — both modes.** Table sorts **internally by default** (small client lists, e.g.
+snapshots); when the caller passes a `sort` / `onSortChange` pair it is **controlled** (server-side
+sort, e.g. the ledger). The header affordance is identical either way.
+
+**Pilot scope (Story 4.11).** Build the primitive *properly* but only the slice 4.11 uses: the
+shell + `ColumnDef` + the inline-edit mechanism + `dateColumn` / `moneyColumn` / `textColumn`. Later
+surfaces add their own vocabulary columns and flip on `quickAdd` / `selectable` / `totalsRow` /
+`matrix` as config — not new components.
+
+**Stays OUT of Table (the non-collapse boundary):** **CategoryTree** (tree + reparent, different
+layout engine), **EntityCard grids** (vivid card layer, not tabular), and **aggregation inline
+edit** (structurally read-only). Same primitive everywhere it *is* tabular; never forced where it
+isn't.
+
 ---
 
 ## 9. Visualization Viewer
@@ -988,7 +1179,8 @@ expand animation, or full-screen. Specced once, reused everywhere.
 - **Header:** title · **chart-type** toggle (line / bar / area / pie / stacked / **table** /
   **calendar** — only types valid for the current data are enabled, FR-V-014; **table** and
   **calendar** require date-dimensioned event data) · close.
-- **Control bar:** **date range** (presets **+ Custom range picker**) · **group-by**
+- **Control bar** (`FilterBar`, §1.2a aggregation profile): **date range** (presets **+ Custom
+  range picker**) · **group-by**
   (day / month / quarter / year). **Contextual controls** appear only when relevant: **metric**
   (count / sum / avg) for event-group aggregation (FR-V-013); **raw/converted** toggle for
   multi-currency (FR-V-004 / FR-CU-008).
@@ -999,7 +1191,8 @@ expand animation, or full-screen. Specced once, reused everywhere.
   transactions**. Columns are **derived from the active group-by + metric**: a **dimension**
   column (the group-by — Month / Category / Account / Payee / Currency; entity dimensions render
   with their `FilledChip`/colour), a **Txns** count column, the **metric value** column
-  (Sum / Count / Avg — mono, right-aligned, sortable, default sort desc), and a **Share %** column
+  (Sum / Count / Avg — `MonetaryValue` columnar §0.3a for money metrics, right-aligned, sortable,
+  default sort desc), and a **Share %** column
   for proportional metrics (omitted for Avg), plus a pinned **Totals** row. A two-dimension
   (stacked) chart becomes a **matrix** — bucket rows × series columns + Total. Sortable headers
   (Table primitive); **row click drills down** like a chart segment (FR-V-002).
@@ -1049,6 +1242,30 @@ expand animation, or full-screen. Specced once, reused everywhere.
   **Retry** (the §18 Error state), never a silent empty chart. Loading → a chart-shaped Skeleton
   (§5.10 / §9.2).
 - Sources: `/api/visualizations/*` (read-only).
+- **Renderer — one engine, SVG only (ARCH §1.11).** The Viewer and the Dashboard-L widgets (§17)
+  share **one** chart engine built on **visx** (low-level d3 SVG primitives) over the
+  `d3-scale`/`d3-shape` math layer; `MiniSparkline` (§9.2) shares only that math, not the engine.
+  **SVG only, never canvas** — so charts reskin via `var(--color-chart-1..8)` under immersive
+  themes. **Chart motion is ours, not the library's:** visx renders static SVG, so every animation
+  here (§0.7: pie idle-float, CRT rebuild pop, drill-down) is applied by us with nothing in the
+  library to override or fight.
+
+### 9.0a Drill model — one contract, one breadcrumb, one cross-module hop
+
+Every drill in the app — pie slice, chart point, view-as-table row, calendar day, budget card,
+debt row, dashboard widget — resolves to **one data contract and two navigation shapes**:
+
+- **The contract — `VisualizationFilter`.** A drill *narrows the active filter* (§16: "a
+  `VisualizationFilter` … **no dedicated drill endpoint**"). It is the same shape `FilterBar`
+  serializes to (§1.2a), so filter-bar state, a Visualize action, and a drill are interchangeable.
+- **In-Viewer drill → `DrillBreadcrumb`.** A drill that stays inside the Viewer (pie → sub-donut,
+  point → filter, table row, calendar day) pushes onto **one** breadcrumb that renders the filter
+  stack (`All ▸ {category} ▸ …`, §0.7 pie cross-zoom). Specced **once here**, used by every
+  chart-type — never re-described per chart. Click a crumb / centre / empty space pops the stack.
+- **Cross-module drill → `openWithFilter(target, VisualizationFilter)`.** A drill that *leaves* the
+  surface (budget card → ledger, debt row → ledger, dashboard widget → its module) opens the target
+  module seeded with the filter. **The breadcrumb does not cross the hop — it resets to the target's
+  own context;** only the filter is carried (FR-V-002/003). One shared nav action, not a breadcrumb.
 
 ### 9.1 Entering the Viewer — every entry point
 
@@ -1063,7 +1280,11 @@ All open the **same** Viewer, seeded with the launching context's filter:
 ### 9.2 MiniSparkline (card mini-chart)
 
 A compact inline chart on cards/rows summarising an entity's recent history/usage (account value,
-currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows history.
+currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows history. **It is a
+hand-rolled SVG atom on the `d3-shape` math layer (ARCH §1.11) — deliberately NOT the Viewer engine
+(no charting lib in every card); it is the click-to-open affordance for the real Viewer.** Sharing
+the `d3-shape` math (not the engine) is what keeps it from forking when the visx Viewer lands in
+Epic 9, even though this atom ships first (Story 4.5).
 - **Form:** axis-less and label-less — pure trend. **Line** for continuous series (account value,
   FX rate), **bar** for discrete/period series (budget months). Renders the **last 12 points** of
   the entity's series (fewer if fewer exist — never downsampled below the available data); the line
@@ -1092,9 +1313,10 @@ currency FX rate, budget burn). A new atom (§7), reused everywhere a card shows
 
 EntityPage scaffold; **rows** (FX data is tabular): per-currency colour chip · code (mono) ·
 name · **rate shown human-readably as "1 {base} = N {target}"** (the inverse of the stored
-`rate_to_base`; storage + math unchanged, architecture §3.8) · **Status** — the freshness badge
-**with the last-updated time** (fresh · {relative, e.g. "2h ago"} / **amber stale at >48h** /
-never), absolute time on hover (the column header is **"Status"**, not "Fresh") · fee ·
+`rate_to_base`; storage + math unchanged, architecture §3.8) · **Status** — the freshness
+`StatusBadge` (§0.9a) **with the last-updated time** (fresh · {relative, e.g. "2h ago"} /
+**amber stale at >48h** / never), absolute time on hover (the column header is **"Status"**, not
+"Fresh") · fee ·
 **display-active** toggle (`is_display_active`) · **FX-history mini-chart** → expands to the
 Viewer (§9, FR-CU-009) · ⋮. Base currency: rate fixed, no toggle, not removable.
 When the **daily FX refresh lands newer rates** than the session last saw — detected by the
@@ -1148,19 +1370,21 @@ error remains. Computed results are **hover-revealed** on asset/capital cards (F
 ## 12. Transactions (ledger)
 
 EntityPage scaffold. **Header:** "Transactions" + info (count · out/in totals in base) · **+ New**.
-**Filter bar:** search · date range · category · type (all/inflow/outflow) · a **Filters** popover
-for secondary filters (account, person, status, GST, tags, reconciled).
+**FilterBar** (§1.2a, record-list profile): search · date range · category · type (all/inflow/outflow) ·
+a **Filters** popover for secondary filters (account, person, status, GST, tags, reconciled). Its
+state serializes to the `VisualizationFilter` that §12.8 Visualize hands to the Viewer.
 
 ### 12.1 Columns (desktop)
 checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-line) · **Payee**
 (avatar — the `payee_person_id` PersonRef, ARCH §3.2; header reads "Payee" to match the data model) ·
 **Category** (filled chip — *colour leads*, anti-rainbow §0.1) · **Currency** (chip) ·
-**Amount** (original, sortable, mono) · **Base SGD** (prominent, sortable, mono) · **status**
+**Amount** (`MonetaryValue` columnar+signColour, §0.3a; original, sortable) · **Base SGD**
+(`MonetaryValue` columnar, prominent, sortable) · **status**
 (faint dot) · ⋮.
 - **Currency + Amount + Base are first-class** (the figures that matter most).
   Outflow/inflow is conveyed by amount **sign + colour** (red/green), not a separate column.
-- **Status is de-emphasized** — a faint dot (green paid · amber pending · grey cancelled);
-  rarely edited, full state in the detail modal.
+- **Status is de-emphasized** — a `StatusBadge` `dot` variant (§0.9a: green paid · amber pending ·
+  grey cancelled); rarely edited, full state in the detail modal.
 - **Shared is the default**; only the **exception** is icon-flagged — a small icon for *personal*
   (= shared off; most expenses are shared). Any **tags** on a row render as small colour chips (the
   tag's own colour), after the Category chip — tags are free-form labels, not the category.
@@ -1186,6 +1410,19 @@ the **selection checkbox** in that column, not a `＋`.
 > `payment_method = null`; selecting **Cash** sets `payment_method = "cash"` and
 > `source_account_id = null`. There is no standalone "payment method" string the user types.
 
+### 12.3a Inline cell edit (existing rows)
+The v1-spreadsheet ergonomic, restored: **double-click a visible cell** on an existing ledger row to
+edit it **in place** — date · name · payer · payment-method · category · currency · amount · **base-SGD**.
+**Enter** / blur commits, **Esc** cancels; commit is **optimistic** (the cell updates immediately) and
+**rolls back on a failed `PATCH`** (toast the error). Editing the **Base/SGD** cell inline **is the FX
+manual override** — it flips `amount_base_source → manual` exactly as the modal does (§12.7); the FX
+**breakdown** (spot · fee · Δ) stays in the modal. The **non-column rich fields** are NOT inline —
+shared/GST flags, tags, status/reconciliation, and duplicate-link live in the modal (§12.7), reached via
+**⋮ → Edit details** / row expand. Per-row **permission** applies: a Member edits only rows they created
+(`created_by`), Admin/Owner any. **Desktop/tablet only** — on mobile (< md) a tap opens the sheet/modal
+(cell editing is impractical on a phone, §12.6). This same inline-cell pattern drives the snapshot
+mini-ledger (§8.2a) and recurring occurrences (§13). (SCP 2026-06-22-inline-editing.)
+
 ### 12.4 Selection & bulk
 Rows are **multi-selectable** (checkboxes) → the **BulkActionBar** (Edit shared fields · Duplicate
 · Archive · Delete). **Bulk multi-select is a GENERIC capability** (`useMultiSelect` +
@@ -1196,8 +1433,11 @@ categories: type, archive/restore, merge). Permission applies per item — a Mem
 only on their own events, an Admin/Owner on any.
 
 ### 12.5 Interactions
-Row click → **flip-expand into the transaction modal** (§8.2). ⋮ → ContextMenu (§8.1).
-Mobile: swipe-left archive / swipe-right edit.
+**Cell** double-click → **inline edit** that field in place (§12.3a). **Row** (non-cell) click /
+**⋮ → Edit details** / expand → **open the transaction modal** (§8.2/§12.7) for the
+non-column rich fields + the FX breakdown. ⋮ → ContextMenu (§8.1).
+Mobile: tap → sheet/modal (inline cell edit is desktop/tablet only, §12.3a); swipe-left archive /
+swipe-right edit.
 
 ### 12.6 Responsive collapse
 - **Desktop (≥ lg):** full table, sortable headers.
@@ -1247,13 +1487,13 @@ CategoryTree (§6) and Recurring's occurrence history (§13).
 
 ## 13. Recurring Payments
 
-EntityPage scaffold. **Header:** name + info (next due) + **+ New recurring**. **Filters:** search ·
-**source** (all / explicit / account-linked) · a header **missed** indicator.
+EntityPage scaffold. **Header:** name + info (next due) + **+ New recurring**. **FilterBar** (§1.2a):
+search · **source** (all / explicit / account-linked) · a header **missed** indicator.
 - **Rows:** expand chevron · category icon chip · name + **frequency text + next occurrence**
   sub-line · amount (mono) · **source badge** — Explicit / **Asset-/Capital-/Insurance-linked**
   (FR-A-017) · ⋮.
-- **Occurrence history (expand):** a timeline of expected occurrences with status badges —
-  **upcoming · processed · skipped · missed · failed** (FR-E-013; a manually-triggered run lands on
+- **Occurrence history (expand):** a timeline of expected occurrences with a `StatusBadge` (§0.9a)
+  per row — **upcoming · processed · skipped · missed · failed** (FR-E-013; a manually-triggered run lands on
   `processed` — there is no separate `manual` status, architecture §3.6). Processed shows the
   **linked transaction — clickable → opens it in the Transactions module** (cross-module nav,
   FR-V-003); **missed is highlighted red**. Per-occurrence actions: **Skip** (FR-E-014),
@@ -1270,11 +1510,12 @@ EntityPage scaffold. **Header:** name + info (next due) + **+ New recurring**. *
 
 ## 14. Budgets
 
-EntityPage scaffold. **Header:** name + info (over/near counts) + **+ New budget**. **Filters:**
-**period** (Monthly / Yearly) · **scope** (Household / a person) · period selector.
-- **Budget cards:** category icon chip + name + period badge + ⋮ · **limit vs actual** (mono) ·
-  a **progress bar coloured by health** — green (< threshold) / amber (≥ `alert_threshold_pct`,
-  default 80) / red (> 100%) · status ("S$ N left" / "S$ N over") + **alert badge** · a **drill
+EntityPage scaffold. **Header:** name + info (over/near counts) + **+ New budget**. **FilterBar**
+(§1.2a): **period** (Monthly / Yearly) · **scope** (Household / a person) · period selector.
+- **Budget cards:** category icon chip + name + period badge + ⋮ · **limit vs actual**
+  (`MonetaryValue` columnar, §0.3a) · a **progress bar coloured by health** — green (< threshold) / amber (≥ `alert_threshold_pct`,
+  default 80) / red (> 100%) · status ("S$ N left" / "S$ N over") + a **`StatusBadge`** (§0.9a,
+  budget-health tone) · a **drill
   affordance** ("N transactions →"). Rollover budgets show a `rollover` hint.
 - **Actuals are computed live**, never stored (FR-B-003).
 - **Subcategory rollup (important).** A budget on a **parent** category counts spending in **all its
@@ -1282,7 +1523,8 @@ EntityPage scaffold. **Header:** name + info (over/near counts) + **+ New budget
   parent directly (ARCH §3.7). This is a frequent source of confusion, so it is called out explicitly
   rather than buried.
 - **3-level drill-down (FR-B-006/007):** card → contributing **transactions** → **subcategory**
-  breakdown.
+  breakdown — via `openWithFilter` (§9.0a, cross-module hop into the ledger; breadcrumb resets to
+  the ledger's context, only the `VisualizationFilter` is carried).
 - **Budget history:** the Viewer (§9) charts **limit vs actual across periods** (FR-B-008 / FR-V-007).
 - Monthly + yearly may **coexist** for one category; scope is per-person or household-wide.
 - **Multi-currency:** a budget's `limit` carries a `limit_currency` but is normalized to
@@ -1301,7 +1543,8 @@ EntityPage scaffold rendered as a **ledger-style table — same columns / alignm
 sortable headers / responsive collapse as Transactions (§12)**. **Header:** name + info +
 **+ New transfer**.
 - **Rows:** date · name · **source → destination** (account colour chips) · **Debt repayment**
-  badge (auto-detected, FR-E-018) · amount — dual "S$ 500 → NZD 568" for cross-currency · ⋮.
+  badge (auto-detected, FR-E-018) · amount — `MonetaryValue` `dual` (§0.3a) "S$ 500 → NZD 568"
+  for cross-currency · ⋮.
 - **Create/edit modal:** source account · destination account · MonetaryValue (+ dest
   currency/amount + `fx_delta` for cross-currency, FR-E-017). **`is_debt_repayment` auto-detects**
   when the destination is a CreditCard, or a person with internal debt (FR-D-004/005), with an
@@ -1309,7 +1552,8 @@ sortable headers / responsive collapse as Transactions (§12)**. **Header:** nam
 
 ## 16. Debt
 
-A **computed summary — never entered** (FR-D-001; no debt entity). **Total owing** in the header.
+A **computed summary — never entered** (FR-D-001; no debt entity). **Total owing**
+(`MonetaryValue` hero, §0.3a) in the header.
 Two sections:
 - **Credit cards:** per card, balance = Σ outflows − Σ repayment transfers (FR-D-002); drill →
   contributing transactions (FR-D-007).
@@ -1317,7 +1561,7 @@ Two sections:
   transfers to them (FR-D-003); drill → contributing transactions.
 Auto-cleared by transfers (FR-D-004/005). Also surfaced on the Dashboard debt summary and on the
 CreditCard cards. **Drill-downs render the contributing transactions in the ledger-style table
-(§12)** — consistent with Transactions/Transfers.
+(§12)** via `openWithFilter` (§9.0a) — consistent with Transactions/Transfers.
 
 > **Drill filter (resolved).** The contributing set is exactly the derivation in ARCH §3.10 — not a
 > free-form query. *Credit-card row →* events with `source_account_id = <that card>` AND
@@ -1333,16 +1577,26 @@ CreditCard cards. **Drill-downs render the contributing transactions in the ledg
 
 The home overview (FR-DB, FR-V-009). Context (Household / Individual member + display currency)
 comes from the topbar (§1.1).
-- **Net worth headline** (FR-DB-001) — `Σ positive account values − Σ liabilities` in display
+- **Net worth headline** (FR-DB-001, `MonetaryValue` hero §0.3a) — `Σ positive account values − Σ liabilities` in display
   currency — with a **net-worth-over-time** trend (FR-DB-002) and the period delta.
 - **Stat cards:** this period's **spending · income · debt**.
+- **The board is `DashboardGrid`; each tile is a `DashboardWidget`.** Two named composites, not a
+  bespoke layout. `DashboardGrid` owns edit-mode, the responsive span grid (§1.3 `auto-fit`), the
+  drag-reorder + live reflow, and persistence (`{widget_type, span, order, scope?}[]`).
+  `DashboardWidget` is a **`Card` (§7) shell** + the edit affordances + drill + expand; its
+  **content reuses existing renderers — never a bespoke chart** (S = a stat figure via
+  `MonetaryValue` hero §0.3a; M = `MiniSparkline` §9.2; L = the shared chart renderer behind the
+  Viewer, §9). This keeps the dashboard from minting a third chart engine (the §5/renderer item).
 - **Customize is direct manipulation (not a layout modal).** A **`Customize`** toggle in the
-  header puts the widget grid into **edit mode**: each widget reveals an in-card **drag handle**
-  (drag-reorder *on the board*, with live reflow — drag-follow §0.7), an inline **S/M/L size
-  control**, and a **remove ✕**. Exiting (`Done`) returns to the static board. Outside edit mode
-  the board is read-only (widgets are still clickable to drill in). A ⋮ menu on each widget carries
-  **Resize / Remove / Expand** as the redundant keyboard/a11y path (the ContextMenu, §8.1). Layout
-  persists per person (`{widget_type, span, order, scope?}[]`).
+  header puts `DashboardGrid` into **edit mode**: each `DashboardWidget` reveals an in-card
+  **drag handle** (drag-reorder *on the board*, with live reflow — drag-follow §0.7), an inline
+  **S/M/L size control**, and a **remove ✕**. Exiting (`Done`) returns to the static board. Outside
+  edit mode the board is read-only (widgets are still clickable to drill in). **Drag reuses the
+  shared drag-a11y contract (§6 / SCP 2026-06-20):** **`@dnd-kit`** Pointer **+ Keyboard** sensors
+  (the house drag lib — native HTML5 DnD was tried on CategoryTree and proved unreliable; never
+  reintroduce it) whose accessible twin is the widget's **⋮ ContextMenu** (§8.1) carrying
+  **Resize / Remove / Expand** — the same drag+⋮ pairing as CategoryTree, not a second drag system.
+  Keep the drop *outcome* a pure unit-tested function (the `resolveMove` model, §6).
 - **Data loading.** Each widget fetches **its own** data via TanStack Query, keyed by
   `widget_type` + its `scope` + the active VisualizationFilter + topbar context (Household/member +
   display currency), against the read-only visualization contracts (`/api/visualizations/...`,
@@ -1373,7 +1627,8 @@ comes from the topbar (§1.1).
   marker but remain addable (multiples allowed — two budget widgets scoped to different budgets).
 - **Widgets** include: spending-by-category (**pie — the one chart that idle-floats**, §0.7),
   upcoming payments, budget health, recent transactions, account balances, debt summary. Each
-  **drills into its module** with filter state carried (cross-module nav, FR-V-002/003), and ⋮ →
+  **drills into its module** via `openWithFilter` (§9.0a) with filter state carried (cross-module
+  nav, FR-V-002/003), and ⋮ →
   **expand** opens the full Viewer (§9.1) seeded with the widget's context.
 - **Individual mode (FR-V-009):** when the topbar is set to a member, every figure filters to
   `person_ids = [that member]` (admin/owner may pick any member; §1.1).

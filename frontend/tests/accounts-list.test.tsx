@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { AccountsList } from '../src/pages/AccountsList'
-import type { Account } from '../src/types/account'
+import type { Account, AccountSnapshot } from '../src/types/account'
 import type { Currency } from '../src/types/currency'
 import type { Member } from '../src/types/household'
 import type { Person } from '../src/types/auth'
@@ -229,6 +229,12 @@ describe('AccountsList', () => {
     fireEvent.click(screen.getAllByLabelText('Actions')[index])
   }
 
+  // Tap a card body → flip to the §8.2b read detail view (Story 4.11).
+  async function openDetail(name = 'DBS Multiplier') {
+    await screen.findByText(name)
+    fireEvent.click(screen.getByLabelText(`Open ${name}`))
+  }
+
   test('Duplicate POSTs the duplicate endpoint', async () => {
     renderPage()
     await openMenu(0) // b1
@@ -369,20 +375,103 @@ describe('AccountsList', () => {
     expect(screen.getByText(/Currency locks once the account has activity/)).toBeTruthy()
   })
 
-  test('⋮ → Add value snapshot opens the modal and POSTs the snapshot', async () => {
+  // ── Account detail view: flip + inline mini-ledger (Story 4.11) ──
+
+  test('tapping a card opens the §8.2b detail view, not the edit modal', async () => {
     renderPage()
-    await openMenu(0) // b1 (SGD)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add value snapshot' }))
-    // The modal header shows there are no snapshots yet (its GET returned an empty list).
-    await screen.findByText('No snapshots yet')
+    await openDetail()
+    // The detail view shows the Value-history region; the §8.2 edit modal (its Owners field) is NOT open.
+    expect(await screen.findByText('Value history')).toBeTruthy()
+    expect(screen.queryByText('Owners')).toBeNull()
+  })
+
+  test('admin adds a snapshot via the inline add-row (POST)', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p1', role: 'owner' } as unknown as Person })
+    renderPage()
+    await openDetail()
+    fireEvent.click(await screen.findByText(/Add snapshot/))
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '13000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save snapshot' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith(
         '/api/accounts/b1/snapshots',
         expect.objectContaining({ value: '13000', currency: 'SGD', source: 'manual' }),
       ),
     )
+  })
+
+  // ── Snapshot mini-ledger: inline cell edit & delete (Story 4.11) ──
+
+  const snapshotRow: AccountSnapshot = {
+    id: 's1', account_id: 'b1', snapshot_date: '2026-06-14', value: '13000.0000',
+    currency: 'SGD', value_base: '13000.0000', source: 'manual', note: null,
+    created_at: '2026-06-14T00:00:00',
+  }
+
+  function mockSnapshots(items: AccountSnapshot[]) {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.startsWith('/api/currencies'))
+        return Promise.resolve({ data: { items: currencies, total: currencies.length }, status: 200 })
+      if (url.startsWith('/api/household/members'))
+        return Promise.resolve({ data: { items: members, total: members.length }, status: 200 })
+      if (/\/api\/accounts\/[^/]+\/snapshots/.test(url))
+        return Promise.resolve({ data: { items, total: items.length }, status: 200 })
+      return Promise.resolve({ data: { items: accounts, total: accounts.length }, status: 200 })
+    })
+  }
+
+  test('admin double-clicks a value cell → editor prefills → Enter PATCHes the field', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p1', role: 'owner' } as unknown as Person })
+    mockSnapshots([snapshotRow])
+    renderPage()
+    await openDetail()
+    fireEvent.doubleClick(await screen.findByLabelText(/Edit the .* value/))
+    const input = screen.getByPlaceholderText('0.00') as HTMLInputElement
+    expect(input.value).toBe('13000') // clean prefill — no dead 13000.0000
+    fireEvent.change(input, { target: { value: '14000' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    // Snapshots are native currency — the PATCH sends only the value (no currency picker).
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith('/api/accounts/b1/snapshots/s1', { value: '14000' }),
+    )
+  })
+
+  test('a failed cell PATCH rolls back the optimistic value', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p1', role: 'owner' } as unknown as Person })
+    mockSnapshots([snapshotRow])
+    vi.mocked(api.patch).mockRejectedValueOnce(new Error('boom'))
+    renderPage()
+    await openDetail()
+    fireEvent.doubleClick(await screen.findByLabelText(/Edit the .* value/))
+    const input = screen.getByPlaceholderText('0.00') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '99999' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(api.patch).toHaveBeenCalled())
+    // The optimistic 99,999 is reverted to the stored 13,000 on the failed write.
+    await waitFor(() =>
+      expect((screen.getByLabelText(/Edit the .* value/) as HTMLElement).textContent).toContain('13,000'),
+    )
+  })
+
+  test('admin deletes a snapshot row via confirm (DELETE)', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p1', role: 'owner' } as unknown as Person })
+    mockSnapshots([snapshotRow])
+    renderPage()
+    await openDetail()
+    fireEvent.click(await screen.findByLabelText(/Delete the .* snapshot/))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' })) // confirm dialog
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/accounts/b1/snapshots/s1'))
+  })
+
+  test('a member sees the value-history read-only (no edit/delete affordances)', async () => {
+    useAuthStore.setState({ currentPerson: { personId: 'p2', role: 'member' } as unknown as Person })
+    mockSnapshots([snapshotRow])
+    renderPage()
+    await openDetail()
+    await screen.findByText('Value history')
+    expect(screen.queryByLabelText(/Edit the .* value/)).toBeNull()
+    expect(screen.queryByLabelText(/Delete the .* snapshot/)).toBeNull()
+    expect(screen.queryByText(/Add snapshot/)).toBeNull()
   })
 
   test('the hero shows the native-currency value and the meta shows the native code', async () => {
@@ -477,7 +566,7 @@ describe('AccountsList', () => {
     fireEvent.click(screen.getAllByLabelText('Actions')[3]) // cc1 (Amex Platinum)
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
     await screen.findByText('Owners')
-    expect((screen.getByLabelText(/Credit limit/) as HTMLInputElement).value).toBe('20000.0000')
+    expect((screen.getByLabelText(/Credit limit/) as HTMLInputElement).value).toBe('20000') // clean prefill
     expect((screen.getByLabelText(/Due day/) as HTMLInputElement).value).toBe('28')
   })
 
@@ -503,12 +592,14 @@ describe('AccountsList', () => {
     expect(roi.className).toContain('text-success')
   })
 
-  test('a capital card hides ROI when the current value is in a different currency', async () => {
+  test('a capital card renders cross-currency ROI (current value converted to native)', async () => {
     renderPage(['capital'])
     const card = (await screen.findByText('Overseas Fund')).closest(
       '[data-testid="entity-card"]',
     ) as HTMLElement
-    expect(card.textContent).not.toContain('ROI')
+    // current 44,200 USD → native SGD (×1.35) = 59,670; − 40,000 cost basis = +S$ 19,670.00 (Story 4.11
+    // relaxed the same-currency guard — a cross-currency current value now yields ROI).
+    expect(card.textContent).toContain('ROI +S$ 19,670.00')
   })
 
   test('an insurance card shows the coverage · policy_type sub-line', async () => {
@@ -607,17 +698,17 @@ describe('AccountsList', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
     await screen.findByText('Owners')
     expect(screen.getByLabelText(/Policy type/)).toHaveTextContent('life')
-    expect((screen.getByLabelText(/Death cover/) as HTMLInputElement).value).toBe('250000.0000')
+    expect((screen.getByLabelText(/Death cover/) as HTMLInputElement).value).toBe('250000') // clean prefill
   })
 
   test('editing a capital prefills investment type + cost basis (AC4)', async () => {
     renderPage(['capital'])
     await screen.findByText('Growth Fund')
-    // c1 (Stocks) is first on the capital route — cost_basis '5000.0000'.
+    // c1 (Stocks) is first on the capital route — cost_basis '5000.0000' → cleaned to '5000'.
     fireEvent.click(screen.getAllByLabelText('Actions')[0])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
     await screen.findByText('Owners')
-    expect((screen.getByLabelText(/Cost basis/) as HTMLInputElement).value).toBe('5000.0000')
+    expect((screen.getByLabelText(/Cost basis/) as HTMLInputElement).value).toBe('5000')
   })
 
   test('the card renders the value-history sparkline, or a placeholder when there is no history', async () => {

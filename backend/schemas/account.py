@@ -350,6 +350,19 @@ class AccountSnapshotCreate(BaseModel):
     note: str | None = None
 
 
+class AccountSnapshotUpdate(BaseModel):
+    """Body of `PATCH /api/accounts/{id}/snapshots/{snap_id}` (Story 4.10). All fields optional —
+    a partial update; the frontend re-opens the populated Add form so it sends the full set, but
+    each field is independently patchable. `source` keeps the three-user `Literal` (system sources
+    → 422)."""
+
+    snapshot_date: date | None = None
+    value: Decimal | None = None
+    currency: str | None = None
+    source: Literal["manual", "reconciliation", "appraisal"] | None = None
+    note: str | None = None
+
+
 class AccountSnapshotResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
