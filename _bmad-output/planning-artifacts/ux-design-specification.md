@@ -923,7 +923,16 @@ editor stays a side-drawer (§11). (SCP 2026-06-22-inline-editing.)
   genuinely tall (e.g. Insurance). Footer: **Cancel left / primary right** (locked convention, §4.2).
 - **Opens from ⋮ → Edit** (or the New button) with the standard modal scale-in (§0.7 Modal). A card
   **tap** opens the read **detail view** (§8.2b), not this modal — editing is the ⋮ → Edit path.
-- **Subtype-adaptive:** changing the type swaps in that subtype's fields (FR-A-001).
+- **Subtype-adaptive:** changing the type swaps in that subtype's fields (FR-A-001). On **create**
+  the type is **pre-selected to the route's subtype** and the Type Dropdown is **restricted to that
+  route's subtypes**; a single-subtype route (`/capital`, `/assets`, `/insurance`) **locks** it
+  (disabled). A **new credit card** opens at **balance 0**; a bank stays blank. The credit-card
+  **reward-amount** field follows `reward_type`: points/miles → a **count** (`reward_points`),
+  cashback → a **percentage** (`reward_rate`), none → **no** field (FR-A-010).
+- **Current value on create (asset-like):** on a **create** of capital/asset/insurance, an optional
+  **"Current value"** field; when filled, Save writes the account's **first value snapshot** so the
+  card hero shows a value immediately (FR-A-014). On **edit**, value history is the §8.2b mini-ledger
+  instead.
 - **Controls:** name · **type** *(a **Dropdown** for an enumerated type — e.g. category
   income/expense/both, account subtype; **SegmentedControl is reserved for 2-option toggles**, §0.9.
   For category type, the Dropdown labels are **semantic-coloured** to match the §6 type badge —
@@ -986,6 +995,15 @@ a real home (they were assumed but never scheduled).
   consumer; Epic 5 generalizes it) — it replaces Story 4.10's interim modal Edit/Delete list. The rich
   **charts** stay the §9 Viewer (the sparkline → Viewer expand) — the detail view is **tabular** history
   only. (SCP 2026-06-22-inline-editing.)
+- **Visualize launch point** — the detail view carries a **"Visualize"** affordance (alongside the
+  sparkline-expand seam) that opens the **account entity-history Viewer (§9, Story 9.6)** seeded with
+  this account's filter. The Viewer is **subtype-adaptive** (SCP 2026-06-23-account-history-viewer): for
+  a bank/credit-card it is the monthly reconciliation grid (`Balance · Inflow · Outflow · Transfers ·
+  Reserved · End Balance`, ledger-derived in Epic 5, per-year pivot + Total via the §9.2b Table
+  aggregation profile); for capital it adds an ROI/unrealized-gain column; for asset/insurance it is
+  dominated by the value/surrender-value snapshot history. Drilling a series hops to the account-filtered
+  ledger (§9.3 `openWithFilter`). This is the **rich** view the tabular mini-ledger is the Epic-4 interim
+  for — not built here (Epic 9).
 - **Read-only** — this surface does not edit; the **⋮ → Edit** / card-edit still opens the §8.2
   EntityModal (one edit surface). 
 - **Opening motion** — the **standard modal scale-in + fade** (§0.7 Modal). *(A rotateY flip-expand

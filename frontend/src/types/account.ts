@@ -53,6 +53,7 @@ export interface CreditCardAccount extends AccountShared {
   reward_points: number | null
   annual_fee: string | null
   reward_type: string | null
+  reward_rate: string | null
   bonus_limit: string | null
   points_expiry: string | null
 }

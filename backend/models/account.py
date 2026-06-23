@@ -72,6 +72,9 @@ class Account(BaseEntity):
     reward_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     annual_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     reward_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Cashback %: the count-vs-rate counterpart to reward_points (Story 4.12) — points/miles use
+    # reward_points (int), cashback uses this rate (e.g. 1.5000 = 1.5%). ARCH §3.5.
+    reward_rate: Mapped[Decimal | None] = mapped_column(Numeric(6, 4), nullable=True)
     bonus_limit: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
     points_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
 

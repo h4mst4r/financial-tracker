@@ -396,6 +396,9 @@
    Same dodge as max-w-input/max-w-tooltip above. Values track the design bible (.pubpage 380, .modal 440). ── */
 @utility max-w-empty-state { max-width: 380px; }
 @utility max-w-modal       { max-width: 440px; }
+/* Tall-form cap (Story 4.12): a centred EntityModal taller than this scrolls its body, header/footer
+   pinned (the insurance form). Interim until the §8.2 side-drawer (Story 7.3). P4. */
+@utility max-h-modal       { max-height: 90vh; }
 /* Account detail modal (§8.2b) — a roomy read panel (~2× the entity card) so the subtype rows + value
    history don't wrap. A solid surface with a subtle entity-tinted border (applied in TSX). */
 @utility w-detail          { width: 41.5rem; }

@@ -53,6 +53,7 @@ _SUBTYPE_UPDATE_FIELDS: dict[str, frozenset[str]] = {
         "billing_day",
         "due_day",
         "reward_points",
+        "reward_rate",
         "annual_fee",
         "reward_type",
         "bonus_limit",

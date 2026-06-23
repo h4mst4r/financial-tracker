@@ -37,6 +37,13 @@ export function EntityModal({
       open={open}
       onClose={onClose}
       title={title}
+      // Cap the panel + scroll the body so a tall form (insurance, Story 4.12) keeps its header +
+      // Cancel/Save footer pinned and Save reachable. Invisible for short forms (cap never hit).
+      // Interim until the §8.2 side-drawer. NOTE: Dropdown/DatePicker popups are absolute (not
+      // portalled) → a picker opened near the bottom of a tall scrolling form can clip; account-form
+      // pickers are mid-form so this is acceptable here (real fix = the side-drawer, Story 7.3).
+      panelClassName="w-full max-w-modal bg-surface-raised border border-border flex flex-col max-h-modal"
+      bodyClassName="px-md py-md overflow-y-auto"
       footer={
         // Modal's footer is justify-between → first child left, last child right (§4.2 locked convention).
         <>

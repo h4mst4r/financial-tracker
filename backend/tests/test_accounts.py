@@ -242,6 +242,77 @@ async def test_create_bank_ledger_backed(monkeypatch):
         await engine.dispose()
 
 
+async def test_create_credit_card_cashback_rate_round_trips(monkeypatch):
+    """Story 4.12 — cashback cards carry `reward_rate` (%, NUMERIC); points/miles leave it null."""
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        cashback = client.post(
+            "/api/accounts",
+            json={
+                "account_type": "credit_card",
+                "name": "Amex Cashback",
+                "currency": "SGD",
+                "opening_balance": "0",
+                "opening_balance_date": "2026-06-01",
+                "reward_type": "cashback",
+                "reward_rate": "1.5",
+            },
+        )
+        assert cashback.status_code == 201
+        assert Decimal(cashback.json()["reward_rate"]) == Decimal("1.5")
+        # Round-trips on GET (read side is the discriminated CreditCardResponse).
+        got = client.get(f"/api/accounts/{cashback.json()['id']}").json()
+        assert Decimal(got["reward_rate"]) == Decimal("1.5")
+        assert got["reward_points"] is None
+
+        points = client.post(
+            "/api/accounts",
+            json={
+                "account_type": "credit_card",
+                "name": "Citi Miles",
+                "currency": "SGD",
+                "opening_balance": "0",
+                "opening_balance_date": "2026-06-01",
+                "reward_type": "miles",
+                "reward_points": 42000,
+            },
+        )
+        assert points.status_code == 201
+        assert points.json()["reward_rate"] is None
+        assert points.json()["reward_points"] == 42000
+
+        # Edit path: reward_rate must be an allowed credit_card PATCH field (the
+        # _SUBTYPE_UPDATE_FIELDS allowlist), not rejected as a cross-subtype field.
+        edited = client.patch(
+            f"/api/accounts/{cashback.json()['id']}",
+            json={"reward_rate": "2.0"},
+        )
+        assert edited.status_code == 200
+        assert Decimal(edited.json()["reward_rate"]) == Decimal("2.0")
+
+        # Out-of-range rate (≥100, or >4 dp) is a clean 422, not a Numeric(6,4) overflow.
+        too_big = client.post(
+            "/api/accounts",
+            json={
+                "account_type": "credit_card",
+                "name": "Bad Rate",
+                "currency": "SGD",
+                "opening_balance": "0",
+                "opening_balance_date": "2026-06-01",
+                "reward_type": "cashback",
+                "reward_rate": "150",
+            },
+        )
+        assert too_big.status_code == 422
+    finally:
+        await engine.dispose()
+
+
 async def test_create_asset_like_no_opening_balance(monkeypatch):
     engine, factory = await _make_factory()
     try:

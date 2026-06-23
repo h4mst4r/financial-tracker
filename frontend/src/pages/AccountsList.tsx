@@ -11,6 +11,7 @@ import { Avatar } from '../components/primitives/Avatar'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import type { ContextMenuEntry } from '../components/primitives'
 import { useEntityManager } from '../hooks/useEntityManager'
+import { useEntityPreferences } from '../hooks/useEntityPreferences'
 import { useAlertStore } from '../stores/alertStore'
 import { useAuthStore } from '../stores/authStore'
 import { convertForDisplay } from '../lib/currency'
@@ -58,6 +59,9 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
   const displayCurrency = useAuthStore((s) => s.currentPerson?.displayCurrency ?? 'native')
 
   const manager = useEntityManager<Account>({ entityType: 'accounts', basePath: '/api/accounts' })
+  // Per-person favourites (FR-E-021) — the gold star renders + toggles + persists, favourites sort
+  // first (UX §2.3). Accounts is the first real consumer of the entity_preferences contract.
+  const { preferences: favourites, setFavourite } = useEntityPreferences('accounts')
 
   const currencyQuery = useQuery({
     queryKey: ['currencies'],
@@ -86,13 +90,17 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
 
   const subtypeSet = useMemo(() => new Set(subtypes), [subtypes])
   const q = search.trim().toLowerCase()
-  const visible = manager.items.filter((a) => {
-    if (!subtypeSet.has(a.account_type)) return false
-    if (typeFilter !== 'all' && a.account_type !== typeFilter) return false
-    if (q && !a.name.toLowerCase().includes(q) && !(a.institution ?? '').toLowerCase().includes(q))
-      return false
-    return true
-  })
+  const isFavourite = (a: Account) => favourites.get(a.id)?.is_favourite ?? false
+  const visible = manager.items
+    .filter((a) => {
+      if (!subtypeSet.has(a.account_type)) return false
+      if (typeFilter !== 'all' && a.account_type !== typeFilter) return false
+      if (q && !a.name.toLowerCase().includes(q) && !(a.institution ?? '').toLowerCase().includes(q))
+        return false
+      return true
+    })
+    // Favourites first (UX §2.3); Array.prototype.sort is stable so ties keep the manager order.
+    .sort((a, b) => Number(isFavourite(b)) - Number(isFavourite(a)))
 
   const toastError = (err: unknown, fallback: string) => {
     const detail = err instanceof ApiError ? err.details?.detail : undefined
@@ -127,6 +135,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
     payload: Record<string, unknown>,
     id: string | null,
     ownerIds: string[],
+    initialValue: string | null,
   ) => {
     try {
       if (id) {
@@ -138,7 +147,26 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
         }
       } else {
         // Create folds owner_ids into the single POST (atomic — no created-but-ownerless window).
-        await manager.create({ ...payload, owner_ids: ownerIds })
+        const created = await manager.create({ ...payload, owner_ids: ownerIds })
+        // Asset-like initial value (Story 4.12 AC4): write the first `manual` snapshot so the card
+        // hero shows the value at once (asset-like value = latest snapshot, ARCH §3.11). Same POST
+        // body as the detail-view add-row; snapshots are always the account's native currency. This
+        // is a SECOND, non-atomic write: the account already exists, so a snapshot failure must NOT
+        // look like a failed create (that invites a duplicate re-submit) — swallow it with a distinct
+        // warning and still close the modal; the value can be set later in the detail-view ledger.
+        if (initialValue) {
+          try {
+            await api.post(`/api/accounts/${created.id}/snapshots`, {
+              snapshot_date: new Date().toISOString().slice(0, 10),
+              value: initialValue,
+              currency: created.currency,
+              source: 'manual',
+            })
+            await manager.refetch()
+          } catch (err) {
+            toastError(err, 'Account created, but its starting value could not be set.')
+          }
+        }
       }
       setModalOpen(false)
     } catch (err) {
@@ -290,6 +318,12 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       sparkline={<MiniSparkline data={a.value_series.map(Number)} />}
       meta={`${ACCOUNT_TYPE_LABEL[a.account_type]} · ${a.currency}`}
       owners={ownersSlot(a)}
+      favourite={isFavourite(a)}
+      onToggleFavourite={() => {
+        setFavourite(a.id, !isFavourite(a)).catch((err) =>
+          toastError(err, 'Could not update the favourite.'),
+        )
+      }}
       menuItems={rowMenu(a)}
       onClick={() => openDetail(a)}
     />
@@ -340,6 +374,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
         onClose={() => setModalOpen(false)}
         editing={editing}
         baseCurrency={baseCurrency}
+        subtypes={subtypes}
         currencyOptions={displayCurrencyCodes}
         onSubmit={handleSubmit}
       />

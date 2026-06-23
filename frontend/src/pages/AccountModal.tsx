@@ -92,11 +92,6 @@ function OwnerPicker({
 
 const TODAY_ISO = () => new Date().toISOString().slice(0, 10)
 
-const TYPE_OPTIONS = (Object.keys(ACCOUNT_TYPE_LABEL) as AccountType[]).map((t) => ({
-  value: t,
-  label: ACCOUNT_TYPE_LABEL[t],
-}))
-
 // Locked option sets (Story 4.7). `reward_type` is the backend Literal; `interest_frequency` is a
 // free-form column with no specced enum — locked to these four so the stored value is deterministic.
 const INTEREST_FREQUENCY_OPTIONS = ['monthly', 'quarterly', 'semi-annual', 'annual'].map((v) => ({
@@ -132,6 +127,7 @@ interface FormState {
   due_day: string
   reward_type: string
   reward_points: string
+  reward_rate: string
   annual_fee: string
   bonus_limit: string
   points_expiry: string
@@ -157,17 +153,26 @@ interface FormState {
   coverage_hospital: string
   surrender_value: string
   surrender_inquiry_date: string
+  // Create-only convenience for asset-like accounts (Story 4.12): an optional opening value that
+  // writes the first `manual` snapshot after create (the page does the POST). NOT an account column.
+  initial_value: string
 }
 
-const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
-  account_type: 'bank',
+const emptyForm = (
+  ownerIds: string[] = [],
+  currency = '',
+  accountType: AccountType = 'bank',
+): FormState => ({
+  account_type: accountType,
   name: '',
   currency,
   institution: '',
   notes: '',
   colour: ACCOUNT_DEFAULT_COLOUR,
   vivid: false,
-  opening_balance: '',
+  // A new credit card almost always opens at no spend → default 0; a bank stays blank (a real balance
+  // the user must enter). Story 4.12 AC3.
+  opening_balance: accountType === 'credit_card' ? '0' : '',
   opening_balance_date: TODAY_ISO(),
   ownerIds,
   account_number: '',
@@ -179,6 +184,7 @@ const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
   due_day: '',
   reward_type: '',
   reward_points: '',
+  reward_rate: '',
   annual_fee: '',
   bonus_limit: '',
   points_expiry: '',
@@ -201,6 +207,7 @@ const emptyForm = (ownerIds: string[] = [], currency = ''): FormState => ({
   coverage_hospital: '',
   surrender_value: '',
   surrender_inquiry_date: '',
+  initial_value: '',
 })
 
 // Subtype field validators (Story 4.7) — all optional, so empty is always valid; only a non-empty
@@ -223,12 +230,21 @@ interface AccountModalProps {
   onClose: () => void
   editing: Account | null
   baseCurrency: string
+  /** The route's account subtypes (Story 4.12): on create the Type is pre-selected to `subtypes[0]`
+   *  and the Type dropdown is restricted to these; a single-subtype route (`/capital` etc.) locks it. */
+  subtypes: AccountType[]
   /** Household display-active currency codes (the modal currency picker options; default = base). */
   currencyOptions: string[]
   /** Builds + sends the create/edit request (the page wires useEntityManager + toast + close).
    *  `ownerIds` is the chosen owner set: folded into the create payload, applied via the owner PUT
-   *  on edit (Story 4.3). */
-  onSubmit: (payload: Record<string, unknown>, id: string | null, ownerIds: string[]) => Promise<void>
+   *  on edit (Story 4.3). `initialValue` (create-only, asset-like) is the optional opening value the
+   *  page writes as the first snapshot after the account is created (Story 4.12 AC4). */
+  onSubmit: (
+    payload: Record<string, unknown>,
+    id: string | null,
+    ownerIds: string[],
+    initialValue: string | null,
+  ) => Promise<void>
 }
 
 export function AccountModal({
@@ -236,6 +252,7 @@ export function AccountModal({
   onClose,
   editing,
   baseCurrency,
+  subtypes,
   currencyOptions,
   onSubmit,
 }: AccountModalProps) {
@@ -286,6 +303,7 @@ export function AccountModal({
         due_day: str(cc?.due_day),
         reward_type: str(cc?.reward_type),
         reward_points: str(cc?.reward_points),
+        reward_rate: money(cc?.reward_rate),
         annual_fee: money(cc?.annual_fee),
         bonus_limit: money(cc?.bonus_limit),
         points_expiry: str(cc?.points_expiry),
@@ -308,13 +326,24 @@ export function AccountModal({
         coverage_hospital: str(ins?.coverage_hospital),
         surrender_value: money(ins?.surrender_value),
         surrender_inquiry_date: str(ins?.surrender_inquiry_date),
+        initial_value: '', // create-only — on edit, value history is the §8.2b mini-ledger (4.11)
       })
     } else {
-      setForm(emptyForm(currentPersonId ? [currentPersonId] : [], baseCurrency))
+      setForm(emptyForm(currentPersonId ? [currentPersonId] : [], baseCurrency, subtypes[0]))
     }
-  }, [open, editing, currentPersonId, baseCurrency])
+  }, [open, editing, currentPersonId, baseCurrency, subtypes])
 
   const isLedger = LEDGER_BACKED.has(form.account_type)
+  // Type is pre-selected by route + restricted to the route's subtypes; a single-subtype route locks
+  // it, and editing always locks it (the STI discriminator is immutable). Story 4.12 AC1.
+  const typeOptions = useMemo(
+    () => subtypes.map((t) => ({ value: t, label: ACCOUNT_TYPE_LABEL[t] })),
+    [subtypes],
+  )
+  const typeLocked = editing !== null || subtypes.length === 1
+  // The asset-like initial-value field shows only on a create of capital/asset/insurance (AC4).
+  const showInitialValue =
+    editing === null && ['capital', 'asset', 'insurance'].includes(form.account_type)
 
   // Per-field validity of the (optional) subtype inputs — drives both the inline error state and the
   // save gate (Story 4.7). Empty is always valid; a malformed non-empty value blocks Save.
@@ -327,6 +356,12 @@ export function AccountModal({
     billing_day: dayOk(form.billing_day),
     due_day: dayOk(form.due_day),
     reward_points: countOk(form.reward_points),
+    // cashback % — non-negative AND < 100 (the Numeric(6,4) column max is 99.9999); blocks an
+    // out-of-range rate client-side instead of round-tripping to a 422 (Story 4.12).
+    reward_rate:
+      nonNegOk(form.reward_rate) &&
+      (form.reward_rate.trim() === '' || Number(form.reward_rate) < 100),
+    initial_value: nonNegOk(form.initial_value), // asset-like opening value (Story 4.12)
     // Capital/asset/insurance money fields — all non-negative (Story 4.8).
     cost_basis: nonNegOk(form.cost_basis),
     purchase_value: nonNegOk(form.purchase_value),
@@ -345,7 +380,8 @@ export function AccountModal({
         !fieldOk.bonus_limit ||
         !fieldOk.billing_day ||
         !fieldOk.due_day ||
-        !fieldOk.reward_points)) ||
+        !fieldOk.reward_points ||
+        !fieldOk.reward_rate)) ||
     (form.account_type === 'capital' && !fieldOk.cost_basis) ||
     (form.account_type === 'asset' && !fieldOk.purchase_value) ||
     (form.account_type === 'insurance' &&
@@ -363,7 +399,8 @@ export function AccountModal({
     (isLedger &&
       (!/^-?\d+(\.\d+)?$/.test(form.opening_balance.trim()) || form.opening_balance_date === '')) ||
     !/^#[0-9a-fA-F]{6}$/.test(form.colour) ||
-    subtypeInvalid
+    subtypeInvalid ||
+    (showInitialValue && !fieldOk.initial_value)
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -397,7 +434,13 @@ export function AccountModal({
               billing_day: int(form.billing_day),
               due_day: int(form.due_day),
               reward_type: form.reward_type || null,
-              reward_points: int(form.reward_points),
+              // The reward amount follows reward_type — send only the active field, null the other
+              // (Story 4.12 AC5; mirrors the cross-subtype-null discipline). none/unset → both null.
+              reward_points:
+                form.reward_type === 'points' || form.reward_type === 'miles'
+                  ? int(form.reward_points)
+                  : null,
+              reward_rate: form.reward_type === 'cashback' ? dec(form.reward_rate) : null,
               annual_fee: dec(form.annual_fee),
               bonus_limit: dec(form.bonus_limit),
               points_expiry: form.points_expiry || null,
@@ -435,12 +478,18 @@ export function AccountModal({
       // PATCH — no `account_type` (immutable STI discriminator); owners go via the owner PUT.
       // Currency only when it actually changed (the backend locks it once the account has history).
       const currencyPatch = form.currency !== editing.currency ? { currency: form.currency } : {}
-      await onSubmit({ ...shared, ...currencyPatch, ...ledger, ...subtype }, editing.id, form.ownerIds)
+      await onSubmit(
+        { ...shared, ...currencyPatch, ...ledger, ...subtype },
+        editing.id,
+        form.ownerIds,
+        null,
+      )
     } else {
       await onSubmit(
         { account_type: form.account_type, currency: form.currency, ...shared, ...ledger, ...subtype },
         null,
         form.ownerIds,
+        showInitialValue ? form.initial_value.trim() || null : null,
       )
     }
   }
@@ -464,10 +513,20 @@ export function AccountModal({
         <Dropdown
           id="acct-type"
           value={form.account_type}
-          options={TYPE_OPTIONS}
-          onChange={(v) => set('account_type', v as AccountType)}
-          // The STI discriminator is immutable after create.
-          disabled={editing !== null}
+          options={typeOptions}
+          onChange={(v) => {
+            const t = v as AccountType
+            // Switching to a credit card on create applies the AC3 opening-balance default (0) when
+            // the field is still empty; other switches leave it untouched.
+            setForm((f) => ({
+              ...f,
+              account_type: t,
+              opening_balance:
+                t === 'credit_card' && f.opening_balance.trim() === '' ? '0' : f.opening_balance,
+            }))
+          }}
+          // Locked on single-subtype routes + on edit (the STI discriminator is immutable). AC1.
+          disabled={typeLocked}
         />
       </div>
 
@@ -645,17 +704,34 @@ export function AccountModal({
               onChange={(v) => set('reward_type', v)}
             />
           </div>
-          <div className="flex flex-col gap-xs">
-            <Label htmlFor="acct-reward-points">Reward points</Label>
-            <Input
-              id="acct-reward-points"
-              inputMode="numeric"
-              value={form.reward_points}
-              error={!fieldOk.reward_points}
-              onChange={(e) => set('reward_points', e.target.value)}
-              placeholder="Optional"
-            />
-          </div>
+          {/* Reward amount adapts to reward_type (Story 4.12 AC5): points/miles → a count; cashback
+              → a %; none/unset → no field. */}
+          {(form.reward_type === 'points' || form.reward_type === 'miles') && (
+            <div className="flex flex-col gap-xs">
+              <Label htmlFor="acct-reward-points">Reward points / miles</Label>
+              <Input
+                id="acct-reward-points"
+                inputMode="numeric"
+                value={form.reward_points}
+                error={!fieldOk.reward_points}
+                onChange={(e) => set('reward_points', e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          )}
+          {form.reward_type === 'cashback' && (
+            <div className="flex flex-col gap-xs">
+              <Label htmlFor="acct-reward-rate">Cashback rate (%)</Label>
+              <Input
+                id="acct-reward-rate"
+                inputMode="decimal"
+                value={form.reward_rate}
+                error={!fieldOk.reward_rate}
+                onChange={(e) => set('reward_rate', e.target.value)}
+                placeholder="e.g. 1.5"
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-xs">
             <Label htmlFor="acct-bonus-limit">Bonus limit ({form.currency})</Label>
             <Input
@@ -882,6 +958,22 @@ export function AccountModal({
             />
           </div>
         </>
+      )}
+
+      {/* Current value (Story 4.12 AC4) — create-only, asset-like. Optional; on save the page writes
+          it as the first `manual` snapshot so the card hero shows a value immediately. */}
+      {showInitialValue && (
+        <div className="flex flex-col gap-xs md:col-span-2">
+          <Label htmlFor="acct-initial-value">Current value ({form.currency})</Label>
+          <Input
+            id="acct-initial-value"
+            inputMode="decimal"
+            value={form.initial_value}
+            error={!fieldOk.initial_value}
+            onChange={(e) => set('initial_value', e.target.value)}
+            placeholder="Optional — sets the starting value"
+          />
+        </div>
       )}
 
       <div className="flex flex-col gap-xs md:col-span-2">

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { AccountsList } from '../src/pages/AccountsList'
@@ -91,7 +91,7 @@ const accounts: Account[] = [
     value_series: [],
     opening_balance: '0.0000', opening_balance_date: '2026-06-01',
     credit_limit: '20000.0000', billing_day: 15, due_day: 28, reward_points: 1200,
-    annual_fee: '321.00', reward_type: 'points', bonus_limit: null, points_expiry: null,
+    annual_fee: '321.00', reward_type: 'points', reward_rate: null, bonus_limit: null, points_expiry: null,
   },
   {
     id: 'bk-int', account_type: 'bank', name: 'High Yield', currency: 'SGD', institution: 'GXS', notes: null,
@@ -162,6 +162,9 @@ beforeEach(() => {
     if (/\/api\/accounts\/[^/]+\/snapshots/.test(url)) {
       return Promise.resolve({ data: { items: [], total: 0 }, status: 200 })
     }
+    if (url.startsWith('/api/entity-preferences')) {
+      return Promise.resolve({ data: { items: [], total: 0 }, status: 200 })
+    }
     return Promise.resolve({ data: { items: accounts, total: accounts.length }, status: 200 })
   })
   vi.spyOn(api, 'post').mockResolvedValue({ data: {}, status: 201 })
@@ -191,10 +194,11 @@ describe('AccountsList', () => {
   })
 
   test('New → the type Dropdown swaps the opening-balance fields in/out', async () => {
-    renderPage()
+    // A multi-subtype route so the Type dropdown is enabled (Story 4.12 restricts + can lock it).
+    renderPage(['bank', 'capital'])
     await screen.findByText('DBS Multiplier')
     fireEvent.click(screen.getByTestId('entity-page-new'))
-    // Default type is bank (ledger-backed) → opening balance shown.
+    // Default type is bank (subtypes[0], ledger-backed) → opening balance shown.
     expect(await screen.findByText('Opening balance')).toBeTruthy()
     // Switch to capital (asset-like) → opening balance hidden.
     fireEvent.click(screen.getByLabelText(/Type/))
@@ -621,11 +625,11 @@ describe('AccountsList', () => {
   })
 
   test('the subtype slot swaps to capital, then to insurance fields', async () => {
-    renderPage(['capital'])
+    // Multi-subtype route so the Type dropdown is enabled and can swap (single-subtype routes lock it).
+    renderPage(['capital', 'insurance'])
     await screen.findByText('Growth Fund')
     fireEvent.click(screen.getByTestId('entity-page-new'))
-    fireEvent.click(await screen.findByLabelText(/Type/))
-    fireEvent.click(screen.getByRole('option', { name: 'Capital' }))
+    // capital is pre-selected (subtypes[0]) → its fields already show.
     expect(await screen.findByLabelText(/Investment type/)).toBeTruthy()
     expect(screen.getByLabelText(/Cost basis/)).toBeTruthy()
     expect(screen.queryByLabelText(/Death cover/)).toBeNull()
@@ -636,11 +640,9 @@ describe('AccountsList', () => {
   })
 
   test('saving a capital POSTs cost_basis as a string and no cross-subtype keys', async () => {
-    renderPage(['capital'])
+    renderPage(['capital']) // single-subtype route → type pre-selected + locked to capital
     await screen.findByText('Growth Fund')
     fireEvent.click(screen.getByTestId('entity-page-new'))
-    fireEvent.click(await screen.findByLabelText(/Type/))
-    fireEvent.click(screen.getByRole('option', { name: 'Capital' }))
     fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Fund' } })
     fireEvent.change(screen.getByLabelText(/Investment type/), { target: { value: 'ETF' } })
     fireEvent.change(screen.getByLabelText(/Cost basis/), { target: { value: '40000' } })
@@ -658,11 +660,9 @@ describe('AccountsList', () => {
   })
 
   test('saving an insurance POSTs coverage decimals as strings, empty optionals as null', async () => {
-    renderPage(['insurance'])
+    renderPage(['insurance']) // single-subtype route → type pre-selected + locked to insurance
     await screen.findByText('Life Policy')
     fireEvent.click(screen.getByTestId('entity-page-new'))
-    fireEvent.click(await screen.findByLabelText(/Type/))
-    fireEvent.click(screen.getByRole('option', { name: 'Insurance' }))
     fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Policy' } })
     fireEvent.click(screen.getByLabelText(/Policy type/))
     fireEvent.click(screen.getByRole('option', { name: 'life' }))
@@ -681,11 +681,9 @@ describe('AccountsList', () => {
   })
 
   test('a negative cost basis blocks Save', async () => {
-    renderPage(['capital'])
+    renderPage(['capital']) // type pre-selected + locked to capital
     await screen.findByText('Growth Fund')
     fireEvent.click(screen.getByTestId('entity-page-new'))
-    fireEvent.click(await screen.findByLabelText(/Type/))
-    fireEvent.click(screen.getByRole('option', { name: 'Capital' }))
     fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Fund' } })
     fireEvent.change(screen.getByLabelText(/Cost basis/), { target: { value: '-5000' } })
     expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
@@ -757,5 +755,231 @@ describe('AccountsList', () => {
       '[data-testid="entity-card"]',
     ) as HTMLElement
     expect(card.textContent).toContain('S$ 12,840.00')
+  })
+
+  // ── Story 4.12: create/edit UX + rewards model + favourite star ──
+
+  test('the Type dropdown is restricted to the route subtypes (no insurance from /accounts)', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    expect(screen.queryByRole('option', { name: 'Insurance' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Capital' })).toBeNull()
+    expect(screen.getByRole('option', { name: 'Bank' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Credit card' })).toBeTruthy()
+  })
+
+  test('a single-subtype route pre-selects + locks the Type (insurance fields show, dropdown disabled)', async () => {
+    renderPage(['insurance'])
+    await screen.findByText('Life Policy')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    // Pre-selected to insurance → its fields show without any selection.
+    expect(await screen.findByLabelText(/Death cover/)).toBeTruthy()
+    // The Type dropdown is locked (disabled) on a single-subtype route.
+    expect((screen.getByLabelText(/Type/) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('a new credit card defaults opening balance to 0; bank stays blank', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    // Default type is bank → opening balance empty.
+    const bankOpening = (await screen.findByPlaceholderText('0.00')) as HTMLInputElement
+    expect(bankOpening.value).toBe('')
+    // Switch to credit card → opening balance defaults to 0.
+    fireEvent.click(screen.getByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    const ccOpening = (await screen.findByPlaceholderText('0.00')) as HTMLInputElement
+    expect(ccOpening.value).toBe('0')
+  })
+
+  test('the reward-amount field adapts to reward_type (cashback % vs points)', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    // No reward field until a reward_type is chosen.
+    expect(screen.queryByLabelText(/Cashback rate/)).toBeNull()
+    expect(screen.queryByLabelText(/Reward points/)).toBeNull()
+    // cashback → the % field; points hidden.
+    fireEvent.click(screen.getByLabelText(/Reward type/))
+    fireEvent.click(screen.getByRole('option', { name: 'cashback' }))
+    expect(await screen.findByLabelText(/Cashback rate/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Reward points/)).toBeNull()
+    // points → the count field; cashback hidden.
+    fireEvent.click(screen.getByLabelText(/Reward type/))
+    fireEvent.click(screen.getByRole('option', { name: 'points' }))
+    expect(await screen.findByLabelText(/Reward points/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Cashback rate/)).toBeNull()
+  })
+
+  test('saving a cashback card POSTs reward_rate and nulls reward_points', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'Cashback Card' } })
+    fireEvent.click(screen.getByLabelText(/Reward type/))
+    fireEvent.click(screen.getByRole('option', { name: 'cashback' }))
+    fireEvent.change(await screen.findByLabelText(/Cashback rate/), { target: { value: '1.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const body = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.reward_type).toBe('cashback')
+    expect(body.reward_rate).toBe('1.5')
+    expect(body.reward_points).toBeNull()
+  })
+
+  test('saving a points card sends reward_points and nulls reward_rate', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'Points Card' } })
+    fireEvent.click(screen.getByLabelText(/Reward type/))
+    fireEvent.click(screen.getByRole('option', { name: 'points' }))
+    fireEvent.change(await screen.findByLabelText(/Reward points/), { target: { value: '5000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const body = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.reward_points).toBe(5000)
+    expect(body.reward_rate).toBeNull()
+  })
+
+  test('an out-of-range cashback rate (≥100) blocks Save', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.click(await screen.findByLabelText(/Type/))
+    fireEvent.click(screen.getByRole('option', { name: 'Credit card' }))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'Bad Rate' } })
+    fireEvent.click(screen.getByLabelText(/Reward type/))
+    fireEvent.click(screen.getByRole('option', { name: 'cashback' }))
+    fireEvent.change(await screen.findByLabelText(/Cashback rate/), { target: { value: '150' } })
+    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('editing a points card to cashback nulls reward_points and PATCHes reward_rate', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('Amex Platinum') // cc1 is reward_type 'points'
+    const ccCard = screen
+      .getAllByTestId('entity-card')
+      .find((c) => c.textContent?.includes('Amex Platinum')) as HTMLElement
+    fireEvent.click(within(ccCard).getByLabelText('Actions'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    // points field prefilled; switch to cashback.
+    expect(screen.getByLabelText(/Reward points/)).toBeTruthy()
+    fireEvent.click(screen.getByLabelText(/Reward type/))
+    fireEvent.click(screen.getByRole('option', { name: 'cashback' }))
+    fireEvent.change(await screen.findByLabelText(/Cashback rate/), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.patch).toHaveBeenCalled())
+    const body = (api.patch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(body.reward_rate).toBe('3')
+    expect(body.reward_points).toBeNull()
+  })
+
+  test('the create-only Current value field shows for asset-like, not bank/credit_card or on edit', async () => {
+    // Capital create → present.
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    expect(await screen.findByLabelText(/Current value/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' })) // close the create modal first
+    // Editing a capital → absent (value history is the detail-view mini-ledger).
+    fireEvent.click(screen.getAllByLabelText('Actions')[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    await screen.findByText('Owners')
+    expect(screen.queryByLabelText(/Current value/)).toBeNull()
+  })
+
+  test('the Current value field is absent for a bank create', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    await screen.findByLabelText(/Name/)
+    expect(screen.queryByLabelText(/Current value/)).toBeNull()
+  })
+
+  test('a capital created with a Current value writes the first snapshot (POST)', async () => {
+    vi.spyOn(api, 'post').mockImplementation((url: string) => {
+      if (url === '/api/accounts') {
+        return Promise.resolve({ data: { id: 'newcap', currency: 'SGD' }, status: 201 })
+      }
+      return Promise.resolve({ data: {}, status: 201 })
+    })
+    renderPage(['capital'])
+    await screen.findByText('Growth Fund')
+    fireEvent.click(screen.getByTestId('entity-page-new'))
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'New Fund' } })
+    fireEvent.change(screen.getByLabelText(/Current value/), { target: { value: '50000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/api/accounts/newcap/snapshots',
+        expect.objectContaining({ value: '50000', currency: 'SGD', source: 'manual' }),
+      ),
+    )
+    // initial_value is never folded into the account create payload.
+    const createBody = (api.post as unknown as { mock: { calls: unknown[][] } }).mock.calls.find(
+      (c) => c[0] === '/api/accounts',
+    )?.[1] as Record<string, unknown>
+    expect('initial_value' in createBody).toBe(false)
+  })
+
+  test('the favourite star toggles → PUTs entity-preferences', async () => {
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('DBS Multiplier')
+    const stars = screen.getAllByTestId('entity-card-favourite')
+    fireEvent.click(stars[0])
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith(
+        '/api/entity-preferences',
+        expect.objectContaining({ entity_type: 'accounts', is_favourite: true }),
+      ),
+    )
+  })
+
+  test('favourited accounts sort to the front of the grid', async () => {
+    vi.spyOn(api, 'get').mockImplementation((url: string) => {
+      if (url.startsWith('/api/currencies')) {
+        return Promise.resolve({ data: { items: currencies, total: currencies.length }, status: 200 })
+      }
+      if (url.startsWith('/api/household/members')) {
+        return Promise.resolve({ data: { items: members, total: members.length }, status: 200 })
+      }
+      if (/\/api\/accounts\/[^/]+\/snapshots/.test(url)) {
+        return Promise.resolve({ data: { items: [], total: 0 }, status: 200 })
+      }
+      if (url.startsWith('/api/entity-preferences')) {
+        return Promise.resolve({
+          data: {
+            items: [{ entity_type: 'accounts', entity_id: 'cc1', is_favourite: true, sort_order: null }],
+            total: 1,
+          },
+          status: 200,
+        })
+      }
+      return Promise.resolve({ data: { items: accounts, total: accounts.length }, status: 200 })
+    })
+    renderPage(['bank', 'credit_card'])
+    await screen.findByText('Amex Platinum')
+    // cc1 (Amex) is favourited → first card, ahead of the default-first DBS Multiplier.
+    const firstCard = screen.getAllByTestId('entity-card')[0]
+    expect(firstCard.textContent).toContain('Amex Platinum')
   })
 })

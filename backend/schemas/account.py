@@ -82,6 +82,9 @@ class CreditCardCreate(_AccountCreateShared):
     reward_points: int | None = None
     annual_fee: Decimal | None = None
     reward_type: Literal["points", "cashback", "miles", "none"] | None = None
+    # cashback % (Story 4.12); points/miles use reward_points. Bounded to the Numeric(6,4) column
+    # (≥0, ≤2 int digits, ≤4 dp) so an out-of-range rate is a clean 422, not a Postgres overflow.
+    reward_rate: Decimal | None = Field(default=None, ge=0, max_digits=6, decimal_places=4)
     bonus_limit: Decimal | None = None
     points_expiry: date | None = None
 
@@ -158,6 +161,8 @@ class AccountUpdate(BaseModel):
     reward_points: int | None = None
     annual_fee: Decimal | None = None
     reward_type: Literal["points", "cashback", "miles", "none"] | None = None
+    # cashback % (Story 4.12) — bounded to the Numeric(6,4) column.
+    reward_rate: Decimal | None = Field(default=None, ge=0, max_digits=6, decimal_places=4)
     bonus_limit: Decimal | None = None
     points_expiry: date | None = None
     # Capital
@@ -245,6 +250,7 @@ class CreditCardResponse(_AccountResponseShared):
     reward_points: int | None
     annual_fee: Decimal | None
     reward_type: str | None
+    reward_rate: Decimal | None
     bonus_limit: Decimal | None
     points_expiry: date | None
 
