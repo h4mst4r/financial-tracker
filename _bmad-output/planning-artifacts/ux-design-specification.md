@@ -1,22 +1,6 @@
-# UX Systems — the systematized spec (becomes `ux-design-specification.md`)
+# Financial Tracker — UX Design Specification
 
-> Systems, not values. Layers: **Foundation** (this doc) → Primitives → Composites → Pages. Each system = **inputs · derivation · law**; everything borrowed, never authored at a call site. Build gaps → [FRONTEND-AUDIT.md](FRONTEND-AUDIT.md), run after merge. Foundation locked pending review.
-
-> **The body is self-contained** — bare `§0–§18` always = a **foundation system in this doc**; no body text points at the legacy `ux-design-specification.md`. The **only** ux-spec references live in **"Merge actions"** below (a delete-on-merge block).
->
-> **After this document is complete:** apply **Merge actions** → merge UX-SYSTEMS → `ux-design-specification.md` (delete the Merge-actions block) → regenerate epics (+4 behavior stories: Pressable/Field/Popover/Menu) → implement Part II tests → run `FRONTEND-AUDIT.md`.
-
-## Merge actions — the ONLY ux-spec references (apply each, then delete this whole section)
-
-> The body absorbs the legacy spec's content; these are the **deltas** where the systematized version *changes* the legacy text. Apply to the absorbed content at merge, then delete — after which nothing references the old spec.
-
-| # | legacy ux-spec location | action |
-|---|---|---|
-| **M1** | §8.6 (BulkActionBar) | **Strike** "open an `EntityModal` with a single `Dropdown` chooser; the modal's confirm is the single confirmation." The bar owns the picker **inline** (ratified). |
-| **M2** | §9 (CustomRangePicker) | The "band rounded at start/end + each week-wrap" is **wrong** (the bible never rendered it). Replace with: **continuous `selection-fill` band, solid `accent-secondary` endpoint cells.** |
-| **M3** | §9 (Viewer) | **Brush-to-zoom → DEFERRED post-MVP.** The FilterBar presets drive the range and rescale the axes; mark deferred. |
-| **M4** | §0.9a (StatusBadge registry) | **Drop the `Presence` domain** — no backing feature in MVP. |
-| **M5** | §5.3 (import/export) | **Now absorbed as `ImportFlow`** (Layer 3) — and *extended* beyond the legacy spec: **account-snapshot import** (2nd target) + **`Table` virtualization** for tens-of-thousands of rows. On merge, **replace** §5.3's import/export paragraphs with the `ImportFlow` spec. |
+> **Systems, not values.** Layers: **Foundation** → Primitives → Composites → Pages. Each system = **inputs · derivation · law**; everything borrowed, never authored at a call site. `§0–§18` = a foundation system **in this doc**; page modules are referenced **by name**. Build-conformance gaps (build ↔ this spec) live in [FRONTEND-AUDIT.md](FRONTEND-AUDIT.md).
 
 ---
 
@@ -439,7 +423,7 @@ Skins below compose these — `Button` = Pressable + label/icon · `Modal` = Pop
 |---|---|---|
 | **Dropdown** ✓ | Field + Popover + Menu + option rows; **`searchable` variant** = a filter Input at the panel top (roving ↑↓ · ↵ select · Esc close) for long lists | open trigger = `accent-secondary` (§6) · option hover = `surface-active` (§1) · §13 list-slide |
 | **DatePicker** ✓ | Field (**typeable input** — a typed date parses) + Popover + **MonthGrid** | picked day = solid `accent-secondary` (§6) · §13 month-slide |
-| **CustomRangePicker** ○ | Field + Popover + **MonthGrid** (two-month desktop / one-month `< md`) + preset rail (Last 7/30 · This/Last month · This quarter · This/last year · YTD · All time · Custom) | **selection = a continuous `selection-fill` band** over the in-range days (wrapping onto each week row); the **start & end dates are solid `accent-secondary` endpoint cells** (§6); selected preset = `bg-accent-active`/`text-accent` · §13 month-slide *(Merge action M2)* |
+| **CustomRangePicker** ○ | Field + Popover + **MonthGrid** (two-month desktop / one-month `< md`) + preset rail (Last 7/30 · This/Last month · This quarter · This/last year · YTD · All time · Custom) | **selection = a continuous `selection-fill` band** over the in-range days (wrapping onto each week row); the **start & end dates are solid `accent-secondary` endpoint cells** (§6); selected preset = `bg-accent-active`/`text-accent` · §13 month-slide |
 | **GridPicker** base ○ | Field + Popover + grid of Pressable cells; **selected cell = `accent-secondary` ring (§6)** | — |
 | **ColourPicker** ✓ | GridPicker + **header tabs `Palette │ Hex`** (Hex pane = OS colour-wheel input + hex field) + Swatch cells + vivid Toggle | §5 colour |
 | **EmojiIconPicker** ✓ | GridPicker + **header tabs `Emojis │ Icons` + search Input + Recent row** + GlyphView cells | §12 scroll |
@@ -501,7 +485,7 @@ The **only** new primitive the Viewer needs; everything else it composes already
 
 - **Renders:** line · bar · area · pie/donut · stacked · **calendar-heatmap** (reuses the shared `MonthGrid`; month nav lives in the control-bar `FilterBar`, differs only in cell render; a **recurring-`Icon`** — lucide `Repeat` via the §11 `Icon` wrapper, **not** a raw `↻` glyph or emoji — on days backed by *known* recurring data, never inferred; date-dimensioned only). The **`table` chart-type is not a Chart** — it's the `Table` AggregationTable profile in the render-slot.
   - **Heatmap colour scale (sequential, single-hue):** each day's metric value maps to a **lightness position on the one `accent-secondary` ramp** (low → high) — a *sequential* scale, **not** the `chart-1..8` categorical set (one metric = one hue, intensity carries magnitude). Domain = **min→max of the metric across the *visible* days** (the range the FilterBar set), so the scale re-normalizes when the range changes; **zero / no-data days are untinted** (`surface`, not the ramp floor) so "no activity" reads distinctly from "low activity". Any in-cell label takes the §0.11 contrast pole (dark text flips on high-intensity cells). Under **immersive** the `accent-secondary` ramp remaps to the theme ramp (§3), so the heatmap reskins with everything else.
-- **Interaction:** **hover/focus a point → `Tooltip`** (value · date/bucket · series name; multi-series lists each) + **crosshair + ring/halo marker**; **click pins + drills** → narrows `VisualizationFilter` · **legend toggle** (each `Badge` key is a `Pressable`) · **compare-overlay** (add a series — reuses `MultiSelectField`, capped 2–4 persons / 2–8 categories). *(**Brush-to-zoom is DEFERRED post-MVP** — the date range is driven entirely by the `FilterBar` presets + Custom, and **the axes rescale when a preset is chosen**; that is the MVP behaviour. (**Merge action M3**.))*
+- **Interaction:** **hover/focus a point → `Tooltip`** (value · date/bucket · series name; multi-series lists each) + **crosshair + ring/halo marker**; **click pins + drills** → narrows `VisualizationFilter` · **legend toggle** (each `Badge` key is a `Pressable`) · **compare-overlay** (add a series — reuses `MultiSelectField`, capped 2–4 persons / 2–8 categories). *(**Brush-to-zoom is DEFERRED post-MVP** — the date range is driven entirely by the `FilterBar` presets + Custom, and **the axes rescale when a preset is chosen**; that is the MVP behaviour.)*
 - **Range & axes:** the date **range** is set by the `FilterBar` presets (Last 7 / 30 days · This/Last month · This quarter · This/last year · YTD · All time · **Custom** → `CustomRangePicker`) + group-by (day/month/quarter/year) — **not** by zoom. The value axis **auto-fits** ("nice" bounds, not forced to 0) with a **"Start at zero"** toggle (default on for bars, off for tight trends); **tick density adapts to the active range** (set by the presets — brush-zoom deferred).
 - **Colour (the engine, §3/§5/§0):** a series colour is **deterministic, never picked at the call site** — an **entity-backed series** (a category / account / person / currency) takes **that entity's own §5 identity colour** (so the chart matches its card/chip); an **abstract series** with no identity takes `chart-1..8` (§0) **by stable index** (series order, tie-broken by a stable `entity_id`/key hash; collisions nudge to the next free slot — the same §3 collision rule). **Anti-rainbow:** a single series is **one** colour; colour encodes meaning only with > 1 series. Under **immersive** all of the above remap to the theme's `tint_ramp` (§3).
 - **Flat — no faux-3D:** no extrusion / tilt / ground-shadow; bars get only a `radius-sm` top cap; heights/angles geometrically true.
@@ -513,7 +497,7 @@ The **only** new primitive the Viewer needs; everything else it composes already
 
 > A **composite** = an arrangement of primitives. **It adds no new system or token** — if one needs something new, that's a gap in Layers 0–2. `made of` = the parts it arranges; `inherits` = foundation systems it adds (named to the token). **Pages live in Layer 4.** **✓ built · ○ specced.**
 >
-> **Reference scheme:** `§0–§18` always = a **foundation system in *this* doc**; a page **module** (Transactions, Budgets, Settings…) is referenced **by name, never `§`**. The body is self-contained — see **Merge actions** (top) for the only legacy-spec deltas.
+> **Reference scheme:** `§0–§18` always = a **foundation system in *this* doc**; a page **module** (Transactions, Budgets, Settings…) is referenced **by name, never `§`**.
 
 ## Composites
 
@@ -557,7 +541,7 @@ The **only** new primitive the Viewer needs; everything else it composes already
 - **decisions** → `ConfirmationDialog` (incl. destructive + the optional safeguard-input).
 - **read / detail** → `EntityDetailView` (Account = first consumer).
 - **search** → `CommandPalette`.
-- **single-target bulk picks** (Edit-type / Move / Merge) → an **inline picker in `BulkActionBar`** (destructive → `ConfirmationDialog`), **not** a modal. The bar owns the picker **inline**; there is **no** "bulk chooser" modal. *(Ratified — **Merge action M1**.)*
+- **single-target bulk picks** (Edit-type / Move / Merge) → an **inline picker in `BulkActionBar`** (destructive → `ConfirmationDialog`), **not** a modal. The bar owns the picker **inline**; there is **no** "bulk chooser" modal.
 - **inline-editable tabular *rows*** → edited in the `Table` (ledger · snapshot **history** · recurring occurrences). The modal owns **create** + the **non-column rich fields** (shared/GST flags · tags · status/reconciliation · FX breakdown · duplicate-link). *(Asymmetry by design: snapshot **add** is a modal — date + value together; snapshot **history** corrections are inline.)*
 
 **Layout / responsive:** centered **two-column** default · **Drawer variant** for a genuinely tall form (Insurance · Formula editor) — a *form-length* choice, **not** a breakpoint · **bottom-sheet `< md`** (§17).
@@ -757,7 +741,7 @@ A `Drawer` (tall) in **Settings → Data**. **One flow, two targets** — a lead
 `AppShell` + `Table` (RecordLedger, expandable rows). Toolbar: name + info (next due) + **+New recurring**. `FilterBar`: search · source (all/explicit/account-linked) · missed indicator.
 - Row: expand chevron · glyph `Badge` (entity, icon-only) · name + **frequency + next occurrence** sub-line · amount(mono) · **source `Badge`** (Explicit / Asset-/Capital-/Insurance-linked) · ⋮.
 - **Occurrence history** (expand): timeline + `StatusBadge` (upcoming/processed/skipped/missed/failed); processed → clickable linked transaction (cross-module); missed = red. Per-occurrence: Skip · Trigger now · Process now.
-- **Create/edit** `EntityModal` + **`RecurringDateInput`** = a single **`Field` text `Input`** for `frequency_text` → parses the 9 patterns → a **`DateValue` "Next: {date}" preview** below confirms before save; no-match = **blocking** `Field` error (§6), Save disabled, nothing stored. **No structured Dropdown/SegmentedControl builder** — the free-text parser is the whole interface (settled — was functional-only in the legacy spec).
+- **Create/edit** `EntityModal` + **`RecurringDateInput`** = a single **`Field` text `Input`** for `frequency_text` → parses the 9 patterns → a **`DateValue` "Next: {date}" preview** below confirms before save; no-match = **blocking** `Field` error (§6), Save disabled, nothing stored. **No structured Dropdown/SegmentedControl builder** — the free-text parser is the whole interface.
 
 ### Budgets
 `AppShell` + `EntityPage` (cards + `MiniChart`). Toolbar: name + info (over/near) + **+New budget**. `FilterBar`: period (Monthly/Yearly) · scope (Household/person) · period selector.
@@ -790,4 +774,4 @@ A **full-height route** mounting the `Viewer` composite — fully detailed in La
 
 ## Known gaps
 
-1. **✅ Page-module detail — fully absorbed** (Layer 4 "Page detail"): every page's screen spec (columns · fields · flows · responsive) is in-doc, composing only existing systems. **No flags remain** — the import/export module is now the **`ImportFlow`** composite (Layer 3, tracked as Merge action **M5**), `RecurringDateInput` is settled, and the Alerts page + alert registry are specced. The doc is spec-complete.
+1. **Page-module detail** (Layer 4 "Page detail"): every page's screen spec (columns · fields · flows · responsive) is in-doc, composing only existing systems. The import/export module is the **`ImportFlow`** composite (Layer 3); `RecurringDateInput` is settled; the Alerts page + alert registry are specced. **No open flags.**

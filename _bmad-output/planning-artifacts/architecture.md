@@ -1408,14 +1408,16 @@ pin a scale-to-zero Cloud Run instance (§1.1). Alerts are produced by the daily
 **pulled** by the client. Read/ack API (household-scoped, RFC 7807 like every route):
 
 ```
-GET   /api/alerts?status=unread|all   -> { items: [Alert], total, unread_count }
+GET   /api/alerts?status=unread|all&type=<alert_type>&cursor=&limit=  -> { items: [Alert], next_cursor, total, unread_count }
 POST  /api/alerts/{id}/read           -> sets read_at
 POST  /api/alerts/{id}/dismiss        -> sets dismissed_at
 POST  /api/alerts/read-all            -> bulk mark read
 ```
 
 The frontend `AlertPanel` (UX §7) polls `GET /api/alerts` via TanStack Query with a **60 s
-`refetchInterval` + `refetchOnWindowFocus`** (§6.3); the unread badge reads `unread_count`.
+`refetchInterval` + `refetchOnWindowFocus`** (§6.3); the unread badge reads `unread_count`. The
+**`/alerts` history page** (UX Alerts) adds the `type` filter + **keyset pagination** (above) and
+date-groups the returned page client-side; the panel itself just takes the first page.
 Staleness of up to one interval is acceptable — alerts are advisory, never transactional.
 
 **`audit_logs`** (Base, **no FKs by design**) — `id, household_id(UUID), actor_id(UUID),
@@ -1761,6 +1763,22 @@ DELETE /api/<es>/{id}       -> 204
 seeders; route-ordering (static before parameterized); permission via `require_role` or
 per-row ownership check.
 
+**List pagination (keyset) — required for large collections.** The generic `GET /api/<es>` accepts
+`?cursor=<opaque>&limit=<int, default 100, max 200>&sort=<col[:dir]>&<filters>` and returns
+`{items, next_cursor (null at end), total}`. The cursor is **keyset** — the encoded `(sort_key, id)`
+of the last row, **not** offset (stable under concurrent inserts; O(1) deep pages). Sorting and
+filtering are **server-side** — a `FilterBar`/`VisualizationFilter` (§4.12) serialises straight to
+these params. The **events ledger** (tens of thousands of rows) and **alerts** MUST paginate and are
+**never** returned unbounded; this is exactly what the frontend `Table` `virtualized`/`infinite`
+mode (UX §"Data — Table") consumes via TanStack `useInfiniteQuery`. Small fixed collections
+(currencies, members, FX providers) may ignore the cursor and return the full set.
+
+**Toolbar summaries.** A module's live info-text (Accounts net · Transactions out/in totals ·
+Budgets over/near counts) is a **server aggregate**, *not* derivable from `total` — list responses
+for those modules carry a small `summary` object computed in the same query (or the toolbar reads
+the relevant `/api/visualizations/*` endpoint, §4.12). It is **never** client-summed over a
+paginated (and therefore incomplete) page.
+
 **Tags follow the same template** (`/api/tags`, full CRUD incl. hard-delete — its only referrer is
 `transaction_tags`, whose rows are removed with it, so a tag is **always** deletable). The
 **transaction** create/edit payload carries `tag_ids: UUID[]` (the service replaces the
@@ -1901,6 +1919,44 @@ them):
 All of the above is surfaced through **one reusable Viewer** (UX §9), not per-module chart
 screens; every contextual chart (`MiniSparkline`, Ledger Visualize, dashboard widget) is an entry
 point that opens that Viewer seeded with its `VisualizationFilter`.
+
+### 4.12a Import / Export & Backup API (FR-IE-001..006, FR-SYS-008)
+
+The backend of the `ImportFlow` (UX Settings → Data). **CSV import is two-step and two-target**
+(`target ∈ {events, account_snapshots}` — the v1 ledger and the per-account value history).
+
+```
+POST /api/import/preview   (multipart: file + target)
+                           -> { batch_id, rows:[{ idx, parsed, mapping_suggestion, matched|needs_pick }],
+                                conflicts:[{ idx, incoming, existing }] }     # parse only — NO writes
+POST /api/import/confirm   { target, batch_id,
+                             rows:[{ idx, included, mapping, resolution }],
+                             inline_creates:[ <Category|Account>Create ] }
+                           -> { created, skipped, merged }                    # the ONLY writer
+GET  /api/export/events?<VisualizationFilter>   -> text/csv stream
+                           (Content-Disposition: financial-tracker-export-{YYYY-MM-DD}.csv)
+POST /api/backup           (admin/owner)         -> 202   # manual "Back up now"
+```
+
+- **Preview** accepts ≤10 MB `text/csv` UTF-8; the header row is matched **case-insensitively** to
+  the FR-IE-005 layout. Per row it returns a **mapping suggestion** — events → category by name
+  (`Parent > Child` ⇒ subcategory); account_snapshots → account by name — flagged `matched` /
+  `needs_pick` (FR-IE-003). It computes **conflicts** (FR-IE-004) and returns a `batch_id`. **It
+  writes nothing.**
+- **Confirm** is the sole writer and runs in **one transaction** (§4.3). Per row: `included`, the
+  chosen `mapping`, and a conflict `resolution ∈ {keep_newer, keep_existing, keep_both}` —
+  `keep_newer` **overwrites the existing record in place** (same id, audited), `keep_existing`
+  skips, `keep_both` inserts a new row. **Conflict key:** events = the §4.10 duplicate-detection
+  tuple; account_snapshots = `(account_id, snapshot_date)`. **`inline_creates`** (categories /
+  accounts) are committed **first** so later rows reference them — **never silent** (FR-IE-005).
+  Every written row carries `actor_id` = the importing person + its **own audit row** (§4.7);
+  events `source = csv_import`, snapshots `snapshot_source = import` (§3.6). Budget/debt recompute
+  **once** after the batch.
+- **Export** streams the ledger under the active `VisualizationFilter` (§4.12) — household-scoped,
+  respecting the Individual-mode member filter (FR-IE-006).
+- **Backup** — the manual trigger reuses the scheduled `/jobs/backup` GCS path (§5.5/§5.6, 90-day
+  retention); **admin/owner only** (FR-SYS-008). Status (last-run timestamp + success/in-progress/
+  failed) reads from the backup record the job writes.
 
 ### 4.13 Naming conventions
 

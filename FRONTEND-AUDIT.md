@@ -1,8 +1,8 @@
 # Frontend Audit — build vs. spec
 
 > **Build is on hold.** This file collects discrepancies between the current build and the
-> foundation systems (`UX-SYSTEMS.md`). **Run only AFTER** that doc merges into the UX spec —
-> we are not reworking the build now. Ordered by blast radius within each table.
+> foundation systems in the UX spec (`_bmad-output/planning-artifacts/ux-design-specification.md`).
+> We are not reworking the build now. Ordered by blast radius within each table.
 
 ## Findings (conformance defects found while writing the foundation)
 
@@ -17,14 +17,14 @@
 | F7 | `index.css:22-25,506-509,546-549,586-589,624-627` | `border-accent`/`-focus`/`-error` are alias anchors re-pasted as literals in every theme — should be `var()` refs |
 | F8 | `index.css` ↔ `theme/palettes.ts` | Immersive `tint`/`tint_ramp` lives in TS, not CSS — split source of truth; verify they agree |
 | F9 | `index.css:274-276` | Compact toggle dims invented ("no bible exemplar") — value not locked in spec |
-| F10 | auth modals (`App.tsx` gate — Pending/Conflict/NewHousehold/Invite) | Hand-rolled on raw `<Modal>`; recompose onto `ConfirmationDialog` (Pending/Conflict) / `EntityModal` (NewHousehold/Invite) per UX-SYSTEMS "Dissolved — auth/onboarding modals" |
+| F10 | auth modals (`App.tsx` gate — Pending/Conflict/NewHousehold/Invite) | Hand-rolled on raw `<Modal>`; recompose onto `ConfirmationDialog` (Pending/Conflict) / `EntityModal` (NewHousehold/Invite) per the spec's "Dissolved — auth/onboarding modals" |
 | F11 | `BulkActionBar` (Categories/ledger consumers) | Verify single-target picks (Edit-type/Move/Merge) use the **inline picker in the bar** (ratified §8.6 override), **not** the dissolved `EntityModal + single Dropdown` chooser. Conform if it still opens a chooser-modal |
 | F12 | §18 data states | `stale` state **unimplemented** and **`AlertBanner` unbuilt** — build them (FX rates + FX-derived aggregates are the only `stale` surfaces) |
 | F13 | Button / Input / … (built primitives) | The **extract-the-behavior refactor** — recompose already-built interactive primitives onto headless `Pressable`/`Field`/`Popover`/`Menu` (L0). On hold until the spec merges + the 4 behavior stories land |
 
 ## Foundation-merge reconciliation deltas
 
-> Build↔new-spec gaps surfaced while writing `UX-SYSTEMS.md`. Action only after the spec merge.
+> Build↔spec gaps surfaced while writing the systematized spec. Action only after the spec is adopted.
 
 | # | Delta | Where | Why / maps to |
 |---|---|---|---|
