@@ -13,25 +13,21 @@ import { describe, it, expect } from 'vitest'
 // backdrop, shadows) — those are syntax-dependent and re-skin via var() references; and entity-*
 // colours, which use a different model in each file (the bible shows 5 account-type defaults; the
 // app ships 3 generic role-4 defaults + per-instance data colours).
+//
+// Story 5F.2 (P5-lockstep): the structural ladder, text emphasis, and shadows are now DERIVED in
+// index.css (`color-mix(in oklab, ramp-lo, ramp-hi, f%)` / `calc()` from each theme's authored §0
+// extremes), so they are no longer plain-hex tokens and join the "not compared" set above — the bible
+// still renders the old hand-picked hexes (within ΔE tolerance of the derived values; the §0.11 floor is
+// guarded by ramp-derivation.test.ts). What stays pinned: the per-theme ACCENT/SEMANTIC/CHART anchors
+// (still authored hex in both). The full bible retirement (a direct spec↔index token-parity test) is
+// 5f-8 (audit H1–H3).
 
 const INDEX_CSS = join(__dirname, '..', 'src', 'index.css')
 const BIBLE_CSS = join(__dirname, '..', '..', '_bmad-output', 'planning-artifacts', 'design-bible', 'bible.css')
 
-/** bible token name (after `--`) → index token name (after `--color-`). */
+/** bible token name (after `--`) → index token name (after `--color-`). Structural ladder + text are
+ *  DERIVED in index.css as of 5F.2 (no plain hex) → omitted here (not comparable; see header). */
 const NAME_MAP: Record<string, string> = {
-  bg: 'bg',
-  'bg-secondary': 'bg-secondary',
-  surface: 'surface',
-  'surface-raised': 'surface-raised',
-  'surface-hover': 'surface-hover',
-  'surface-active': 'surface-active',
-  'surface-overlay': 'surface-overlay',
-  border: 'border',
-  'border-light': 'border-light',
-  'border-strong': 'border-strong',
-  text: 'text-primary',
-  'text-secondary': 'text-secondary',
-  'text-muted': 'text-muted',
   'accent-primary': 'accent-primary',
   'accent-secondary': 'accent-secondary',
   success: 'success',
@@ -70,9 +66,10 @@ describe('design bible ↔ index.css token parity', () => {
   const indexCss = readFileSync(INDEX_CSS, 'utf8')
   const bibleCss = readFileSync(BIBLE_CSS, 'utf8')
 
-  it('self-test: extractors find the base-dark surface token in both files', () => {
-    expect(hexTokens(block(indexCss, 'base-dark-index'), 'color-').get('surface')).toBe('#16162a')
-    expect(hexTokens(block(bibleCss, 'base-dark-bible'), '').get('surface')).toBe('#16162a')
+  it('self-test: extractors find the base-dark accent-primary token in both files', () => {
+    // (surface is now a derived color-mix, no longer plain hex — pin a still-authored anchor instead.)
+    expect(hexTokens(block(indexCss, 'base-dark-index'), 'color-').get('accent-primary')).toBe('#6366f1')
+    expect(hexTokens(block(bibleCss, 'base-dark-bible'), '').get('accent-primary')).toBe('#6366f1')
   })
 
   for (const theme of THEMES) {
@@ -138,17 +135,15 @@ describe('design bible ↔ index.css — radius / elevation / font parity', () =
     expect(primaryFamily(idx.get('mono'))).toBe(primaryFamily(bib.get('mono')))
   })
 
-  it('elevation (--shadow-*) agrees per theme, where index pins it', () => {
-    const mismatches: Record<string, { bible?: string; index?: string }> = {}
-    for (const theme of THEMES) {
-      const idx = rawTokens(block(indexCss, theme === 'base-dark' ? 'base-dark-index' : theme), 'shadow-')
-      const bib = rawTokens(block(bibleCss, theme === 'base-dark' ? 'base-dark-bible' : theme), 'shadow-')
-      for (const key of ['sm', 'md', 'lg', 'xl']) {
-        const iv = idx.get(key)
-        if (iv === undefined) continue // index inherits base-dark for this theme
-        if (iv !== bib.get(key)) mismatches[`${theme}/${key}`] = { bible: bib.get(key), index: iv }
-      }
-    }
-    expect(mismatches).toEqual({})
+  // Shadows are DERIVED in index.css as of 5F.2 (each step's alpha lerps the per-theme opacity extremes
+  // `--shadow-lo`/`--shadow-hi` via calc(); offset/blur geometry is global) — no longer the raw rgba()
+  // values the bible renders, so a literal per-step comparison is obsolete (joins the "not compared"
+  // derived set). Instead, pin that the global offset/blur geometry the bible shares is intact.
+  it('shadow geometry (offset/blur) is intact in index.css (the per-theme opacity is derived, §9/B15)', () => {
+    const idx = rawTokens(block(indexCss, 'base-dark-index'), 'shadow-')
+    expect(idx.get('sm')).toContain('0 1px 2px')
+    expect(idx.get('md')).toContain('0 2px 8px')
+    expect(idx.get('lg')).toContain('0 8px 24px')
+    expect(idx.get('xl')).toContain('0 16px 48px')
   })
 })

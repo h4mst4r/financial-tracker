@@ -1,28 +1,63 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Colour · structural (UX §0.1, frontend.md §1.1–§1.3) ── */
-  --color-bg:              #09090f;
-  --color-bg-secondary:    #0f0f1a;
-  --color-surface:         #16162a;
-  --color-surface-raised:  #1f1f38;
-  --color-surface-hover:   #262643;
-  --color-surface-active:  #2f2f50;
-  --color-surface-overlay: #2a2a48;
-  --color-border:          #2b2b44;
-  --color-border-light:    #3b3b58;
-  --color-border-strong:   #50506e;
-  --color-text-primary:    #e8e8f0;
-  --color-text-secondary:  #a2a2bd;
-  --color-text-muted:      #6a6a85;
+  /* ══ Colour · structural ladder — DERIVED, not authored (UX §0a/§1, B12/D2/D3). ════════════════════
+     Author the extremes, derive the stops (§0a). A theme is `--ramp-lo`/`--ramp-hi` (the two OKLCH
+     ladder endpoints, one constant hue) + the profile fractions below; every structural tone is
+     `color-mix(in oklab, lo, hi, f%)` written ONCE here. Because lo/hi share a hue, the oklab mix IS
+     `OKLCH(lerp(L), lerp(C), hue)` (§1). [data-theme] blocks set only `--ramp-lo`/`--ramp-hi` (+ light/
+     immersive fraction overrides). Base · Dark is the @theme default; its inputs live here. ══════════ */
+  /* base-dark ladder endpoints (OKLCH L 14.3→44.4, C .034→.053, H 283). Chroma is authored a touch
+     higher than the bg's own near-neutral chroma so the mid-tones don't desaturate toward grey — a
+     straight lo→hi chroma line through a near-neutral bg under-saturates the surfaces (the originals
+     carried a mid-ramp chroma bump). */
+  --ramp-lo: #080817;
+  --ramp-hi: #4f5070;
+  /* Structural profile fractions — DARK profile default (shared; brown inherits; light/immersive override
+     in their blocks). Each = the stop's position on the ladder (§1 profile table; surface-active tuned to
+     today's hand-brightened selected tone). */
+  --f-bg:             0%;
+  --f-bg-secondary:  12%;
+  --f-surface:       22%;
+  --f-surface-raised:37%;
+  --f-surface-hover: 45%;
+  --f-surface-overlay:52%;
+  --f-border:        52%;
+  --f-surface-active:57%;
+  --f-border-light:  73%;
+  --f-border-strong:100%;
+  --color-bg:              color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-bg));
+  --color-bg-secondary:    color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-bg-secondary));
+  --color-surface:         color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface));
+  --color-surface-raised:  color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface-raised));
+  --color-surface-hover:   color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface-hover));
+  --color-surface-active:  color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface-active));
+  --color-surface-overlay: color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface-overlay));
+  --color-border:          color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-border));
+  --color-border-light:    color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-border-light));
+  --color-border-strong:   color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-border-strong));
+  /* ── Text emphasis — DERIVED (UX §2, D2): text = mix(pole, surface, e%). `pole` = the surface's
+     contrast winner (white on dark themes, near-black on light); muted is solved to the §0.11 4.5:1 floor
+     (today's hand-picked muted was sub-floor — this darkens it to legibility-by-construction). One formula;
+     [data-theme] sets only `--text-pole` + the per-profile emphasis fractions. (DARK defaults here.) */
+  --text-pole: #ffffff;
+  --e-text-primary:  10%;
+  --e-text-secondary:39%;
+  --e-text-muted:    46%;  /* solved to the §0.11 4.5:1 floor in OKLab — clears it on base-dark + brown */
+  --color-text-primary:   color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-primary));
+  --color-text-secondary: color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-secondary));
+  --color-text-muted:     color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-muted));
 
   /* ── Colour · role-2 interaction/feedback (UX §0.9, frontend.md §1.3–§1.6) ── */
   --color-accent-primary:   #6366f1;
   --color-accent-secondary: #06b6d4;
-  --color-border-accent:    #06b6d4;
-  --color-border-focus:     #6366f1;
   --color-error:            #ef4444;
-  --color-border-error:     #ef4444;
+  /* F7: border-accent/-focus/-error are aliases of the accent/error anchors — authored ONCE here as
+     var() refs (was re-pasted as a literal in every theme block). Each theme sets only its accent/error
+     anchors; these re-resolve. */
+  --color-border-accent:    var(--color-accent-secondary);
+  --color-border-focus:     var(--color-accent-primary);
+  --color-border-error:     var(--color-error);
   /* Derived interaction-fill tokens — written ONCE (SCP 2026-06-22 colour-system-contract): each is a
      color-mix of the theme's own accent/error anchor + a per-theme alpha INPUT (--alpha-*). A [data-theme]
      block sets anchors (+ any alpha that differs) only — never a re-pasted color-mix (the failure signal).
@@ -108,11 +143,16 @@
   --radius-2xl: 24px;
   --radius-full: 9999px;
 
-  /* ── Elevation/shadow · dark default (UX §0.6) ── */
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.30);
-  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.35);
-  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.45);
-  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.55);
+  /* ── Elevation/shadow — DERIVED (UX §9, B15): author the opacity extremes [lo, hi] + tint; the 4 steps
+     lerp their alpha. Offset/blur geometry is global (shared); only the per-theme opacity + tint vary.
+     A [data-theme] sets only `--shadow-lo`/`--shadow-hi`/`--shadow-rgb`. (Dark defaults here.) ── */
+  --shadow-lo:  0.30;
+  --shadow-hi:  0.55;
+  --shadow-rgb: 0 0 0;
+  --shadow-sm: 0 1px 2px   rgb(var(--shadow-rgb) / calc(var(--shadow-lo) + (var(--shadow-hi) - var(--shadow-lo)) * 0));
+  --shadow-md: 0 2px 8px   rgb(var(--shadow-rgb) / calc(var(--shadow-lo) + (var(--shadow-hi) - var(--shadow-lo)) * 0.2));
+  --shadow-lg: 0 8px 24px  rgb(var(--shadow-rgb) / calc(var(--shadow-lo) + (var(--shadow-hi) - var(--shadow-lo)) * 0.6));
+  --shadow-xl: 0 16px 48px rgb(var(--shadow-rgb) / calc(var(--shadow-lo) + (var(--shadow-hi) - var(--shadow-lo)) * 1));
 
   /* ── Breakpoints (UX §0.10; xs is the addition over Tailwind defaults) ── */
   --breakpoint-xs:  480px;
@@ -490,169 +530,146 @@
    Base · Dark is the @theme default (no block needed). 'base' resolves to base-light/-dark
    via prefers-color-scheme in useAppearance. (UX §0.2, AC1) ═══ */
 
-/* ── Base · Light (immersive: no) ── */
+/* LIGHT-profile fractions — authored ONCE, shared by base-light + retro (§1; light: surfaces pin to
+   white, borders descend — elevation via shadow). Overrides the @theme dark-profile defaults. */
+[data-theme="base-light"],
+[data-theme="retro"] {
+  --f-bg: 91%;
+  --f-bg-secondary: 81%;
+  --f-surface: 100%;
+  --f-surface-raised: 100%;
+  --f-surface-hover: 86%;
+  --f-surface-overlay: 100%;
+  --f-border: 62%;
+  --f-surface-active: 72.5%;
+  --f-border-light: 35%;
+  --f-border-strong: 0%;
+  /* Text: pole = near-black; emphasis fractions tuned (muted solved to the 4.5:1 floor). */
+  --text-pole: #0a0a0a;
+  --e-text-primary: 11%;
+  --e-text-secondary: 34%;
+  --e-text-muted: 42%;
+}
+
+/* ── Base · Light (immersive: no) — §0 inputs only; ladder/text/shadow derive (@theme). ── */
 [data-theme="base-light"] {
-  --color-bg:              #f7f7fb;
-  --color-bg-secondary:    #eeeef5;
-  --color-surface:         #ffffff;
-  --color-surface-raised:  #ffffff;
-  --color-surface-hover:   #f2f2f8;
-  --color-surface-active:  #e9e9f2;
-  --color-surface-overlay: #ffffff;
-  --color-border:          #e2e2ec;
-  --color-border-light:    #cfcfdd;
-  --color-border-strong:   #b4b4c8;
-  --color-text-primary:    #1a1a2e;
-  --color-text-secondary:  #565676;
-  --color-text-muted:      #8a8aa0;
+  --ramp-lo: #b4b4c8;   /* ladder dark end (border-strong) */
+  --ramp-hi: #ffffff;   /* ladder light end (surface) */
+  --shadow-lo: 0.06;
+  --shadow-hi: 0.16;
+  --shadow-rgb: 0 0 0;
   --color-accent-primary:   #4f46e5;
   --color-accent-secondary: #0891b2;
-  --color-border-accent:    #0891b2;
-  --color-border-focus:     #4f46e5;
   --color-error:            #dc2626;
-  --color-border-error:     #dc2626;
-  /* Light surfaces need lower tint alphas than the dark default (the color-mix formula lives in @theme). */
+  /* border-accent/-focus/-error inherit the @theme var() refs (F7). */
   --alpha-accent-subtle:  12%;
   --alpha-control-active: 16%;
   --alpha-accent-active:  16%;
   --alpha-primary-muted:  14%;
   --alpha-ring-glow:      30%;
-  --color-backdrop:          rgb(0 0 0 / 0.4);
+  --color-backdrop:        rgb(0 0 0 / 0.4);
   --color-on-primary:      #ffffff;
   --color-success:       #16a34a;
   --color-warning:       #d97706;
   --color-info:          #2563eb;
   --color-chart-1: #4f46e5; --color-chart-2: #0891b2; --color-chart-3: #16a34a; --color-chart-4: #d97706;
   --color-chart-5: #db2777; --color-chart-6: #7c3aed; --color-chart-7: #0d9488; --color-chart-8: #e11d48;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.12);
-  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.16);
 }
 
 /* ── Retro · 70s (immersive: no) ── */
 [data-theme="retro"] {
-  --color-bg:              #f4ecd8;
-  --color-bg-secondary:    #ece0c4;
-  --color-surface:         #fffaf0;
-  --color-surface-raised:  #fffaf0;
-  --color-surface-hover:   #f6eeda;
-  --color-surface-active:  #ece0c6;
-  --color-surface-overlay: #fffaf0;
-  --color-border:          #ddccae;
-  --color-border-light:    #cbb892;
-  --color-border-strong:   #b09b6f;
-  --color-text-primary:    #3a2a18;
-  --color-text-secondary:  #6e573c;
-  --color-text-muted:      #9c8a6b;
+  /* §0 inputs only (light-profile fractions + text-pole shared above). */
+  --ramp-lo: #b09b6f;   /* warm ladder dark end */
+  --ramp-hi: #fffae7;   /* warm cream light end (chroma raised .014→.025 so mid borders stay warm, not grey) */
+  /* Warm text pole so the §2-derived text keeps the theme's warmth (not neutral grey). */
+  --text-pole: #2a1d10;
+  --shadow-lo: 0.10;
+  --shadow-hi: 0.22;
+  --shadow-rgb: 58 42 24;
   --color-accent-primary:   #d2691e;
   --color-accent-secondary: #2a9d8f;
-  --color-border-accent:    #2a9d8f;
-  --color-border-focus:     #d2691e;
   --color-error:            #c0392b;
-  --color-border-error:     #c0392b;
-  /* Light surfaces need lower tint alphas than the dark default (the color-mix formula lives in @theme). */
   --alpha-accent-subtle:  14%;
   --alpha-control-active: 18%;
   --alpha-accent-active:  18%;
   --alpha-primary-muted:  16%;
   --alpha-ring-glow:      30%;
-  --color-backdrop:          rgb(58 42 24 / 0.45);
+  --color-backdrop:        rgb(58 42 24 / 0.45);
   --color-on-primary:      #3a2a18; /* dark text on chocolate-orange accent for contrast (white fails AA) */
   --color-success:       #5b8c3a;
   --color-warning:       #cc8a2c;
   --color-info:          #3d7b8c;
   --color-chart-1: #d2691e; --color-chart-2: #2a9d8f; --color-chart-3: #c0392b; --color-chart-4: #e9c46a;
   --color-chart-5: #8a5a44; --color-chart-6: #6a994e; --color-chart-7: #bc6c25; --color-chart-8: #457b9d;
-  --shadow-sm: 0 1px 2px rgb(58 42 24 / 0.10);
-  --shadow-md: 0 2px 8px rgb(58 42 24 / 0.12);
-  --shadow-lg: 0 8px 24px rgb(58 42 24 / 0.18);
-  --shadow-xl: 0 16px 48px rgb(58 42 24 / 0.22);
 }
 
 /* ── Muted Brown (immersive: no) ── */
 [data-theme="brown"] {
-  --color-bg:              #1f1a16;
-  --color-bg-secondary:    #261f19;
-  --color-surface:         #2b241d;
-  --color-surface-raised:  #352c24;
-  --color-surface-hover:   #3d332a;
-  --color-surface-active:  #473a30;
-  --color-surface-overlay: #40342b;
-  --color-border:          #463a2f;
-  --color-border-light:    #5a4b3d;
-  --color-border-strong:   #6f5d4b;
-  --color-text-primary:    #e8ddd0;
-  --color-text-secondary:  #b8a690;
-  --color-text-muted:      #8a7a66;
+  /* §0 inputs only — dark-profile fractions + white pole inherit from @theme; ladder is warm-brown. */
+  --ramp-lo: #1f1a16;   /* darkest (bg) */
+  --ramp-hi: #705d4c;   /* lightest (border-strong) */
+  /* Warm-white pole so the §2-derived text keeps brown's warm cast (not neutral). */
+  --text-pole: #fdf6ee;
+  --shadow-lo: 0.30;
+  --shadow-hi: 0.55;
+  --shadow-rgb: 0 0 0;
   --color-accent-primary:   #b08968;
   --color-accent-secondary: #9c6644;
-  --color-border-accent:    #9c6644;
-  --color-border-focus:     #b08968;
   --color-error:            #d9534f;
-  --color-border-error:     #d9534f;
-  /* Interaction-fill + *-muted tokens inherit the @theme formula (brown's alphas == the dark defaults). */
-  --color-backdrop:          rgb(0 0 0 / 0.7);
+  /* brown's alphas == the dark defaults (inherit the @theme interaction-fill formula). */
+  --color-backdrop:        rgb(0 0 0 / 0.7);
   --color-on-primary:      #1f1a16; /* dark text on warm-brown accent for contrast */
   --color-success:       #7fa05a;
   --color-warning:       #d99a4e;
   --color-info:          #6a9bb0;
   --color-chart-1: #b08968; --color-chart-2: #9c6644; --color-chart-3: #7fa05a; --color-chart-4: #d9a441;
   --color-chart-5: #c97b5a; --color-chart-6: #6a9bb0; --color-chart-7: #a8855f; --color-chart-8: #cf6b4a;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.30);
-  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.35);
-  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.45);
-  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.55);
 }
 
 /* ── Game Boy · DMG (immersive: YES — entity/semantic/interaction collapse to the 4-green ramp.
    The JS remap (theme/colour.ts) handles per-instance entity hex; these vars fix the chrome +
    semantics to ramp slots. Monochrome can't carry red/green meaning — icons/shape do, §0.2. ── */
 [data-theme="gameboy"] {
-  --color-bg:              #0f380f;
-  --color-bg-secondary:    #143d14;
-  --color-surface:         #306230;
-  --color-surface-raised:  #386b38;
-  --color-surface-hover:   #3f733f;
-  --color-surface-active:  #487f48;
-  --color-surface-overlay: #386b38;
-  --color-border:          #1d491d;
-  --color-border-light:    #265626;
-  --color-border-strong:   #306230;
-  --color-text-primary:    #9bbc0f;
-  --color-text-secondary:  #8bac0f;
-  --color-text-muted:      #6f8f2a;
-  --color-accent-primary:   #8bac0f;   /* light ramp slot — focus/primary */
-  --color-accent-secondary: #306230;   /* dark ramp slot — selection/accent FILL (== surface, so unusable as text) */
-  --color-accent-fg:        #9bbc0f;   /* accent FOREGROUND (text-accent) — lightest slot, legible on the green surfaces */
-  --color-border-accent:    #9bbc0f;   /* open-picker border — lightest, so it reads on green surface */
-  --color-border-focus:     #8bac0f;
-  --color-error:            #9bbc0f;   /* meaning via icon; lightest = attention */
-  --color-border-error:     #9bbc0f;
-  /* Interaction-fill + *-muted inherit the @theme formula (gameboy's alphas == the dark defaults). Two
-     stay bespoke below — they are anchor-level legibility decisions, not the re-pasted-derivation failure signal. */
-  /* Active picker tab: the standard subtle accent tint reads as a *lighter glow* on a dark surface, but
-     in Game Boy the accent-secondary tint is darker-than-surface and muddy — so the active tab is a
-     *recessed dark well* (blend toward the page bg), clearly darker than the panel (~1.6:1) with crisp
-     accent-fg text (~4.6:1, AA). The fill metaphor flips per palette; legibility wins. */
-  --color-accent-active:  color-mix(in oklab, var(--color-bg) 65%, var(--color-surface-raised));
-  /* ring-glow-accent pinned to the lightest slot — the @theme default uses accent-secondary (== surface here) and would vanish. */
-  --color-ring-glow-accent:  color-mix(in oklab, #9bbc0f 35%, transparent);
-  --color-backdrop:          rgb(15 56 15 / 0.7);
-  --color-on-primary:      #0f380f; /* dark text on light-green accent for contrast */
-  --color-success:       #9bbc0f;   /* lightest = income/success (§0.2) */
+  /* IMMERSIVE — a discrete 4-green ramp (not a smooth lerp; borders sit darker than surface). Own
+     fractions reproduce the DMG chrome from the two ramp endpoints. Text: lightest slot is the pole; the
+     green ramp is ~3:1 by nature so muted is FLOOR-EXEMPT (icon/shape carries meaning). Accents F5 fix
+     (audit D5): accent-secondary was #306230 == surface, forcing two bespoke mixes + a raw literal; moved
+     to the lightest slot (distinct from surface AND accent-primary) so the @theme accent-active/ring-glow/
+     border formulas resolve, eliminating F5, F6 and the F7 re-pastes. */
+  --ramp-lo: #0d380f;
+  --ramp-hi: #487f48;
+  --f-bg: 0%;
+  --f-bg-secondary: 8%;
+  --f-border: 25%;
+  --f-border-light: 43%;
+  --f-surface: 60%;
+  --f-border-strong: 60%;
+  --f-surface-raised: 73%;
+  --f-surface-overlay: 73%;
+  --f-surface-hover: 84%;
+  --f-surface-active: 100%;
+  --text-pole: #9bbc0f;
+  --e-text-primary: 0%;
+  --e-text-secondary: 17%;
+  --e-text-muted: 49%;
+  --shadow-lo: 0.40;
+  --shadow-hi: 0.60;
+  --shadow-rgb: 0 0 0;
+  --color-accent-primary:   #8bac0f;
+  --color-accent-secondary: #9bbc0f;
+  --color-accent-fg:        #9bbc0f;
+  --color-error:            #9bbc0f;
+  --color-backdrop:        rgb(15 56 15 / 0.7);
+  --color-on-primary:      #0f380f;
+  --color-success:       #9bbc0f;
   --color-warning:       #8bac0f;
-  --color-info:          #8bac0f;   /* was #306230 == --color-surface → info-toned chips/badges invisible; legible ramp slot (meaning via icon §0.2) */
-  --color-entity-account:  #8bac0f;   /* fallbacks → ramp slots (per-instance remapped in JS) */
+  --color-info:          #8bac0f;
+  --color-entity-account:  #8bac0f;
   --color-entity-category: #306230;
   --color-entity-currency: #9bbc0f;
-  --color-favourite:       #9bbc0f;   /* immersive remap of the gold star → ramp slot */
+  --color-favourite:       #9bbc0f;
   --color-chart-1: #9bbc0f; --color-chart-2: #7a9a1a; --color-chart-3: #5e8226; --color-chart-4: #306230;
   --color-chart-5: #214c21; --color-chart-6: #8bac0f; --color-chart-7: #486f24; --color-chart-8: #143d14;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.40);
-  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.45);
-  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.55);
-  --shadow-xl: 0 16px 48px rgb(0 0 0 / 0.60);
 }
 
 /* ── Font swap — only --font-sans changes; --font-mono (money) is invariant (AC3) ── */

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   format,
   parseISO,
@@ -17,6 +17,8 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Icon } from './Icon'
 import { formatDateDisplay } from '../../lib/date'
+import { usePopover } from './behaviors/usePopover'
+import { useField } from './behaviors/useField'
 
 // DatePicker (UX §7/§8.2, bible §7 .datecal). A picker trigger (frontend.md §2.1) opening a calendar
 // popover anchored below it (§0.10). Value in/out is an ISO `YYYY-MM-DD` string (storage/transport);
@@ -52,19 +54,18 @@ export function DatePicker({
   // The month grid + keyboard cursor; seeded from the selected date or today.
   const [cursor, setCursor] = useState<Date>(selected ?? new Date())
 
-  const handleOutsideClick = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-  }, [])
+  // Field behavior: the controlled value contract (disabled-gated change).
+  const field = useField<string>({ onChange, disabled })
 
+  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+calendar wrapper.
+  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+
+  // Seed the month grid + keyboard cursor to the selected date (or today) each time it opens.
   useEffect(() => {
-    if (open) {
-      setCursor(selected ?? new Date())
-      document.addEventListener('mousedown', handleOutsideClick)
-    }
-    return () => document.removeEventListener('mousedown', handleOutsideClick)
+    if (open) setCursor(selected ?? new Date())
     // `selected` is derived from `value`; depending on `value` avoids a new Date() identity loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, value, handleOutsideClick])
+  }, [open, value])
 
   // Move DOM focus to the cursor day whenever the calendar is open and the cursor changes.
   useEffect(() => {
@@ -77,7 +78,7 @@ export function DatePicker({
   })
 
   const pick = (day: Date) => {
-    onChange(format(day, ISO))
+    field.change(format(day, ISO))
     setOpen(false)
   }
 

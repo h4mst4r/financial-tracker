@@ -7,6 +7,7 @@ NOT handled here — this module never touches `base_currency` or `currencies`.
 """
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
@@ -61,6 +62,22 @@ async def update_household(
         before=before,
         after={"name": household.name, "timezone": household.timezone},
     )
+    return household
+
+
+async def complete_setup(db: AsyncSession, household_id: str) -> Household:
+    """Mark first-login setup dismissed (§2.14.C) — stamps `setup_completed_at` so `isFirstLogin`
+    flips false and the New Household modal never re-fires on reload.
+
+    Idempotent: a second call (re-skip, double-submit) leaves the original timestamp untouched. Not
+    audited — it is a UI-dismissal signal, not a household data change.
+    """
+    household = (
+        await db.execute(select(Household).where(Household.id == household_id))
+    ).scalar_one()
+    if household.setup_completed_at is None:
+        household.setup_completed_at = datetime.now(UTC)
+        await db.flush()
     return household
 
 

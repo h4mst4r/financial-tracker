@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { Icon } from './Icon'
+import { usePopover } from './behaviors/usePopover'
+import { useMenu } from './behaviors/useMenu'
+import { useField } from './behaviors/useField'
 
 interface DropdownOption {
   value: string
@@ -25,13 +28,15 @@ interface DropdownProps {
 
 export function Dropdown({ value, options, onChange, placeholder, disabled, id, searchable }: DropdownProps) {
   const [open, setOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   // Roving-focus targets: one ref per option so ArrowUp/Down can move DOM focus (WAI-ARIA listbox).
   // Searchable mode keeps DOM focus in the filter input instead and tracks the highlight via
   // aria-activedescendant, so these refs are only used when NOT searchable.
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  // Field behavior: the controlled value contract (disabled-gated change).
+  const field = useField<string>({ onChange, disabled })
 
   const selectedOption = options.find((o) => o.value === value)
 
@@ -47,28 +52,21 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
 
   const baseId = id ?? 'dropdown'
 
-  // Close on outside click
-  const handleOutsideClick = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) {
-      setOpen(false)
-    }
-  }, [])
+  const selectOption = (optValue: string) => {
+    field.change(optValue)
+    setOpen(false)
+  }
 
-  // Close on Escape
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') setOpen(false)
-  }, [])
+  // Menu behavior: roving keyboard (↑↓ Enter Esc) over the visible options. The skin decides how the
+  // active row is reflected (DOM focus when not searchable; aria-activedescendant when searchable).
+  const { activeIndex, setActiveIndex, onKeyDown } = useMenu({
+    itemCount: visibleOptions.length,
+    onActivate: (i) => selectOption(visibleOptions[i].value),
+    onClose: () => setOpen(false),
+  })
 
-  useEffect(() => {
-    if (open) {
-      document.addEventListener('mousedown', handleOutsideClick)
-      document.addEventListener('keydown', handleKeyDown)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, handleOutsideClick, handleKeyDown])
+  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
+  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
 
   // While open, keep the active option reachable: the non-searchable list moves DOM focus (roving
   // tabIndex); the searchable list keeps focus in the filter input and just scrolls the highlight
@@ -89,7 +87,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
       setActiveIndex(visibleOptions.length === 0 ? -1 : 0)
     }
     prevQueryRef.current = query
-  }, [searchable, open, query, visibleOptions.length])
+  }, [searchable, open, query, visibleOptions.length, setActiveIndex])
 
   // Clear the filter when the panel closes so reopening starts fresh.
   useEffect(() => {
@@ -103,26 +101,6 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
       // no options there is nothing to focus, so leave the active index unset (-1).
       const selectedIndex = options.findIndex((o) => o.value === value)
       setActiveIndex(options.length === 0 ? -1 : selectedIndex >= 0 ? selectedIndex : 0)
-    }
-  }
-
-  const handleOptionClick = (optValue: string) => {
-    onChange(optValue)
-    setOpen(false)
-  }
-
-  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setActiveIndex((i) => Math.min(i + 1, visibleOptions.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setActiveIndex((i) => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < visibleOptions.length) {
-      e.preventDefault()
-      handleOptionClick(visibleOptions[activeIndex].value)
-    } else if (e.key === 'Escape') {
-      setOpen(false)
     }
   }
 
@@ -159,7 +137,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
         <div
           role="listbox"
           className="absolute z-dropdown mt-1 w-full bg-surface-raised border border-border rounded-md shadow-lg"
-          onKeyDown={handlePanelKeyDown}
+          onKeyDown={onKeyDown}
         >
           {searchable && (
             <input
@@ -191,7 +169,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
                     ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}
                     ${opt.value === value ? 'text-primary' : 'text-text-primary'}
                   `}
-                  onClick={() => handleOptionClick(opt.value)}
+                  onClick={() => selectOption(opt.value)}
                 >
                   <span>{opt.label}</span>
                   {opt.value === value && <Icon icon={Check} size={16} className="text-primary" />}

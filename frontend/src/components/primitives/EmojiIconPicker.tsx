@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   House, Car, ShoppingCart, Utensils, Plane, Heart, Gift, Briefcase,
@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { Icon } from './Icon'
 import { api } from '../../api/client'
+import { usePopover } from './behaviors/usePopover'
+import { useField } from './behaviors/useField'
 
 // EmojiIconPicker (UX §8.3). The glyph picker for entities with a custom glyph (categories only).
 // A picker trigger opening a panel with two tabs — Emojis | Icons — a search field, a glyph grid,
@@ -174,26 +176,14 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['recent-glyphs'] }),
   })
 
-  const handleOutsideClick = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-  }, [])
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') setOpen(false)
-  }, [])
+  // Field behavior: the controlled value contract (disabled-gated change).
+  const field = useField<string | null>({ onChange, disabled })
 
-  useEffect(() => {
-    if (open) {
-      document.addEventListener('mousedown', handleOutsideClick)
-      document.addEventListener('keydown', handleKeyDown)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, handleOutsideClick, handleKeyDown])
+  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
+  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
 
   const pick = (glyph: string) => {
-    onChange(glyph)
+    field.change(glyph)
     pushRecent.mutate(glyph)
     setOpen(false)
   }
@@ -310,7 +300,7 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
             <button
               type="button"
               onClick={() => {
-                onChange(null)
+                field.change(null)
                 setOpen(false)
               }}
               className="flex items-center gap-1 mt-sm pt-sm border-t border-border w-full text-xs text-text-secondary hover:text-text-primary focus:outline-none"

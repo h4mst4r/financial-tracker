@@ -5,6 +5,13 @@ interface TooltipProps {
   children: ReactNode
 }
 
+// Tooltip is the deliberate CSS-primary exception to the Popover behavior (frontend.md §2.8, L0). It
+// owns NO portal, focus-trap, or outside-click dismiss — its anchor/position/elevation are expressed in
+// CSS (absolute placement + z-tooltip) and it shows/hides via `group-hover`/`group-focus-within`, never
+// JS open-state. So there is nothing for `usePopover` to absorb; its only JS is the Escape force-blur
+// below. Routing it through the open/close Popover model would *add* JS hover state — a regression — so
+// it stays CSS-driven by design.
+
 // Flip the tooltip below the trigger when it sits within this many px of the top viewport edge
 // (≈ topbar height) — otherwise the default above-placement would be clipped off-screen.
 const TOOLTIP_TOP_FLIP_THRESHOLD = 56

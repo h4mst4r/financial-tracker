@@ -43,7 +43,6 @@ SESSION_TTL = timedelta(minutes=30)
 OAUTH_STATE_TTL = timedelta(minutes=10)
 DEV_SESSION_TTL = timedelta(hours=24)
 DEV_USER_AGENT = "dev-bypass"
-FIRST_LOGIN_WINDOW = timedelta(minutes=2)  # isFirstLogin window after household creation (§2.14.C)
 
 # Dev-bypass synthetic identity (ARCH §2.5) — `google_sub` is spec-fixed; the email is locked here.
 DEV_GOOGLE_SUB = "dev-bypass-user-001"
@@ -540,10 +539,13 @@ async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> d
     # login-time HouseholdConflictDialog (ARCH §2.8a conflict-push, Story 2.6c).
     pending_invitation = await _build_pending_invitation(db, person)
 
+    # First-login modal gate (§2.14.C): an owner whose household setup is not yet dismissed. Backed
+    # by the persistent `setup_completed_at` (stamped by Save/Skip) so it survives reloads, rather
+    # than a wall-clock window that re-fired the modal on every reload within 2 min of creation.
     is_first_login = (
         person.role == "owner"
         and household is not None
-        and (datetime.now(UTC) - as_utc(household.created_at)) < FIRST_LOGIN_WINDOW
+        and household.setup_completed_at is None
     )
 
     return {

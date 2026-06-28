@@ -87,6 +87,21 @@ async def patch_household(
     return auth_service.household_payload(household)
 
 
+@router.post("/household/complete-setup")
+async def complete_household_setup(
+    person: Person = Depends(_require_owner),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Dismiss the first-login New Household modal (Save or Skip); return the §2.14.C household.
+
+    Stamps `setup_completed_at` so `isFirstLogin` stays false across reloads (ARCH §2.14.C). Owner
+    only (the modal only shows to owners); idempotent. The PATCH (name/timezone) is a separate call.
+    """
+    household = await household_service.complete_setup(db, household_id)
+    return auth_service.household_payload(household)
+
+
 @router.post("/household/base-currency")
 async def change_base_currency(
     data: BaseCurrencyUpdate,

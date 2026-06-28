@@ -693,7 +693,10 @@ Dev sessions use a 24-hour expiry and are exempt from step 7.
   "csrfToken": "str",           // the session synchronizer token (§2.4)
   "pendingInvitation": null,    // else: { token, householdId, householdName,
                                 //         invitedByDisplayName, invitedEmail, expiresAt, status }
-  "isFirstLogin": false         // true iff role==owner AND household.created_at within last 2 min
+  "isFirstLogin": false         // true iff role==owner AND household.setup_completed_at IS NULL
+                                //   (stamped when the owner dismisses the New Household modal via
+                                //    Save or Skip → POST /api/household/complete-setup; persists so
+                                //    the modal does not re-fire on reload)
 }
 ```
 

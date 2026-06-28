@@ -27,27 +27,43 @@ export function NewHouseholdModal() {
   const [name, setName] = useState(household?.name ?? '')
   const [timezone, setTimezone] = useState(household?.timezone ?? 'Asia/Singapore')
 
+  // Save persists name/timezone then stamps setup_completed_at; Skip only stamps it. Both flip
+  // `isFirstLogin` false server-side (`POST /api/household/complete-setup`) so a reload doesn't
+  // re-open the modal — `dismissFirstLogin` alone is session-local and would not survive a refresh.
   const save = useMutation({
-    mutationFn: async () => (await api.patch<Household>('/api/household', { name, timezone })).data,
+    mutationFn: async () => {
+      await api.patch<Household>('/api/household', { name, timezone })
+      return (await api.post<Household>('/api/household/complete-setup')).data
+    },
     onSuccess: (updated) => {
       setHousehold(updated)
       dismissFirstLogin()
     },
   })
 
+  const skip = useMutation({
+    mutationFn: async () => (await api.post<Household>('/api/household/complete-setup')).data,
+    onSuccess: (updated) => {
+      setHousehold(updated)
+      dismissFirstLogin()
+    },
+  })
+
+  const pending = save.isPending || skip.isPending
+
   if (!isFirstLogin) return null
 
   return (
     <Modal
       open
-      onClose={dismissFirstLogin}
+      onClose={() => skip.mutate()}
       title="Set up your household"
       footer={
         <>
-          <Button variant="ghost" onClick={dismissFirstLogin} disabled={save.isPending}>
+          <Button variant="ghost" onClick={() => skip.mutate()} disabled={pending}>
             Skip
           </Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button onClick={() => save.mutate()} disabled={pending}>
             Save
           </Button>
         </>

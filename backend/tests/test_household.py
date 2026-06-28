@@ -284,6 +284,74 @@ async def test_patch_household_null_household_401(monkeypatch):
         await engine.dispose()
 
 
+# ── First-login setup dismissal (§2.14.C) ──
+
+
+async def test_complete_setup_stamps_and_flips_first_login(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_owner_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # Fresh owner household → setup not yet dismissed.
+        assert client.get("/auth/me").json()["isFirstLogin"] is True
+
+        resp = client.post("/api/household/complete-setup")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "householdId": hh_id,
+            "name": "Acme Household",
+            "baseCurrency": "SGD",
+            "timezone": "Asia/Singapore",
+        }
+
+        async with factory() as db:
+            hh = await db.get(Household, hh_id)
+            assert hh.setup_completed_at is not None
+
+        # Survives a fresh /auth/me (the reload path) — the bug this fixes.
+        assert client.get("/auth/me").json()["isFirstLogin"] is False
+    finally:
+        await engine.dispose()
+
+
+async def test_complete_setup_idempotent(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_owner_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        assert client.post("/api/household/complete-setup").status_code == 200
+        async with factory() as db:
+            first_stamp = (await db.get(Household, hh_id)).setup_completed_at
+
+        # A second call (re-skip / double-submit) must not move the timestamp.
+        assert client.post("/api/household/complete-setup").status_code == 200
+        async with factory() as db:
+            assert (await db.get(Household, hh_id)).setup_completed_at == first_stamp
+    finally:
+        await engine.dispose()
+
+
+async def test_complete_setup_non_owner_403(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _hh = await _seed_owner_household(factory, role="member")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        resp = client.post("/api/household/complete-setup")
+        assert resp.status_code == 403
+        assert resp.json()["type"] == "forbidden"
+    finally:
+        await engine.dispose()
+
+
 # ── Members / Invitations lists (Story 2.5) ──
 
 

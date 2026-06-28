@@ -33,6 +33,11 @@ class Household(Base):
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    # First-login setup gate (§2.14.C): NULL until the owner dismisses the New Household modal
+    # (Save or Skip). Persisted so `isFirstLogin` survives reloads — not a wall-clock window.
+    setup_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Person(BaseEntity):

@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
 import { Icon } from './Icon'
+import { useField } from './behaviors/useField'
 
 interface CheckboxProps {
   checked: boolean
@@ -12,13 +13,15 @@ interface CheckboxProps {
 }
 
 export function Checkbox({ checked, onChange, disabled, id, label, 'aria-label': ariaLabel }: CheckboxProps) {
+  // Field behavior: the controlled value contract (disabled-gated change).
+  const field = useField<boolean>({ onChange, disabled })
   return (
     <label className="flex items-center gap-2 cursor-pointer">
       <input
         type="checkbox"
         className="sr-only peer focus-visible:outline-none"
         checked={checked}
-        onChange={(e) => { if (!disabled) onChange(e.target.checked); }}
+        onChange={(e) => field.change(e.target.checked)}
         disabled={disabled}
         id={id}
         aria-label={ariaLabel}

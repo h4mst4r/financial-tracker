@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Toggle } from './Toggle'
+import { usePopover } from './behaviors/usePopover'
+import { useField } from './behaviors/useField'
 
 // ColourPicker (UX §8.2). A picker trigger (frontend.md §2.1) opening a panel with two tabs —
 // Palette | Hex — plus a per-instance **vivid** toggle. The selected colour is a hex string
@@ -41,28 +43,20 @@ export function ColourPicker({
   const [hexDraft, setHexDraft] = useState(value)
   const ref = useRef<HTMLDivElement>(null)
 
-  const handleOutsideClick = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-  }, [])
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') setOpen(false)
-  }, [])
+  // Field behavior: the controlled value contract (disabled-gated change).
+  const field = useField<string>({ onChange, disabled })
 
+  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
+  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+
+  // Seed the hex draft from the live value each time the panel opens.
   useEffect(() => {
-    if (open) {
-      setHexDraft(value)
-      document.addEventListener('mousedown', handleOutsideClick)
-      document.addEventListener('keydown', handleKeyDown)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, value, handleOutsideClick, handleKeyDown])
+    if (open) setHexDraft(value)
+  }, [open, value])
 
   const commitHex = (raw: string) => {
     setHexDraft(raw)
-    if (HEX_RE.test(raw)) onChange(raw)
+    if (HEX_RE.test(raw)) field.change(raw)
   }
 
   const tabClass = (isActive: boolean) =>
@@ -128,7 +122,7 @@ export function ColourPicker({
                   key={hex}
                   type="button"
                   aria-label={hex}
-                  onClick={() => onChange(hex)}
+                  onClick={() => field.change(hex)}
                   style={{ backgroundColor: hex }}
                   className={`size-6 rounded-full transition-transform hover:scale-110 focus:outline-none ${
                     value.toLowerCase() === hex

@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Icon } from './Icon'
+import { Portal } from './behaviors/Portal'
+import { usePopover } from './behaviors/usePopover'
 
 interface ModalProps {
   open: boolean
@@ -42,17 +43,9 @@ export function Modal({
   framePoled = false,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const previousFocus = useRef<HTMLElement | null>(null)
   // Where the most recent press started — so a drag that begins inside the panel (e.g. selecting text
   // in an input) and releases on the backdrop does NOT count as a backdrop dismissal.
   const mouseDownOnBackdrop = useRef(false)
-  // Read the latest onClose/dismissible from refs inside the open-scoped effect, so a parent re-render
-  // (e.g. typing into a child input, which hands us a fresh onClose closure) does NOT re-run the
-  // focus/scroll-lock effect and yank focus back to the panel mid-type.
-  const onCloseRef = useRef(onClose)
-  const dismissibleRef = useRef(dismissible)
-  onCloseRef.current = onClose
-  dismissibleRef.current = dismissible
   const titleId = useId()
   // Drives the scale+fade entrance (§0.7): mount at scale-95/opacity-0, then flip to final next frame.
   // duration-base carries --motion-factor, so reduce-motion collapses this to instant.
@@ -67,55 +60,19 @@ export function Modal({
     return () => cancelAnimationFrame(raf)
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    // Store currently focused element & lock body scroll
-    previousFocus.current = document.activeElement as HTMLElement
-    const originalOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
-    // Focus trap: move focus into panel
-    const timer = setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 50)
-
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissibleRef.current) onCloseRef.current()
-      // Focus trap within panel
-      if (e.key === 'Tab') {
-        const el = panelRef.current
-        if (!el) return
-        // Exclude disabled/hidden controls so Tab never lands on a dead element. Filter at the
-        // selector level (:not([disabled]):not([hidden])) + drop aria-hidden — NOT via offsetParent,
-        // which jsdom always reports null, breaking the trap in tests.
-        const focusable = Array.from(
-          el.querySelectorAll<HTMLElement>(
-            'button:not([disabled]):not([hidden]), [href]:not([hidden]), input:not([disabled]):not([hidden]), select:not([disabled]):not([hidden]), textarea:not([disabled]):not([hidden]), [tabindex]:not([tabindex="-1"]):not([hidden])'
-          )
-        ).filter((n) => n.getAttribute('aria-hidden') !== 'true')
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault()
-            last?.focus()
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault()
-            first?.focus()
-          }
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKey)
-      document.body.style.overflow = originalOverflow
-      // Restore focus
-      previousFocus.current?.focus()
-    }
-  }, [open])
+  // The modal-tier Popover behavior: focus-trap + scroll-lock + focus-return + Escape (gated on
+  // `dismissible`). Outside-click is OFF here — the backdrop dismissal is handled below with the
+  // press-started-on-backdrop drag guard, which a generic outside-click can't express.
+  usePopover({
+    open,
+    onClose,
+    panelRef,
+    dismissOnOutsideClick: false,
+    dismissOnEscape: dismissible,
+    trapFocus: true,
+    lockScroll: true,
+    returnFocus: true,
+  })
 
   const handleBackdropMouseDown = (e: React.MouseEvent) => {
     mouseDownOnBackdrop.current = e.target === e.currentTarget
@@ -132,7 +89,8 @@ export function Modal({
 
   if (!open) return null
 
-  return createPortal(
+  return (
+    <Portal>
     <div
       className="fixed inset-0 z-modal flex items-center justify-center p-md"
       onMouseDown={handleBackdropMouseDown}
@@ -190,7 +148,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>,
-    document.body
+    </div>
+    </Portal>
   )
 }

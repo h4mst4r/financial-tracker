@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
+import { Portal } from './behaviors/Portal'
+import { usePopover } from './behaviors/usePopover'
+import { useMenu } from './behaviors/useMenu'
+import { usePressable } from './behaviors/usePressable'
 
 export interface ContextMenuItem {
   label: string
@@ -31,19 +34,49 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
   const [position, setPosition] = useState({ x: -9999, y: -9999 }) // offscreen until positioned (no flash)
   const triggerRef = useRef<HTMLElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const focusIndexRef = useRef(-1)
 
-  const handleOpen = (e: React.MouseEvent | React.KeyboardEvent) => {
-    e.stopPropagation()
-    setOpen(true)
-    focusIndexRef.current = -1
-  }
+  // Navigable rows exclude dividers AND disabled entries (disabled is a dead stop, never focused/activated).
+  const actionableItems = items.filter(
+    (i): i is ContextMenuItem => !('divider' in i) && !i.disabled,
+  )
 
   const handleClose = () => {
     setOpen(false)
     setPosition({ x: -9999, y: -9999 })
-    focusIndexRef.current = -1
+    setActiveIndex(-1)
   }
+
+  // Menu behavior: roving keyboard (↑↓ Enter Esc) over the actionable rows. Enter activates; Escape
+  // closes and returns focus to the trigger (outside-click does NOT refocus — Popover handles that path).
+  const { activeIndex, setActiveIndex, onKeyDown } = useMenu({
+    itemCount: actionableItems.length,
+    onActivate: (index) => {
+      actionableItems[index].onClick()
+      handleClose()
+    },
+    onClose: () => {
+      handleClose()
+      triggerRef.current?.focus()
+    },
+  })
+
+  // Popover behavior: outside-click dismissal (containment = the portalled menu). Escape is owned by the
+  // Menu (above) so it can refocus the trigger — turn it off here to avoid a double close.
+  usePopover({
+    open,
+    onClose: handleClose,
+    containRef: menuRef,
+    dismissOnEscape: false,
+  })
+
+  const triggerProps = usePressable({
+    host: true,
+    onPress: (e) => {
+      e?.stopPropagation()
+      setOpen(true)
+      setActiveIndex(-1)
+    },
+  })
 
   // Anchor the menu to the trigger: dropped below it, RIGHT-aligned (kebab convention),
   // re-read from the live trigger rect (not the click event) and clamped/flipped to the viewport.
@@ -70,126 +103,85 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
     }
   }, [open])
 
-  // Close on outside click
+  // Roving focus: move DOM focus to the actionable menuitem at the active index. The selector excludes
+  // disabled buttons so its order matches `actionableItems` (the index space the Menu navigates).
   useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        handleClose()
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  // Close on Esc, keyboard navigation
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      // Navigable items exclude dividers AND disabled entries (disabled is a dead stop, never focused/activated).
-      const actionableItems = items.filter(
-        (i) => !('divider' in i) && !(i as ContextMenuItem).disabled
-      )
-      if (e.key === 'Escape') {
-        handleClose()
-        triggerRef.current?.focus()
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        focusIndexRef.current = Math.min(focusIndexRef.current + 1, actionableItems.length - 1)
-        focusCurrentItem()
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        focusIndexRef.current = Math.max(focusIndexRef.current - 1, 0)
-        focusCurrentItem()
-      } else if (e.key === 'Enter' && focusIndexRef.current >= 0) {
-        e.preventDefault()
-        const item = actionableItems[focusIndexRef.current]
-        if (item && !('divider' in item)) {
-          item.onClick()
-          handleClose()
-        }
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [open, items])
-
-  const focusCurrentItem = () => {
+    if (!open || activeIndex < 0) return
     const buttons = menuRef.current?.querySelectorAll<HTMLButtonElement>(
-      'button[role="menuitem"]:not([disabled])'
+      'button[role="menuitem"]:not([disabled])',
     )
-    buttons?.[focusIndexRef.current]?.focus()
-  }
+    buttons?.[activeIndex]?.focus()
+  }, [open, activeIndex])
+
+  // The Menu's keyboard is document-level so it works wherever focus lands while the menu is open
+  // (matching the original hand-rolled behavior); `onKeyDown` is stable, so the listener never goes stale.
+  useEffect(() => {
+    if (!open) return
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, onKeyDown])
 
   return (
     <span className="relative inline-block">
-      <span
-        ref={triggerRef}
-        role="button"
-        tabIndex={0}
-        className="cursor-pointer"
-        onClick={handleOpen}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') handleOpen(e)
-        }}
-      >
+      <span ref={triggerRef} className="cursor-pointer" {...triggerProps}>
         {trigger}
       </span>
 
-      {open && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={menuRef}
-          role="menu"
-          className="fixed z-dropdown bg-surface-overlay border border-border rounded-md shadow-lg min-w-menu py-2xs"
-          style={{ left: position.x, top: position.y }}
-        >
-          {items.map((entry, idx) => {
-            if ('divider' in entry) {
-              // border-strong (not the default border-border) — on the surface-overlay menu the
-              // plain border token is near-invisible (≈ the overlay colour).
+      {open && (
+        <Portal>
+          <div
+            ref={menuRef}
+            role="menu"
+            className="fixed z-dropdown bg-surface-overlay border border-border rounded-md shadow-lg min-w-menu py-2xs"
+            style={{ left: position.x, top: position.y }}
+          >
+            {items.map((entry, idx) => {
+              if ('divider' in entry) {
+                // border-strong (not the default border-border) — on the surface-overlay menu the
+                // plain border token is near-invisible (≈ the overlay colour).
+                return (
+                  <div
+                    key={`div-${idx}`}
+                    role="separator"
+                    className="my-2xs border-t border-border-strong"
+                  />
+                )
+              }
+              const item = entry
               return (
-                <div
-                  key={`div-${idx}`}
-                  role="separator"
-                  className="my-2xs border-t border-border-strong"
-                />
+                <button
+                  key={`${item.label}-${idx}`}
+                  role="menuitem"
+                  tabIndex={-1}
+                  disabled={item.disabled}
+                  onClick={() => {
+                    if (!item.disabled) {
+                      item.onClick()
+                      handleClose()
+                    }
+                  }}
+                  title={item.disabled ? item.disabledReason : undefined}
+                  className={`
+                    w-full text-left px-sm py-xs text-sm flex items-center gap-xs hover:bg-surface-active
+                    ${item.disabled
+                      ? 'text-text-muted cursor-not-allowed'
+                      : item.destructive
+                        ? 'text-error'
+                        : item.tone === 'favourite'
+                          ? 'text-favourite'
+                          : item.tone === 'open'
+                            ? 'text-accent'
+                            : 'text-text-primary'
+                    }
+                  `}
+                >
+                  {item.icon && <Icon icon={item.icon} size={14} />}
+                  {item.label}
+                </button>
               )
-            }
-            const item = entry as ContextMenuItem
-            return (
-              <button
-                key={`${item.label}-${idx}`}
-                role="menuitem"
-                tabIndex={-1}
-                disabled={item.disabled}
-                onClick={() => {
-                  if (!item.disabled) {
-                    item.onClick()
-                    handleClose()
-                  }
-                }}
-                title={item.disabled ? item.disabledReason : undefined}
-                className={`
-                  w-full text-left px-sm py-xs text-sm flex items-center gap-xs hover:bg-surface-active
-                  ${item.disabled
-                    ? 'text-text-muted cursor-not-allowed'
-                    : item.destructive
-                      ? 'text-error'
-                      : item.tone === 'favourite'
-                        ? 'text-favourite'
-                        : item.tone === 'open'
-                          ? 'text-accent'
-                          : 'text-text-primary'
-                  }
-                `}
-              >
-                {item.icon && <Icon icon={item.icon} size={14} />}
-                {item.label}
-              </button>
-            )
-          })}
-        </div>,
-        document.body
+            })}
+          </div>
+        </Portal>
       )}
     </span>
   )

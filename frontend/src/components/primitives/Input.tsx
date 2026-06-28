@@ -2,6 +2,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: boolean
 }
 
+// Input is the native Field leaf: a raw <input> already owns the Field contract (value · change · error
+// · disabled · label) at the platform level, so it adds only the error/disabled ring treatment. The
+// `useField` behavior exists for the *composite* fields (Dropdown / DatePicker / the pickers) that carry
+// the same contract over a non-native value — they delegate to this primitive for text entry.
 export function Input({ error, disabled, className, ...rest }: InputProps) {
   const stateClass = disabled
     ? 'opacity-50 cursor-not-allowed'

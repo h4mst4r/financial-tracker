@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { Search, Calendar, SlidersHorizontal, X } from 'lucide-react'
 import { Icon } from './Icon'
+import { Portal } from './behaviors/Portal'
+import { usePopover } from './behaviors/usePopover'
 import { Input } from './Input'
 import { Dropdown } from './Dropdown'
 import { SegmentedControl } from './SegmentedControl'
@@ -137,31 +138,21 @@ function AnchoredPanel({
     }
   }, [open])
 
-  // Close on outside click — a click INSIDE the panel (incl. an inner Dropdown/DatePicker popup, which is
-  // a DOM descendant of panelRef) keeps it open (the 5.0a blur-within lesson, handled here by containment).
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (panelRef.current && !panelRef.current.contains(target) && triggerRef.current && !triggerRef.current.contains(target)) {
-        close()
-      }
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        close()
-        triggerRef.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open])
+  // Popover behavior: outside-click + Escape dismissal. The panel is portalled, so the trigger (a
+  // separate DOM subtree) is passed as a second "inside" element — a press on it must not dismiss. A
+  // click INSIDE the panel (incl. an inner Dropdown/DatePicker popup, a DOM descendant of panelRef)
+  // keeps it open (the 5.0a blur-within lesson, by containment). Escape additionally refocuses the
+  // trigger; an outside-click does not.
+  usePopover({
+    open,
+    onClose: close,
+    onEscape: () => {
+      close()
+      triggerRef.current?.focus()
+    },
+    containRef: panelRef,
+    triggerRef,
+  })
 
   return (
     <>
@@ -175,9 +166,8 @@ function AnchoredPanel({
       >
         {triggerContent}
       </button>
-      {open &&
-        typeof document !== 'undefined' &&
-        createPortal(
+      {open && (
+        <Portal>
           <div
             ref={panelRef}
             role="dialog"
@@ -186,9 +176,9 @@ function AnchoredPanel({
             style={{ left: pos.x, top: pos.y }}
           >
             {children(close)}
-          </div>,
-          document.body,
-        )}
+          </div>
+        </Portal>
+      )}
     </>
   )
 }

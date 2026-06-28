@@ -1,3 +1,5 @@
+import { usePressable, PRESS_SCALE, DISABLED_CLASS } from './behaviors/usePressable'
+
 interface ToggleProps {
   checked: boolean
   onChange: (checked: boolean) => void
@@ -6,19 +8,22 @@ interface ToggleProps {
   'aria-label'?: string
 }
 
+// Toggle = Pressable + a sliding thumb. The Pressable behavior owns the disabled-gated press + the
+// press-scale/disabled tokens; the switch role/track/thumb are the skin.
 export function Toggle({ checked, onChange, disabled, id, 'aria-label': ariaLabel }: ToggleProps) {
+  const press = usePressable({ disabled, onPress: () => onChange(!checked) })
   return (
     <button
       role="switch"
       aria-checked={checked}
       id={id}
       aria-label={ariaLabel}
-      onClick={() => !disabled && onChange(!checked)}
+      {...press}
       className={`
         toggle-track rounded-full relative
         transition-colors duration-base
-        active:scale-[0.97] transition-transform duration-press
-        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+        ${PRESS_SCALE}
+        ${disabled ? DISABLED_CLASS : ''}
         ${checked ? 'bg-primary' : 'bg-surface-active'}
       `}
     >

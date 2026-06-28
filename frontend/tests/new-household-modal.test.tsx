@@ -55,17 +55,25 @@ describe('NewHouseholdModal', () => {
     expect(screen.queryByText(/date format/i)).toBeNull()
   })
 
-  test('Skip dismisses without any request', () => {
+  test('Skip persists the dismissal via complete-setup, then closes', async () => {
+    fetchMock.mockResolvedValue(makeResponse(HH))
     useAuthStore.setState({ household: HH, isFirstLogin: true })
     renderModal()
+
     fireEvent.click(screen.getByText('Skip'))
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(useAuthStore.getState().isFirstLogin).toBe(false)
+
+    // Skip must hit the server (not just clear local state) so a reload does not re-open the modal.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(String(url)).toBe('/api/household/complete-setup')
+    expect(opts.method).toBe('POST')
+    await waitFor(() => expect(useAuthStore.getState().isFirstLogin).toBe(false))
   })
 
-  test('Save PATCHes /api/household, updates store, and closes', async () => {
+  test('Save PATCHes /api/household then completes setup, updates store, and closes', async () => {
     const updated: Household = { ...HH, name: 'The Lim Household', timezone: 'Pacific/Auckland' }
-    fetchMock.mockResolvedValue(makeResponse(updated))
+    // Fresh Response per call — a Response body is single-use, and Save makes two calls.
+    fetchMock.mockImplementation(() => Promise.resolve(makeResponse(updated)))
     useAuthStore.setState({ household: HH, isFirstLogin: true })
     renderModal()
 
@@ -74,21 +82,25 @@ describe('NewHouseholdModal', () => {
     })
     fireEvent.click(screen.getByText('Save'))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    const [url, opts] = fetchMock.mock.calls[0]!
-    expect(String(url)).toBe('/api/household')
-    expect(opts.method).toBe('PATCH')
-    expect(JSON.parse(opts.body as string)).toEqual({
+    // Two calls: the name/timezone PATCH, then the complete-setup stamp.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const [patchUrl, patchOpts] = fetchMock.mock.calls[0]!
+    expect(String(patchUrl)).toBe('/api/household')
+    expect(patchOpts.method).toBe('PATCH')
+    expect(JSON.parse(patchOpts.body as string)).toEqual({
       name: 'The Lim Household',
       timezone: 'Asia/Singapore',
     })
+    const [completeUrl, completeOpts] = fetchMock.mock.calls[1]!
+    expect(String(completeUrl)).toBe('/api/household/complete-setup')
+    expect(completeOpts.method).toBe('POST')
 
     await waitFor(() => expect(useAuthStore.getState().isFirstLogin).toBe(false))
     expect(useAuthStore.getState().household?.name).toBe('The Lim Household')
   })
 
   test('timezone is a searchable Dropdown — filter then select PATCHes the chosen IANA zone (story 1.13)', async () => {
-    fetchMock.mockResolvedValue(makeResponse({ ...HH, timezone: 'Pacific/Auckland' }))
+    fetchMock.mockImplementation(() => Promise.resolve(makeResponse({ ...HH, timezone: 'Pacific/Auckland' })))
     useAuthStore.setState({ household: HH, isFirstLogin: true })
     renderModal()
 
@@ -97,7 +109,7 @@ describe('NewHouseholdModal', () => {
     fireEvent.click(screen.getByRole('option', { name: /Auckland/ }))
     fireEvent.click(screen.getByText('Save'))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     const [, opts] = fetchMock.mock.calls[0]!
     expect(JSON.parse(opts.body as string).timezone).toBe('Pacific/Auckland')
   })

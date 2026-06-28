@@ -1,4 +1,5 @@
 import React from 'react'
+import { useField } from './behaviors/useField'
 
 interface SegmentedControlOption {
   value: string
@@ -12,7 +13,10 @@ interface SegmentedControlProps {
   disabled?: boolean
 }
 
+// SegmentedControl = Field (single-select) + Pressable segments. The Field behavior owns the
+// disabled-gated value change; each segment is a native-button Pressable.
 export function SegmentedControl({ value, options, onChange, disabled }: SegmentedControlProps) {
+  const field = useField<string>({ onChange, disabled })
   return (
     <div className="flex border border-border rounded-md overflow-hidden">
       {options.map((opt, i) => {
@@ -30,7 +34,7 @@ export function SegmentedControl({ value, options, onChange, disabled }: Segment
                 ${isActive ? 'bg-control-active text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'}
                 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
               `}
-              onClick={() => !disabled && onChange(opt.value)}
+              onClick={() => field.change(opt.value)}
             >
               {opt.label}
             </button>

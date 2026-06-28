@@ -1,8 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { Icon } from './Icon'
 import { THEME_OPTIONS } from '../../theme/palettes'
 import type { ThemeId } from '../../theme/palettes'
+import { usePopover } from './behaviors/usePopover'
+import { useMenu } from './behaviors/useMenu'
+import { useField } from './behaviors/useField'
 
 interface ThemePickerProps {
   value: ThemeId
@@ -29,31 +32,29 @@ function Swatch({ colour }: { colour: string }) {
  */
 export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps) {
   const [open, setOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const selected = THEME_OPTIONS.find((o) => o.value === value)
   const selectedIndex = THEME_OPTIONS.findIndex((o) => o.value === value)
 
-  const handleOutsideClick = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-  }, [])
+  // Field behavior: the controlled value contract (disabled-gated change).
+  const field = useField<ThemeId>({ onChange, disabled })
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') setOpen(false)
-  }, [])
+  const selectTheme = (optValue: ThemeId) => {
+    field.change(optValue)
+    setOpen(false)
+  }
 
-  useEffect(() => {
-    if (open) {
-      document.addEventListener('mousedown', handleOutsideClick)
-      document.addEventListener('keydown', handleKeyDown)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, handleOutsideClick, handleKeyDown])
+  // Menu behavior: roving keyboard (↑↓ Enter Esc) over the theme list (focus reflected via roving tabIndex).
+  const { activeIndex, setActiveIndex, onKeyDown } = useMenu({
+    itemCount: THEME_OPTIONS.length,
+    onActivate: (i) => selectTheme(THEME_OPTIONS[i].value),
+    onClose: () => setOpen(false),
+  })
+
+  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
+  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
 
   useEffect(() => {
     if (open && activeIndex >= 0) optionRefs.current[activeIndex]?.focus()
@@ -63,26 +64,6 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
     if (disabled) return
     setOpen((p) => !p)
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0)
-  }
-
-  const handleOptionClick = (optValue: ThemeId) => {
-    onChange(optValue)
-    setOpen(false)
-  }
-
-  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setActiveIndex((i) => Math.min(i + 1, THEME_OPTIONS.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setActiveIndex((i) => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter' && activeIndex >= 0) {
-      e.preventDefault()
-      handleOptionClick(THEME_OPTIONS[activeIndex].value)
-    } else if (e.key === 'Escape') {
-      setOpen(false)
-    }
   }
 
   return (
@@ -120,7 +101,7 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
         <div
           role="listbox"
           className="absolute z-dropdown mt-1 w-full bg-surface-raised border border-border rounded-md shadow-lg"
-          onKeyDown={handlePanelKeyDown}
+          onKeyDown={onKeyDown}
         >
           {THEME_OPTIONS.map((opt, i) => (
             <button
@@ -135,7 +116,7 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
                 ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}
                 ${opt.value === value ? 'text-primary' : 'text-text-primary'}
               `}
-              onClick={() => handleOptionClick(opt.value)}
+              onClick={() => selectTheme(opt.value)}
             >
               <span className="flex items-center gap-2">
                 <Swatch colour={opt.swatch} />

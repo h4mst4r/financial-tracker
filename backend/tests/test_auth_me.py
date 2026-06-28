@@ -80,9 +80,16 @@ async def _seed_session_for_person(factory, person_id: str) -> tuple[str, str]:
 
 
 async def _seed_owner_household(
-    factory, *, created_at: datetime | None = None, role: str = "owner"
+    factory,
+    *,
+    created_at: datetime | None = None,
+    role: str = "owner",
+    setup_completed_at: datetime | None = None,
 ) -> tuple[str, str]:
-    """Insert a Household + a Person in it. Returns (person_id, household_id)."""
+    """Insert a Household + a Person in it. Returns (person_id, household_id).
+
+    `setup_completed_at` gates `isFirstLogin` (§2.14.C): NULL → owner sees the first-login modal.
+    """
     hh_id = str(uuid4())
     person_id = str(uuid4())
     async with factory() as db:
@@ -94,6 +101,7 @@ async def _seed_owner_household(
                 timezone="Asia/Singapore",
                 created_at=created_at or datetime.now(UTC),
                 created_by=person_id,
+                setup_completed_at=setup_completed_at,
             )
         )
         await db.flush()
@@ -117,9 +125,9 @@ async def _seed_owner_household(
 async def test_auth_me_in_household_returns_full_contract(monkeypatch):
     engine, factory = await _make_factory()
     try:
-        # created_at well outside the 2-min window so isFirstLogin is False here
+        # setup already dismissed → isFirstLogin is False here
         person_id, hh_id = await _seed_owner_household(
-            factory, created_at=datetime.now(UTC) - timedelta(hours=1)
+            factory, setup_completed_at=datetime.now(UTC) - timedelta(hours=1)
         )
         sid, csrf = await _seed_session_for_person(factory, person_id)
 
@@ -171,7 +179,8 @@ async def test_auth_me_in_household_returns_full_contract(monkeypatch):
 async def test_auth_me_is_first_login_true_for_fresh_owner(monkeypatch):
     engine, factory = await _make_factory()
     try:
-        person_id, _hh = await _seed_owner_household(factory, created_at=datetime.now(UTC))
+        # setup_completed_at NULL (default) → owner still sees the first-login modal
+        person_id, _hh = await _seed_owner_household(factory)
         sid, _csrf = await _seed_session_for_person(factory, person_id)
 
         client = _client_with_db(factory, monkeypatch)
@@ -181,13 +190,27 @@ async def test_auth_me_is_first_login_true_for_fresh_owner(monkeypatch):
         await engine.dispose()
 
 
+async def test_auth_me_is_first_login_false_after_setup_completed(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        # Owner whose setup is dismissed → isFirstLogin False even though created_at is "now".
+        person_id, _hh = await _seed_owner_household(
+            factory, created_at=datetime.now(UTC), setup_completed_at=datetime.now(UTC)
+        )
+        sid, _csrf = await _seed_session_for_person(factory, person_id)
+
+        client = _client_with_db(factory, monkeypatch)
+        client.cookies.set(auth.SESSION_COOKIE_NAME, sid)
+        assert client.get("/auth/me").json()["isFirstLogin"] is False
+    finally:
+        await engine.dispose()
+
+
 async def test_auth_me_is_first_login_false_for_member_in_fresh_household(monkeypatch):
     engine, factory = await _make_factory()
     try:
-        # fresh household, but the person is a member → role gate makes isFirstLogin False
-        person_id, _hh = await _seed_owner_household(
-            factory, created_at=datetime.now(UTC), role="member"
-        )
+        # fresh household (setup not dismissed), but the person is a member → role gate → False
+        person_id, _hh = await _seed_owner_household(factory, role="member")
         sid, _csrf = await _seed_session_for_person(factory, person_id)
 
         client = _client_with_db(factory, monkeypatch)
