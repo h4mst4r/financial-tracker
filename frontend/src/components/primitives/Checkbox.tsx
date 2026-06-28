@@ -25,7 +25,7 @@ export function Checkbox({ checked, onChange, disabled, id, label, 'aria-label':
       />
       <span
         className={`
-          w-5 h-5 rounded-md flex items-center justify-center
+          w-5 h-5 shrink-0 rounded-md flex items-center justify-center
           transition-colors duration-quick border
           peer-focus-visible:ring-2 peer-focus-visible:ring-glow-primary
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}

@@ -335,9 +335,7 @@ async def move_category(
     else:
         parent = await get_or_404(db, Category, parent_id, household_id=household_id)
         if parent.archived:
-            errors.bad_request(
-                "Invalid move", "Cannot move a category under an archived parent"
-            )
+            errors.bad_request("Invalid move", "Cannot move a category under an archived parent")
         if parent.depth != 0:
             errors.bad_request(
                 "Invalid move", "The target must be a top-level category (max 2 levels)"
@@ -418,9 +416,7 @@ async def merge_categories(
     target = await get_or_404(db, Category, target_id, household_id=household_id)
     if target.archived:
         errors.bad_request("Invalid merge", "Cannot merge into an archived category")
-    sources = [
-        await get_or_404(db, Category, sid, household_id=household_id) for sid in source_ids
-    ]
+    sources = [await get_or_404(db, Category, sid, household_id=household_id) for sid in source_ids]
 
     # The sources' active subcategories re-parent to the target (also drives the 2-level guard).
     children_by_source = {
@@ -457,7 +453,7 @@ async def merge_categories(
         for child in children_by_source[src.id]:
             before = _snapshot(child)
             if child.name.lower() in taken:
-                # ponytail: " (2)" per spec; no (3) loop — category name has no DB unique constraint
+                # " (2)" per spec; no (3) loop — category name has no DB unique constraint
                 child.name = f"{child.name} (2)"
             child.parent_id = target_id
             child.depth = 1

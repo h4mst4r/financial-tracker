@@ -53,7 +53,7 @@ class BaseEntity(Base):
     archived_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("persons.id"), nullable=True
     )
-    status: Mapped[str] = mapped_column(String, nullable=False, default="active", index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
 
 
 class MonetaryValueMixin:

@@ -30,6 +30,7 @@ from backend.models.currency import Currency
 from backend.models.identity import ApprovedOwner, Household, HouseholdInvitation, Person, Session
 from backend.services.category import seed_default_categories
 from backend.services.profile import parse_notification_prefs
+from backend.time_utils import as_utc
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +287,7 @@ async def seed_household_if_needed(db: AsyncSession, person: Person) -> None:
         )
     )
     for invitation in pending.scalars():
-        if _as_utc(invitation.expires_at) > now:
+        if as_utc(invitation.expires_at) > now:
             return  # NULL household — pending-invitation path takes priority (§2.6 step 2)
 
     approved = await db.execute(
@@ -367,10 +368,6 @@ async def seed_bootstrap_owners(db: AsyncSession) -> None:
 # ── Sessions (ARCH §2.3 / §2.14.B) ──
 
 
-def _as_utc(dt: datetime) -> datetime:
-    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
-
-
 async def create_session(
     db: AsyncSession,
     person: Person,
@@ -430,7 +427,7 @@ async def ensure_dev_session(db: AsyncSession, *, ip: str | None = None) -> Sess
         .order_by(Session.created_at.desc())
     )
     session = found.scalars().first()
-    if session is not None and _as_utc(session.expires_at) > datetime.now(UTC):
+    if session is not None and as_utc(session.expires_at) > datetime.now(UTC):
         return session
     return await create_session(db, person, ip=ip, user_agent=None, dev=True)
 
@@ -456,7 +453,7 @@ async def validate_session(
         return None
 
     now = datetime.now(UTC)
-    if _as_utc(session.expires_at) < now:
+    if as_utc(session.expires_at) < now:
         return None
 
     is_dev = session.user_agent == DEV_USER_AGENT
@@ -466,7 +463,7 @@ async def validate_session(
     if (
         not is_dev
         and session.last_activity_at is not None
-        and (now - _as_utc(session.last_activity_at)) > SESSION_TTL
+        and (now - as_utc(session.last_activity_at)) > SESSION_TTL
     ):
         return None
 
@@ -546,7 +543,7 @@ async def build_auth_me(db: AsyncSession, person: Person, session: Session) -> d
     is_first_login = (
         person.role == "owner"
         and household is not None
-        and (datetime.now(UTC) - _as_utc(household.created_at)) < FIRST_LOGIN_WINDOW
+        and (datetime.now(UTC) - as_utc(household.created_at)) < FIRST_LOGIN_WINDOW
     )
 
     return {
@@ -574,7 +571,7 @@ async def _build_pending_invitation(db: AsyncSession, person: Person) -> dict | 
         .order_by(HouseholdInvitation.created_at)  # deterministic: oldest pending invite first
     )
     for invitation in found.scalars():
-        if _as_utc(invitation.expires_at) <= now:
+        if as_utc(invitation.expires_at) <= now:
             continue
         household = await db.execute(
             select(Household).where(Household.id == invitation.household_id)
@@ -588,7 +585,7 @@ async def _build_pending_invitation(db: AsyncSession, person: Person) -> dict | 
             "householdName": household.name if household is not None else None,
             "invitedByDisplayName": (inviter.display_name or inviter.email) if inviter else None,
             "invitedEmail": invitation.invited_email,
-            "expiresAt": _as_utc(invitation.expires_at).isoformat(),
+            "expiresAt": as_utc(invitation.expires_at).isoformat(),
             "status": invitation.status,
         }
     return None

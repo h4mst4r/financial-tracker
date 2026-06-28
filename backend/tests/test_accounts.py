@@ -121,9 +121,7 @@ async def _seed_household(factory, *, role: str = "admin") -> tuple[str, str]:
     return person_id, hh_id
 
 
-async def _seed_currency(
-    factory, hh_id: str, code: str, *, rate: str = "1.0"
-) -> str:
+async def _seed_currency(factory, hh_id: str, code: str, *, rate: str = "1.0") -> str:
     """Add a non-base currency to `hh_id` (for the native-currency / FX snapshot tests)."""
     cid = str(uuid4())
     async with factory() as db:
@@ -426,9 +424,7 @@ async def test_patch_edits_and_audits(monkeypatch):
         _auth(client, sid, csrf)
 
         acct = client.post("/api/accounts", json=_bank(account_number="9876543210")).json()
-        resp = client.patch(
-            f"/api/accounts/{acct['id']}", json={"name": "POSB", "vivid": True}
-        )
+        resp = client.patch(f"/api/accounts/{acct['id']}", json={"name": "POSB", "vivid": True})
         assert resp.status_code == 200
         body = resp.json()
         assert body["name"] == "POSB"
@@ -608,8 +604,10 @@ async def test_delete_empty_204_removes_owners_no_audit(monkeypatch):
         async with factory() as db:
             assert await db.get(Account, acct_id) is None
             owners = (
-                await db.execute(select(AccountOwner).where(AccountOwner.account_id == acct_id))
-            ).scalars().all()
+                (await db.execute(select(AccountOwner).where(AccountOwner.account_id == acct_id)))
+                .scalars()
+                .all()
+            )
             assert owners == []
         # Hard delete leaves NO audit row (INFO log only).
         async with factory() as db:
@@ -651,9 +649,7 @@ async def test_delete_blocked_by_snapshot_409_value_history(monkeypatch):
 
         assert client.delete(f"/api/accounts/{acct_id}").status_code == 409
         # The row survives and reports can_delete=false + the reason.
-        item = next(
-            a for a in client.get("/api/accounts").json()["items"] if a["id"] == acct_id
-        )
+        item = next(a for a in client.get("/api/accounts").json()["items"] if a["id"] == acct_id)
         assert item["can_delete"] is False
         assert item["delete_blocked_reason"] == "has value history"
     finally:
@@ -839,9 +835,7 @@ async def test_create_with_owner_ids_creator_primary(monkeypatch):
         client = _client_with_db(factory, monkeypatch)
         _auth(client, sid, csrf)
 
-        body = client.post(
-            "/api/accounts", json=_bank(owner_ids=[person_id, alex])
-        ).json()
+        body = client.post("/api/accounts", json=_bank(owner_ids=[person_id, alex])).json()
         assert set(body["owner_ids"]) == {person_id, alex}
         rows = await _owner_rows(factory, body["id"])
         assert len(rows) == 2
@@ -1193,9 +1187,7 @@ async def test_snapshot_same_date_tiebreak_latest_written(monkeypatch):
             "/api/accounts", json={"account_type": "capital", "name": "Fund", "currency": "SGD"}
         ).json()["id"]
         for val in ("100", "200"):
-            client.post(
-                f"/api/accounts/{acct_id}/snapshots", json=_snap(val, on="2026-06-13")
-            )
+            client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap(val, on="2026-06-13"))
         # Same date → the latest-written (200) wins current value.
         current = client.get(f"/api/accounts/{acct_id}").json()["current_value"]
         assert Decimal(current) == Decimal("200")
@@ -1220,16 +1212,12 @@ async def test_snapshot_source_guard_and_user_sources(monkeypatch):
         ).json()["id"]
 
         # A system source → 422 (Pydantic Literal).
-        resp = client.post(
-            f"/api/accounts/{acct_id}/snapshots", json=_snap("1", source="formula")
-        )
+        resp = client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("1", source="formula"))
         assert resp.status_code == 422
 
         # The three user sources are all accepted.
         for src in ("manual", "reconciliation", "appraisal"):
-            resp = client.post(
-                f"/api/accounts/{acct_id}/snapshots", json=_snap("1", source=src)
-            )
+            resp = client.post(f"/api/accounts/{acct_id}/snapshots", json=_snap("1", source=src))
             assert resp.status_code == 201, resp.text
     finally:
         await engine.dispose()
@@ -1437,9 +1425,7 @@ async def test_snapshot_mutation_perms_and_wrong_account_404(monkeypatch):
             ).status_code
             == 404
         )
-        assert (
-            client_a.delete(f"/api/accounts/{other_id}/snapshots/{snap_id}").status_code == 404
-        )
+        assert client_a.delete(f"/api/accounts/{other_id}/snapshots/{snap_id}").status_code == 404
 
         # Plain member → 403 on both verbs.
         member_id = await _add_member(factory, hh_id, role="member")
@@ -1452,18 +1438,14 @@ async def test_snapshot_mutation_perms_and_wrong_account_404(monkeypatch):
             ).status_code
             == 403
         )
-        assert (
-            client_m.delete(f"/api/accounts/{acct_id}/snapshots/{snap_id}").status_code == 403
-        )
+        assert client_m.delete(f"/api/accounts/{acct_id}/snapshots/{snap_id}").status_code == 403
 
         # Admin of another household → 404.
         other_admin, _ = await _seed_household(factory)
         sid_b, csrf_b = await _seed_session(factory, other_admin)
         client_b = _client_with_db(factory, monkeypatch)
         _auth(client_b, sid_b, csrf_b)
-        assert (
-            client_b.delete(f"/api/accounts/{acct_id}/snapshots/{snap_id}").status_code == 404
-        )
+        assert client_b.delete(f"/api/accounts/{acct_id}/snapshots/{snap_id}").status_code == 404
     finally:
         await engine.dispose()
 
@@ -1597,17 +1579,29 @@ async def test_account_events_both_legs_and_lean_shape(monkeypatch):
 
         # source leg (transaction) + destination leg (incoming transfer) → both included.
         src_ev = await _add_event(
-            factory, hh_id, person_id, event_type="transaction",
-            source_account_id=acct_id, on="2026-06-01",
+            factory,
+            hh_id,
+            person_id,
+            event_type="transaction",
+            source_account_id=acct_id,
+            on="2026-06-01",
         )
         dst_ev = await _add_event(
-            factory, hh_id, person_id, event_type="transfer",
-            destination_account_id=acct_id, on="2026-06-02",
+            factory,
+            hh_id,
+            person_id,
+            event_type="transfer",
+            destination_account_id=acct_id,
+            on="2026-06-02",
         )
         # touches neither leg of acct → excluded (proves the filter, not just household scope).
         await _add_event(
-            factory, hh_id, person_id, event_type="transaction",
-            source_account_id=other_id, on="2026-06-03",
+            factory,
+            hh_id,
+            person_id,
+            event_type="transaction",
+            source_account_id=other_id,
+            on="2026-06-03",
         )
 
         body = client.get(f"/api/accounts/{acct_id}/events").json()
@@ -1619,9 +1613,20 @@ async def test_account_events_both_legs_and_lean_shape(monkeypatch):
         # Lean base-event projection (Epic-5 seam — flat, not the §4.5 union).
         row = next(e for e in body["items"] if e["id"] == src_ev)
         assert row.keys() == {
-            "id", "event_type", "name", "event_date", "transaction_status",
-            "transaction_type", "currency", "amount", "amount_base",
-            "source_account_id", "destination_account_id", "category_id", "notes", "created_at",
+            "id",
+            "event_type",
+            "name",
+            "event_date",
+            "transaction_status",
+            "transaction_type",
+            "currency",
+            "amount",
+            "amount_base",
+            "source_account_id",
+            "destination_account_id",
+            "category_id",
+            "notes",
+            "created_at",
         }
         assert row["event_type"] == "transaction"
         assert row["source_account_id"] == acct_id
@@ -1664,18 +1669,25 @@ async def test_account_events_sort_by_date(monkeypatch):
         desc = [e["id"] for e in client.get(f"/api/accounts/{acct_id}/events").json()["items"]]
         assert desc == [e3, e2, e1]  # default order=desc, newest-first
         asc = [
-            e["id"]
-            for e in client.get(f"/api/accounts/{acct_id}/events?order=asc").json()["items"]
+            e["id"] for e in client.get(f"/api/accounts/{acct_id}/events?order=asc").json()["items"]
         ]
         assert asc == [e1, e2, e3]
 
         # Same-date rows tiebreak on created_at (asc → write order by timestamp).
         a = await _add_event(
-            factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-05",
+            factory,
+            hh_id,
+            person_id,
+            source_account_id=acct_id,
+            on="2026-06-05",
             created_at=datetime(2026, 6, 5, 10, 0, tzinfo=UTC),
         )
         b = await _add_event(
-            factory, hh_id, person_id, source_account_id=acct_id, on="2026-06-05",
+            factory,
+            hh_id,
+            person_id,
+            source_account_id=acct_id,
+            on="2026-06-05",
             created_at=datetime(2026, 6, 5, 11, 0, tzinfo=UTC),
         )
         items = client.get(f"/api/accounts/{acct_id}/events?order=asc").json()["items"]

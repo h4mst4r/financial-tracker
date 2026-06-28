@@ -106,7 +106,7 @@ async def test_validate_session_slides_window_and_returns_pair():
             assert result is not None
             person, validated = result
             assert person.id == person_id
-            assert auth._as_utc(validated.last_activity_at) >= auth._as_utc(before)
+            assert auth.as_utc(validated.last_activity_at) >= auth.as_utc(before)
     finally:
         await engine.dispose()
 

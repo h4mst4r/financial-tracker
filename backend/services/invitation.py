@@ -10,30 +10,16 @@ list + actions here, never the member-safe Story 2.5 list.
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
-from backend.errors import problem
 from backend.models.identity import Household, HouseholdInvitation, Person
 from backend.services.audit import audit
+from backend.time_utils import as_utc
 
 # 7-day expiry per FR-HH-003 — single source of truth.
 INVITE_TTL = timedelta(days=7)
-
-
-def _as_utc(dt: datetime) -> datetime:
-    """Coerce a (possibly tz-naive, SQLite) datetime to aware UTC for comparison."""
-    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
-
-
-def _conflict(detail: str) -> None:
-    """Raise 409 Conflict (RFC 7807) — no generic 409 helper exists in `errors`."""
-    raise HTTPException(
-        status_code=409,
-        detail=problem(type_="conflict", title="Conflict", status=409, detail=detail),
-    )
 
 
 async def _get_scoped(
@@ -75,7 +61,7 @@ async def create_invitation(
         )
     ).scalar_one_or_none()
     if existing_member is not None:
-        _conflict("That person is already a member of this household")
+        errors.conflict("That person is already a member of this household")
 
     existing_pending = (
         await db.execute(
@@ -87,7 +73,7 @@ async def create_invitation(
         )
     ).scalar_one_or_none()
     if existing_pending is not None:
-        _conflict("An invitation to that email is already pending")
+        errors.conflict("An invitation to that email is already pending")
 
     invitation = HouseholdInvitation(
         household_id=household_id,
@@ -116,7 +102,7 @@ async def revoke_invitation(
     """Flip a pending invitation to `revoked` (admin/owner). 409 if not pending."""
     invitation = await _get_scoped(db, household_id, invitation_id)
     if invitation.status != "pending":
-        _conflict("Only a pending invitation can be revoked")
+        errors.conflict("Only a pending invitation can be revoked")
     before = {"status": invitation.status}
     invitation.status = "revoked"
     await db.flush()
@@ -138,8 +124,8 @@ async def resend_invitation(
     """Reset a pending invitation's 7-day window (admin/owner; in-app). 409 if not pending."""
     invitation = await _get_scoped(db, household_id, invitation_id)
     if invitation.status != "pending":
-        _conflict("Only a pending invitation can be resent")
-    before = {"expires_at": _as_utc(invitation.expires_at).isoformat()}
+        errors.conflict("Only a pending invitation can be resent")
+    before = {"expires_at": as_utc(invitation.expires_at).isoformat()}
     invitation.expires_at = datetime.now(UTC) + INVITE_TTL
     await db.flush()
     await audit.log(
@@ -150,7 +136,7 @@ async def resend_invitation(
         entity_type="household_invitation",
         entity_id=invitation.id,
         before=before,
-        after={"expires_at": _as_utc(invitation.expires_at).isoformat()},
+        after={"expires_at": as_utc(invitation.expires_at).isoformat()},
     )
     return invitation
 
@@ -165,8 +151,8 @@ async def delete_invitation(
     revoked first.
     """
     invitation = await _get_scoped(db, household_id, invitation_id)
-    if invitation.status == "pending" and _as_utc(invitation.expires_at) > datetime.now(UTC):
-        _conflict("Revoke the invitation before deleting it")
+    if invitation.status == "pending" and as_utc(invitation.expires_at) > datetime.now(UTC):
+        errors.conflict("Revoke the invitation before deleting it")
     await audit.log(
         db,
         household_id=household_id,
@@ -193,7 +179,7 @@ async def validate_token(db: AsyncSession, token: str) -> dict:
     if (
         invitation is None
         or invitation.status != "pending"
-        or _as_utc(invitation.expires_at) <= datetime.now(UTC)
+        or as_utc(invitation.expires_at) <= datetime.now(UTC)
     ):
         return {"status": "invalid"}
 
@@ -220,7 +206,7 @@ async def _load_actionable_for(db: AsyncSession, person: Person, token: str) -> 
     if (
         invitation is None
         or invitation.status != "pending"
-        or _as_utc(invitation.expires_at) <= datetime.now(UTC)
+        or as_utc(invitation.expires_at) <= datetime.now(UTC)
     ):
         errors.bad_request("Invalid invitation", "This invitation is no longer valid")
     # Both sides are already-loaded Python strings here (not a SQL expression), so a plain
@@ -239,7 +225,9 @@ async def accept_invitation(db: AsyncSession, person: Person, token: str) -> Non
     """
     invitation = await _load_actionable_for(db, person, token)
     if person.household_id is not None:
-        _conflict("You already belong to a household; leave or delete it before joining another")
+        errors.conflict(
+            "You already belong to a household; leave or delete it before joining another"
+        )
 
     # `person` comes from `get_current_person` (the CSRF middleware's now-closed session), so it is
     # detached from this request's `db`. Re-load it here so the mutation is tracked and persisted.

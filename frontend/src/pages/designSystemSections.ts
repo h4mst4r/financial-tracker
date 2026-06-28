@@ -32,6 +32,7 @@ export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
   { id: 'entity-card', label: 'EntityCard', group: 'Composites' },
   { id: 'entity-modal', label: 'EntityModal', group: 'Composites' },
   { id: 'bulk-actions', label: 'BulkActionBar', group: 'Composites' },
+  { id: 'table', label: 'Table', group: 'Composites' },
   { id: 'semantic-text', label: 'Semantic text & amounts', group: 'Foundation' },
   { id: 'icon', label: 'Icon', group: 'Foundation' },
   { id: 'button', label: 'Button', group: 'Primitives' },
@@ -101,4 +102,11 @@ export const PRIMITIVE_DEMO_SECTION: Record<string, string> = {
   Toast: 'toast',
   EmptyState: 'empty-state',
   ConfirmationDialog: 'confirmation-dialog',
+  // Table + its column-vocabulary factories are all demoed in the one #table section (TableDemo).
+  Table: 'table',
+  dateColumn: 'table',
+  textColumn: 'table',
+  moneyColumn: 'table',
+  selectColumn: 'table',
+  actionsColumn: 'table',
 }

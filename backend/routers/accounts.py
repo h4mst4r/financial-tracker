@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api", tags=["accounts"])
 _require_admin = require_role("admin")
 
 
-async def _response_for(db: AsyncSession, household_id: str, account: Account) -> AccountResponse:
+async def _to_response(db: AsyncSession, household_id: str, account: Account) -> AccountResponse:
     """Build one subtype Response with its owner ids + the computed hard-delete eligibility (UX
     §8.1). Single-row routes use this; the list route batches the scan instead (`list_accounts`)."""
     owners = await account_service.owner_ids_for(db, [account.id])
@@ -105,7 +105,7 @@ async def create_account(
     `opening_balance` + `opening_balance_date` (422 otherwise). The creator becomes the
     sole owner."""
     account = await account_service.create_account(db, household_id, person.id, data)
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.get("/accounts/{account_id}")
@@ -116,7 +116,7 @@ async def get_account(
 ) -> AccountResponse:
     """A single household-scoped account (any member). 404 incl. cross-household."""
     account = await account_service.get_account(db, household_id, account_id)
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.patch("/accounts/{account_id}")
@@ -129,7 +129,7 @@ async def patch_account(
 ) -> AccountResponse:
     """Edit an account (admin/owner; FR-A-002). `account_type` is immutable. 404 cross-household."""
     account = await account_service.update_account(db, household_id, person.id, account_id, data)
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.post("/accounts/{account_id}/archive")
@@ -142,7 +142,7 @@ async def archive_account(
     """Archive an account (admin/owner; FR-A-003). 200, never 409; hidden from default lists+totals,
     history preserved. Idempotent. 404 cross-household."""
     account = await account_service.archive_account(db, household_id, person.id, account_id)
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.post("/accounts/{account_id}/restore")
@@ -154,7 +154,7 @@ async def restore_account(
 ) -> AccountResponse:
     """Restore an archived account (admin/owner; FR-A-003). Idempotent. 404 cross-household."""
     account = await account_service.restore_account(db, household_id, person.id, account_id)
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.put("/accounts/{account_id}/owners")
@@ -170,7 +170,7 @@ async def replace_account_owners(
     account = await account_service.replace_owners(
         db, household_id, person.id, account_id, data.owner_ids
     )
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.post("/accounts/{account_id}/snapshots", status_code=201)
@@ -261,7 +261,7 @@ async def duplicate_account(
     """Duplicate an account (admin/owner; FR-A-005). A new-UUID clone of all subtype fields with the
     duplicator as sole owner, `status=active`. 404 cross-household."""
     account = await account_service.duplicate_account(db, household_id, person.id, account_id)
-    return await _response_for(db, household_id, account)
+    return await _to_response(db, household_id, account)
 
 
 @router.delete("/accounts/{account_id}", status_code=204)

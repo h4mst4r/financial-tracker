@@ -903,6 +903,22 @@ household forex cost — a primary dashboard metric, **always shown, never hidde
 `currency`/`amount` are preserved (never overwritten) so raw-currency breakdowns stay available
 for visualisation (§3.8).
 
+> **OPEN (revise when Epic 5 builds the transaction money model) — two-hop FX + overseas true-cost.**
+> The fill priority above converts a foreign amount **straight to base** in one hop
+> (`amount_base_calculated = amount × rate_to_base`), written when accounts had no native currency. Now
+> that the "paid with" account carries a native `currency` (§3.11 #4), a foreign spend on a card whose
+> native currency ≠ base converts in **two hops**: **spend → account-native** (where the card's real FX
+> fee/margin lives — `fx_delta`/`fee_amount` are native↔native, e.g. a EUR spend on a USD card is the *USD
+> card's* margin), then **account-native → base** (aggregation/reporting rollup only). Revise this section
+> and the `fx_fee_calculation` formula (§3.8) so the fee resolves against the paid-with account's native
+> currency first; transfers (Epic 6 `dest_*`) and computed debt (Epic 8) inherit the same two hops. This
+> powers the headline "FX fees this year / is this card worth it" insight.
+> **Also consider (same insight family):** a per-transaction `tax_amount` (+ `tax_refundable` /
+> refund-received tracking) alongside `fee_amount`/`fx_delta`, so an Epic 8/9 report can net FX fee +
+> consumption tax − refundable tax (e.g. Japan ~10% GST, refundable for tourists) into a "true cost of
+> buying overseas vs. locally" figure. Today only `is_gst_claimable` (bool, FR-E-010) exists — no explicit
+> tax amount or refundable concept.
+
 **`PersonRef` — the unified person reference.** `Owner`, `Payee`, `Payer` are the same concept: a
 reference to an `EntityPerson`. The field name differs by context; the type is always `PersonRef`.
 A name is **never stored as a string** — only the `*_person_id` FK is persisted; display name,
@@ -1488,6 +1504,14 @@ underlying Transfers/events, never on these routes.
    UX §1.1) using `Currency.rate_to_base` — nothing is stored as a base-currency source of truth.
    `account_snapshots.value_base` is a **non-canonical cached convenience** for backend rollups
    (written at snapshot time via `rate_to_base`), not the value of record. (§3.5)
+
+> **OPEN (resolve when Epic 9 reads `value_base` for net-worth-over-time).** `change_base_currency`
+> (§3.4 note) re-bases every `financial_event.amount_base` but **not** `account_snapshots.value_base`
+> (snapshots were out of scope when Story 3.9 built the recompute). After a base change, stored snapshot
+> `value_base` is in the *old* base — harmless through Epic 4 (heroes render native, never read
+> `value_base`), wrong for any Epic 9 rollup that reads it. Fix either by (a) extending
+> `change_base_currency` to also recompute `account_snapshots.value_base`, or (b) treating `value_base` as
+> strictly point-in-time and recomputing it live from native `value × current rate_to_base`.
 
 ### 3.12 Migration plan (Alembic)
 

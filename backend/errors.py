@@ -85,6 +85,23 @@ def duplicate_name(
     )
 
 
+def conflict(
+    detail: str,
+    instance: str | None = None,
+) -> None:
+    """Raise 409 Conflict — a generic state conflict (not duplicate-name / has-dependencies)."""
+    raise HTTPException(
+        status_code=409,
+        detail=problem(
+            type_="conflict",
+            title="Conflict",
+            status=409,
+            detail=detail,
+            instance=instance,
+        ),
+    )
+
+
 def bad_request(
     title: str,
     detail: str,

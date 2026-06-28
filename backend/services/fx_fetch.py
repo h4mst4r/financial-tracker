@@ -28,6 +28,7 @@ from backend.models.currency import FxProvider as FxProviderModel
 from backend.models.identity import Household
 from backend.services.alerts import create_alert
 from backend.services.fx_providers import seed_default_providers
+from backend.time_utils import as_utc
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,6 @@ class FxProvider(Protocol):
 
 def _to_decimal(value: object) -> Decimal:
     return Decimal(str(value))
-
-
-def _as_utc(dt: datetime) -> datetime:
-    """SQLite drops tzinfo on read, so `last_rate_at` round-trips naive. Normalize to aware UTC
-    before comparing against `datetime.now(UTC)` (the auth.py `_as_utc` convention)."""
-    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
 class FrankfurterProvider:
@@ -171,8 +166,10 @@ async def refresh_fx(db: AsyncSession) -> dict:
 async def _refresh_household(db: AsyncSession, household_id: str) -> tuple[int, int, int]:
     """Refresh every non-base currency for one household via its enabled provider chain."""
     currencies = (
-        await db.execute(select(Currency).where(Currency.household_id == household_id))
-    ).scalars().all()
+        (await db.execute(select(Currency).where(Currency.household_id == household_id)))
+        .scalars()
+        .all()
+    )
     base = next((c for c in currencies if c.is_base), None)
     targets = [c for c in currencies if not c.is_base]
     if base is None or not targets:
@@ -189,15 +186,19 @@ async def _refresh_household(db: AsyncSession, household_id: str) -> tuple[int, 
     await seed_default_providers(db, household_id)
 
     provider_rows = (
-        await db.execute(
-            select(FxProviderModel)
-            .where(
-                FxProviderModel.household_id == household_id,
-                FxProviderModel.is_enabled.is_(True),
+        (
+            await db.execute(
+                select(FxProviderModel)
+                .where(
+                    FxProviderModel.household_id == household_id,
+                    FxProviderModel.is_enabled.is_(True),
+                )
+                .order_by(FxProviderModel.priority, FxProviderModel.name)
             )
-            .order_by(FxProviderModel.priority, FxProviderModel.name)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     providers = [(row, _build_provider(row)) for row in provider_rows]
     providers = [(row, impl) for row, impl in providers if impl is not None]
 
@@ -225,7 +226,7 @@ async def _refresh_household(db: AsyncSession, household_id: str) -> tuple[int, 
             row.last_checked_at = now
 
     alerts_raised = 0
-    if updated == 0 and (freshest_prior is None or _as_utc(freshest_prior) < now - _STALE_STREAK):
+    if updated == 0 and (freshest_prior is None or as_utc(freshest_prior) < now - _STALE_STREAK):
         alert = await create_alert(
             db,
             household_id=household_id,

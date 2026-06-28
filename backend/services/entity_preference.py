@@ -5,6 +5,13 @@ Per-person favourite + manual sort for any EntityCard list. Everything is scoped
 `model_fields_set`: only the fields the client actually sent are applied, so `setFavourite` can't
 wipe a stored `sort_order` and vice-versa. `sort_order=None` is a real value (no manual order),
 which is exactly why the merge keys on *which fields were sent*, not on null-ness.
+
+**Transaction-boundary exception (deliberate).** Unlike every other service — which only `flush`es
+and lets the request boundary (`get_db`) `commit` (see audit.py) — `upsert` `commit`s itself. It
+must own the boundary to recover from the `UNIQUE(person, entity_type, entity_id)` insert race: a
+concurrent first-write (double-clicked star) raises `IntegrityError`, which requires a `rollback`
+(poisoning the request transaction) before re-finding and merging. This is the ONE service that
+manages its own transaction; the single endpoint that calls it does no further DB work afterward.
 """
 
 from sqlalchemy import select

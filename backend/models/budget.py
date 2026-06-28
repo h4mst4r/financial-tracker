@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -72,7 +73,9 @@ class Category(BaseEntity):
     depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Per-instance full-saturation fill opt-in (calm tint is the default). Cross-entity column
     # (also on accounts/currencies) — ARCH §3.7, FR-SYS-016, Story 3.1.
-    vivid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    vivid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
     __table_args__ = (
         CheckConstraint("depth <= 1", name="ck_categories_depth_max_1"),

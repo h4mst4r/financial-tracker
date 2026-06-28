@@ -807,12 +807,16 @@ async def test_merge_reassigns_events_reparents_subs_archives_sources(monkeypatc
             from sqlalchemy import select as _select
 
             rows = (
-                await db.execute(
-                    _select(FinancialEvent.category_id).where(
-                        FinancialEvent.household_id == hh_id
+                (
+                    await db.execute(
+                        _select(FinancialEvent.category_id).where(
+                            FinancialEvent.household_id == hh_id
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         assert set(rows) == {target["id"]}
     finally:
         await engine.dispose()
@@ -854,9 +858,7 @@ async def test_merge_name_clash_appends_suffix(monkeypatch):
             factory, hh_id, person_id, "Groceries", parent_id=None, depth=0
         )
         await _seed_category(factory, hh_id, person_id, "Coffee", parent_id=target, depth=1)
-        source = await _seed_category(
-            factory, hh_id, person_id, "Food", parent_id=None, depth=0
-        )
+        source = await _seed_category(factory, hh_id, person_id, "Food", parent_id=None, depth=0)
         clash = await _seed_category(factory, hh_id, person_id, "Coffee", parent_id=source, depth=1)
 
         resp = client.post(
@@ -1025,12 +1027,16 @@ async def test_merge_skips_already_archived_source(monkeypatch):
             from sqlalchemy import select as _select
 
             evt_cats = (
-                await db.execute(
-                    _select(FinancialEvent.category_id).where(
-                        FinancialEvent.household_id == hh_id
+                (
+                    await db.execute(
+                        _select(FinancialEvent.category_id).where(
+                            FinancialEvent.household_id == hh_id
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         assert set(evt_cats) == {target["id"]}
     finally:
         await engine.dispose()

@@ -18,6 +18,8 @@ story needs (§4). Follow THESE patterns over any instinct to "follow common pat
 
 Story files live in `_bmad-output/implementation-artifacts/stories/`. Read the story file before implementing.
 
+> **Git visibility:** all of `_bmad-output/` is gitignored except force-tracked `architecture.md`, `ux-design-specification.md`, and the PRD. Editing `epics.md`, story files, or `sprint-status.yaml` produces **no** `git status` / `diff` output — verify those edits on the filesystem, never via git.
+
 ---
 
 ## 2. Process Standards (Non-Negotiable)
@@ -34,6 +36,10 @@ Story files live in `_bmad-output/implementation-artifacts/stories/`. Read the s
 **P4 — No magic values.** No raw hex/opacity/z-index/px/breakpoint in TSX — use named tokens in `index.css`, add the token if missing. Full list in [reference/frontend.md](.claude/reference/frontend.md) §1.7.
 
 **P5 — Spec defines values; the Bible renders them; the app matches the Bible.** The **UX spec is the source of truth for exact values** (tokens/hex/px/ms/z-index/breakpoints) and rules. The **Bible is the spec rendered to designer-approved pixels** — the visual reference you build against (you can't eyeball whether the app "looks right"). Build each component to its bible prototype; on an **exact-value** question the **spec arbitrates** (fix the bible + app to the spec), on a **look** question the approved bible does. `/design-system` mirrors the bible's section order (the live inventory of what's built). CI drift guards: `design-bible-parity.test.ts` (bible↔`index.css` agree) + `design-tokens.test.ts` (class/`max-w-*` collisions).
+
+**P6 — Build backend capability ahead of its consumer.** When a story's AC names a backend capability, deliver the **service fn + its endpoint + tests against seeded data** — not just an internal helper — even with no UI consumer yet, so the consumer story is pure wiring. An endpoint is **not** UI, so **P0 does not block it** (P0 only blocks user-visible *page* elements). Defer only the *display*, never the backend. This overrides the default YAGNI "no caller-less endpoint" instinct for this repo.
+
+**P7 — Keep planning artifacts greenfield and in-sync.** (a) The planning artifacts read as a **pure greenfield spec** — no provenance/archaeology, no `(as-built)` / delta tags, no "prior build" citations; *strip* such cruft, don't document it. (b) When a frontend story builds/changes specced UI, update **UX spec + design bible + `/design-system` together during dev** (not deferred to a re-review pass) — no SCP needed for in-story P5 parity. (c) `bmad-create-story` output must **lock every spec-deferred value verbatim** — "use sensible values" / "either X or Y" are defects; the dev agent transcribes, it doesn't design. (d) A design-bible re-review audits the **bible against the UX spec** and fixes the bible where it has drifted — but don't "fix" the intentionally-exaggerated `#motion` lab.
 
 ---
 

@@ -108,6 +108,13 @@ Entity identity is a **colour fill** of the instance's own `colour` (calm tint d
 
 > **⚠️ Caveat — this "for free" remap holds ONLY for tokens defined in CSS** (the interaction/feedback tokens above, and entity-*type* defaults). A **runtime, user-picked per-instance colour** (`Account.colour`, `Category.color`, …) is NOT remapped by CSS — `color-mix` can't snap an arbitrary hex to a ramp slot. It must pass through the JS resolver (`remapEntityColour` → `enforceFloor`) at the point `--entity-colour` is set (SCP 2026-06-22 colour-system-contract; UX §0.2). Do **not** assume an instance colour themes itself on immersive — wire it through the resolver. See §2.5.
 
+### 1.6a Chart Series Tokens (role-3 viz series, defined Story 1.6)
+
+`--color-chart-1 … --color-chart-8` are defined per-palette in `index.css` (base values in `@theme`,
+overrides per `[data-theme]` block). Epic 9 chart series **must read `var(--color-chart-N)`** so they
+reskin per palette automatically — never mint a new chart palette or hardcode series hexes. Per-instance
+entity series colours additionally pass through `remapEntityColour` under an immersive theme.
+
 ### 1.7 No Magic Values (governance P4 — full enforcement here)
 
 All hardcoded colour, opacity, size, z-index, transition duration, or breakpoint values must be named tokens in `index.css`. Never use:
@@ -238,6 +245,29 @@ utility — NOT a flat neutral `border-border`. (The colour still never goes on 
 - Use the themed utilities (`bg-entity-fill-calm` / `bg-entity-fill-vivid` for the fill, `border-entity-calm` for the edge) that read `--entity-colour`; never inline a raw hex.
 - **Selection** is NOT conveyed by the fill — use the §2.4 ring + corner check + lift (tint alone is insufficient on vivid fills).
 - Under an **immersive** theme the instance colour is remapped through the palette's tint ramp (UX §0.2). This does **NOT** happen for free in CSS — a runtime instance hex is resolved in JS (`remapEntityColour` → `enforceFloor`) at the point `--entity-colour` is set, so route every `--entity-colour` setter through the shared resolver / `useEntityColour` hook (SCP 2026-06-22 colour-system-contract; reopened Story 1.6). Never hardcode the hex; never assume the bare CSS variable self-themes on immersive.
+
+### 2.5a Colour-Pole Inheritance on Entity Surfaces (panel sets ONE foreground; children inherit)
+
+On any entity-fill surface (EntityCard, its detail view/modal — **calm OR vivid**) the **panel sets the
+foreground colour once and every child inherits it**; mute with `opacity-*`, never a neutral
+`text-text-*` / `bg-surface-*` / `border-border` token. Patching elements one-by-one is the wrong method —
+the fix is inheritance.
+
+- **Vivid fill:** foreground = the WCAG contrast pole `contrastText(colour)` (→ `--entity-on-colour` /
+  the `text-on-entity` utility on the root). A child that hardcodes `text-text-secondary` overrides the
+  inherited pole and renders light-on-light on a *light* vivid fill (the EntityCard ⋮-dots-invisible bug).
+- **Calm fill:** foreground = **`text-entity-fg`** (`color-mix(text-primary 60%, --entity-colour)` — the
+  pole pulled toward the instance hue). Owner reversed the old neutral-pole rule 2026-06-22 ("ugly with the
+  neutral"). Icons → `text-entity`; dividers/scrollbar/chrome → `border-entity-edge` / `scrollbar-entity`
+  (pole-aware). Use `border-entity-edge`, not `border-entity-calm`, on a surface that can go vivid.
+- **MiniSparkline** reads `var(--spark-colour, var(--entity-colour))`; EntityCard sets
+  `--spark-colour: var(--entity-on-colour)` on vivid **only** — else the chart is the same colour as the
+  fill and vanishes. Calm keeps the identity colour.
+- **Only exempt** (theme-governed by their own rules): semantic colours (success/error), the theme accent
+  (`ring-accent`, `bg-primary` selection check, `text-primary` action buttons), emoji glyphs, the favourite
+  star (always gold).
+- **Verify live** on a **light** vivid fill and across every account subtype — walk each descendant's
+  computed color/stroke/border/bg and assert none equals a neutral `--color-*`. jsdom can't see this.
 
 ### 2.6 Nested Button Rule — Never Button Inside Button
 
@@ -376,6 +406,54 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 
 ---
 
+### 2.12 Modal Portal Stacking Traps (z-index: `dropdown` 100 < `modal` 400)
+
+Both `Modal` and `ContextMenu` `createPortal` to `document.body`.
+- **A ⋮ ContextMenu inside a Modal is invisible/unclickable** — its flyout portals at `z-dropdown` (100),
+  behind the modal panel (`z-modal` 400). Use **inline icon buttons** for per-row actions inside a modal,
+  not a ⋮ menu.
+- **A ConfirmationDialog launched from inside a modal must be a SIBLING of it, not a child.** Nested,
+  React commits its body portal *before* the parent's → the parent paints over it (confirm button
+  un-hittable). Render `<><EntityModal/><ConfirmationDialog/></>`.
+
+Equal z-index → DOM/commit order decides paint; the lesson is the nesting, not the number. Verify live
+(`document.elementFromPoint` on the action button) — jsdom has no stacking/paint.
+
+### 2.13 Searchable Dropdown; Toast & Scroll-Gutter Polish
+
+- **Dropdown has an opt-in `searchable` prop** (Story 1.13) — ONE combobox component, reuse for any "type
+  to find one of many" (currency, timezone, future CommandPalette). Filters on
+  `DropdownOption.searchText ?? (string label : value)` — **never the raw `label`** (it's a ReactNode).
+  Searchable mode keeps DOM focus in the filter input and tracks the highlight via `aria-activedescendant`
+  + `bg-surface-active`; the roving-tabIndex `.focus()` is gated to the non-searchable path (don't
+  reintroduce per-option focus for searchable). Disabled trigger sets the real HTML `disabled` attribute.
+- **`scrollbar-gutter-stable`** on `AppShell <main>` — without it a tall tab's scrollbar narrows the
+  content box and re-centres `max-w-* mx-auto` columns ~5px on tab switch. Inherit for any new scroll
+  region with centred content.
+- **Toast motion** (UX §0.7): `ToastContainer` is `flex-col-reverse` + per-item grid wrapper transitioning
+  `grid-template-rows 0fr↔1fr` (height growth bumps older toasts) + inner `translate-x`/`opacity` slide.
+  Removal is **timer-driven** (`TOAST_EXIT_MS`), NOT `transitionend` — a 0s reduce-motion transition emits
+  no `transitionend`, so the toast would stick in the DOM.
+
+### 2.14 Table\<T\> Record-Ledger Primitive (Story 5.0a)
+
+`components/primitives/Table.tsx` (+ `tableColumns.tsx` factories `date/text/money/select/actionsColumn`,
+`tableLogic.ts` pure `nextSort`/`sortRows`/`shouldCommit`). Demoed at `/design-system#table`.
+- **It's the dumb row-grid** — no fetch, no filters, no modal, no selection state. `rows` + selection come
+  from `useEntityManager` / `useMultiSelect`. Sort is both modes (internal default; controlled when caller
+  passes `sort` + `onSortChange`).
+- **Inline edit:** double-click → `editControl` swap; Enter/blur-out → `onCellCommit(row,key,value)`;
+  Esc/blur-within → cancel; `canEditRow` gates. **Optimism + rollback + toast live in the CALLER's
+  `onCellCommit`**, not Table. Double-fire guarded by a `resolved` ref.
+- **Neutral surface tokens** (`border-border` / `bg-surface-hover`), NOT entity tints — the tint is the
+  consumer's job (§2.5).
+- Every `primitives/index.ts` export must map to a `/design-system` section or
+  `design-system-completeness.test.tsx` fails. Column factories live in their own `.tsx` to dodge
+  `react-refresh/only-export-components`.
+- Seams (deferred, not bugs): `moneyColumn` display→`<MonetaryValue>` = 5.0b; `statusColumn`→StatusBadge =
+  5.0c; category/currency/account/person cols + amount+ccy edit cell = 5.2; aggregation profile (totals,
+  drill) = 9.3; reorderable config profile + bespoke-table retrofit = 5.12.
+
 ## 3. State & API Rules
 
 ### 3.1 Zustand Stores
@@ -407,3 +485,52 @@ For any feature page implementing entity CRUD:
 Do NOT build bespoke CRUD pages — extend the generic layer.
 
 **Sanctioned exception — CategoryTree.** The CategoryTree is a *tree*, not a card grid, so it does **NOT** use `EntityCard` — it renders the flat flex-strip rows of §2.11. It still extends the rest of the generic layer (EntityPage, EntityModal, `useEntityManager`, `useMultiSelect` + BulkActionBar). This is the **only** entity surface exempt from `EntityCard`; everything else uses it. (UX §6.)
+
+### 3.4 Backend Timestamps Serialize Naive (no `Z`) — Append `Z` Before `new Date()`
+
+`DateTime(timezone=True)` columns round-trip **naive** from SQLite; Pydantic emits them tz-less
+(`"2026-06-20T11:59:35"`, no `Z`). `new Date(naive)` in the browser parses as **local** → any
+relative-age / freshness / "N ago" math skews by the viewer's UTC offset (a 52 h-stale rate showed as
+"64 h"). Before `new Date()`, append `Z` when the string carries no offset:
+`/[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z'` (pattern lives in `lib/currency.ts::rateTimeMs`).
+Route every freshness helper through it. Applies to **any** backend timestamp rendered for elapsed
+display (snapshots E4, transactions E5, occurrences E6, alerts E10, chart x-axes E9). `lib/date.ts` does
+**not** cover this — it's the per-person *date-only* preference. Tests must include a naive (no-`Z`) input,
+not just `toISOString()` (which always emits `Z` and hides the bug).
+
+---
+
+## 4. Gate Reality, Local Dev & Repo Gotchas
+
+### 4.1 The Frontend Gate Is Three Layers — Re-run the Whole Thing; `tsc -b` Is the Only Real Type Check
+
+`npm run lint` = `eslint` → `tsc -b` → `stylelint`, chained. `npm run build` = `tsc -b && vite build`.
+- **`tsc -b`, never `tsc --noEmit`.** The root `tsconfig.json` is a solution file (`files: []` +
+  `references`); plain `tsc --noEmit` on it compiles **zero files and exits 0** — a no-op gate that always
+  passed (a file that didn't even compile sailed through every historical "green"). Fixed in `package.json`
+  2026-06-22 → `tsc -b`. Only `tsc -b` / `npm run build` is a trustworthy type gate.
+- **eslint has NO underscore-ignore for unused vars** — `_url` / `_opts` still error. Route a fetch mock by
+  URL so its params are actually used (repo convention in `management-tab.test.tsx`); don't underscore-prefix.
+- **Re-run the FULL gate after any fix** (`npm run lint && npm run test && npm run build`) — a fix for one
+  layer routinely breaks another (a `tsc` fix that introduces an eslint unused-var). One green layer ≠ done.
+- Green lint/test ≠ compiles ≠ visually correct — **no layer checks colour/pole**; do the live visual
+  verify (governance P1).
+
+### 4.2 Stock Python `.gitignore` Silently Swallows `frontend/src` Dirs Named `lib`/`build`/`dist`/`var`
+
+The root `.gitignore` is the Python template with **unanchored** `lib/`, `build/`, `dist/`, `var/`,
+`parts/`, `wheels/` — they match anywhere in the tree, so `frontend/src/lib/` is ignored (file on disk,
+`git add` skips it, `git status` clean, breaks only on a fresh clone). `frontend/src/lib/` is already
+negated (`!frontend/src/lib/`). When a new dir under `frontend/src/` collides with one of those names, add
+a `!frontend/src/<dir>/` negation. Verify: `git check-ignore -v <path>` (no output = safe).
+
+### 4.3 Local Dev Run (don't remove the Dev-login button; `/dashboard`; uvicorn :8000)
+
+- **Browser dev login = the Login page "Dev login" button** (the X-Session-Token path), NOT the middleware
+  cookie auto-inject (unreliable through the Vite proxy). Button → `POST /auth/dev-login` →
+  `sessionStorage.dev_session_token` → `api/client.ts` sends `X-Session-Token` on every request. **Do NOT
+  remove the button** (removing it broke browser dev login once). It + the "DEV BYPASS ON" badge gate on
+  the live backend flag (`GET /auth/config {authBypassEnabled}`, in `PUBLIC_AUTH_PATHS`) **and**
+  `import.meta.env.DEV` — gating on `import.meta.env.DEV` alone is the bug (shows when the flag is off).
+- **`/dashboard` is canonical**; `/` → `<Navigate to="/dashboard">`. Nav + public-error "back" target it.
+- **uvicorn runs on :8000** (Vite proxy `VITE_API_TARGET` default), not :8080.

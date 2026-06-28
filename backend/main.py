@@ -161,7 +161,20 @@ def create_app() -> FastAPI:
         )
 
         @app.get("/{full_path:path}")
-        async def spa_fallback(full_path: str) -> FileResponse:
+        async def spa_fallback(request: Request, full_path: str) -> FileResponse:
+            # An unmatched API-namespace GET is a 404, not the SPA shell — otherwise a typo'd
+            # endpoint returns index.html with 200 instead of a 7807 problem (§4.6).
+            if full_path.startswith(("api/", "auth/", "jobs/")):
+                raise HTTPException(
+                    status_code=404,
+                    detail=problem(
+                        type_="not_found",
+                        title="Not found",
+                        status=404,
+                        detail="Not found",
+                        instance=request.url.path,
+                    ),
+                )
             return FileResponse(FRONTEND_DIST / "index.html")
 
     return app

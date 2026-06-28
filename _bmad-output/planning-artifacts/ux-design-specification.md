@@ -1393,12 +1393,13 @@ a **Filters** popover for secondary filters (account, person, status, GST, tags,
 state serializes to the `VisualizationFilter` that §12.8 Visualize hands to the Viewer.
 
 ### 12.1 Columns (desktop)
-checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-line) · **Payee**
+checkbox · **Date** · **Name** (+ payment-method / description sub-line) · **Payee**
 (avatar — the `payee_person_id` PersonRef, ARCH §3.2; header reads "Payee" to match the data model) ·
 **Category** (filled chip — *colour leads*, anti-rainbow §0.1) · **Currency** (chip) ·
-**Amount** (`MonetaryValue` columnar+signColour, §0.3a; original, sortable) · **Base SGD**
-(`MonetaryValue` columnar, prominent, sortable) · **status**
-(faint dot) · ⋮.
+**Amount** (`MonetaryValue` columnar+signColour, §0.3a; original) · **Base SGD**
+(`MonetaryValue` columnar, prominent) · **status**
+(faint dot) · ⋮. **Every data column is sortable** (§12.2) — the per-column annotation is dropped
+because it is now universal; only the `checkbox` and `⋮` utility columns do not sort.
 - **Currency + Amount + Base are first-class** (the figures that matter most).
   Outflow/inflow is conveyed by amount **sign + colour** (red/green), not a separate column.
 - **Status is de-emphasized** — a `StatusBadge` `dot` variant (§0.9a: green paid · amber pending ·
@@ -1411,8 +1412,10 @@ checkbox · **Date** (sortable) · **Name** (+ payment-method / description sub-
   Currency / Amount / SGD align cleanly across every row — columns never overlap.
 
 ### 12.2 Sorting — both
-**Sortable column headers** (Date / Amount / SGD, asc↕desc) on desktop; collapses to a **sort
-dropdown** on mobile.
+**Every data column is sortable** (Date / Name / Payee / Category / Currency / Amount / Base SGD,
+asc↕desc) on desktop — the active column shows the direction caret; collapses to a **sort dropdown**
+on mobile. Only the leading `checkbox` (selection) and trailing `⋮` (actions) utility columns do not
+sort. (Owner decision 2026-06-23 — supersedes the earlier "Date / Amount / SGD only".)
 
 ### 12.3 Quick-add row
 An inline row pinned at the top for fast entry of the **always-edited** fields: date (today) ·

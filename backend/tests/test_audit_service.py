@@ -119,20 +119,17 @@ async def test_audit_log_creates_row_in_same_transaction():
 
 
 @pytest.mark.asyncio
-async def test_audit_masking_account_number():
-    """account_number is masked to **** + last 4."""
+async def test_audit_masking_account_number_flows_through_snapshot():
+    """account_number is masked to **** + last 4 *in the actual snapshot path* — not just the
+    helper in isolation. This is what guarantees a raw account number never reaches an audit row."""
     account = _TestAccount(
         id="test-1",
         name="Test Account",
         account_number="1234567890123456",
     )
     snapshot = _scalar_snapshot(account)
-    assert snapshot is not None
-    # The masking happens in _mask_value during snapshot creation
-    from backend.services.audit import _mask_value
-
-    masked = _mask_value("account_number", "1234567890123456")
-    assert masked == "****3456", f"Expected '****3456', got '{masked}'"
+    assert snapshot["account_number"] == "****3456"
+    assert "1234567890123456" not in str(snapshot)  # the raw value never survives
 
 
 @pytest.mark.asyncio

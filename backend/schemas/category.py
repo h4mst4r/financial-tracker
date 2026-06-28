@@ -14,11 +14,13 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from backend.schemas.constraints import Hex, Str50, Str100
+
 
 class CategoryCreate(BaseModel):
-    name: str
-    color: str
-    icon: str | None = None
+    name: Str100
+    color: Hex
+    icon: Str50 | None = None
     category_type: str = "expense"
     parent_id: str | None = None
     vivid: bool = False
@@ -28,9 +30,9 @@ class CategoryUpdate(BaseModel):
     # No `parent_id`: re-parent / promote is Story 3.2 (with its own depth + has-children guards).
     # Editing a category never moves it in the tree; a parent_id sent here is ignored (Pydantic
     # drops extra fields), so the tree's 2-level invariant can't be violated via PATCH.
-    name: str | None = None
-    color: str | None = None
-    icon: str | None = None
+    name: Str100 | None = None
+    color: Hex | None = None
+    icon: Str50 | None = None
     category_type: str | None = None
     vivid: bool | None = None
 

@@ -176,9 +176,7 @@ class _FakeProvider:
 
 def _patch_providers(monkeypatch, mapping: dict[str, _FakeProvider]) -> None:
     """Map provider_type → fake impl, replacing the real env/httpx-backed `_build_provider`."""
-    monkeypatch.setattr(
-        fx_fetch, "_build_provider", lambda row: mapping.get(row.provider_type)
-    )
+    monkeypatch.setattr(fx_fetch, "_build_provider", lambda row: mapping.get(row.provider_type))
 
 
 def _refresh(client: TestClient, bearer: str | None = _BEARER):
@@ -194,9 +192,7 @@ async def _currency(factory, cid: str) -> Currency:
 async def _alerts(factory, hh_id: str) -> list[Alert]:
     async with factory() as db:
         return list(
-            (
-                await db.execute(select(Alert).where(Alert.household_id == hh_id))
-            ).scalars().all()
+            (await db.execute(select(Alert).where(Alert.household_id == hh_id))).scalars().all()
         )
 
 
@@ -292,10 +288,10 @@ async def test_happy_fetch_sets_rate_direction_and_history(monkeypatch):
 
         async with factory() as db:
             hist = (
-                await db.execute(
-                    select(FxRateHistory).where(FxRateHistory.currency_id == nzd)
-                )
-            ).scalars().all()
+                (await db.execute(select(FxRateHistory).where(FxRateHistory.currency_id == nzd)))
+                .scalars()
+                .all()
+            )
         assert len(hist) == 1
         assert hist[0].rate_date == datetime.now(UTC).date()  # UTC-consistent rate_date
         assert hist[0].rate_to_base == expected
@@ -304,10 +300,10 @@ async def test_happy_fetch_sets_rate_direction_and_history(monkeypatch):
         assert _refresh(client).status_code == 200
         async with factory() as db:
             hist2 = (
-                await db.execute(
-                    select(FxRateHistory).where(FxRateHistory.currency_id == nzd)
-                )
-            ).scalars().all()
+                (await db.execute(select(FxRateHistory).where(FxRateHistory.currency_id == nzd)))
+                .scalars()
+                .all()
+            )
         assert len(hist2) == 1
     finally:
         await engine.dispose()
@@ -360,9 +356,7 @@ async def test_all_fail_keeps_last_rate_never_null(monkeypatch):
         )
         fresh = await _seed_currency(factory, hh, "USD")  # rate 1.0, last_rate_at None
         await _seed_provider(factory, hh, "openexchangerates", 0)
-        _patch_providers(
-            monkeypatch, {"openexchangerates": _FakeProvider("oxr", {}, fail=True)}
-        )
+        _patch_providers(monkeypatch, {"openexchangerates": _FakeProvider("oxr", {}, fail=True)})
 
         monkeypatch.setattr(get_settings(), "service_account_key", _BEARER, raising=False)
         client = _client_with_db(factory, monkeypatch)
@@ -380,8 +374,10 @@ async def test_all_fail_keeps_last_rate_never_null(monkeypatch):
         # Provider marked down.
         async with factory() as db:
             prov = (
-                await db.execute(select(FxProvider).where(FxProvider.household_id == hh))
-            ).scalars().first()
+                (await db.execute(select(FxProvider).where(FxProvider.household_id == hh)))
+                .scalars()
+                .first()
+            )
         assert prov.last_status == "down"
         assert prov.last_checked_at is not None
     finally:
@@ -398,9 +394,7 @@ async def test_fx_api_down_raised_deduped_and_not_false_positive(monkeypatch):
         stale = datetime.now(UTC) - timedelta(hours=80)
         await _seed_currency(factory, hh, "NZD", last_rate_at=stale)
         await _seed_provider(factory, hh, "openexchangerates", 0)
-        _patch_providers(
-            monkeypatch, {"openexchangerates": _FakeProvider("oxr", {}, fail=True)}
-        )
+        _patch_providers(monkeypatch, {"openexchangerates": _FakeProvider("oxr", {}, fail=True)})
 
         monkeypatch.setattr(get_settings(), "service_account_key", _BEARER, raising=False)
         client = _client_with_db(factory, monkeypatch)
@@ -427,9 +421,7 @@ async def test_no_alert_when_recent_or_successful(monkeypatch):
         recent = datetime.now(UTC) - timedelta(hours=10)
         await _seed_currency(factory, hh, "NZD", last_rate_at=recent)
         await _seed_provider(factory, hh, "openexchangerates", 0)
-        _patch_providers(
-            monkeypatch, {"openexchangerates": _FakeProvider("oxr", {}, fail=True)}
-        )
+        _patch_providers(monkeypatch, {"openexchangerates": _FakeProvider("oxr", {}, fail=True)})
         monkeypatch.setattr(get_settings(), "service_account_key", _BEARER, raising=False)
         client = _client_with_db(factory, monkeypatch)
         assert _refresh(client).json()["alerts_raised"] == 0
@@ -438,9 +430,11 @@ async def test_no_alert_when_recent_or_successful(monkeypatch):
         # Now a successful run also raises no alert.
         _patch_providers(
             monkeypatch,
-            {"openexchangerates": _FakeProvider(
-                "oxr", {"SGD": Decimal("0.74"), "NZD": Decimal("0.60")}
-            )},
+            {
+                "openexchangerates": _FakeProvider(
+                    "oxr", {"SGD": Decimal("0.74"), "NZD": Decimal("0.60")}
+                )
+            },
         )
         assert _refresh(client).json()["alerts_raised"] == 0
         assert await _alerts(factory, hh) == []
@@ -463,9 +457,11 @@ async def test_unseeded_household_gets_seeded_and_fetches(monkeypatch):
         # Frankfurter is EUR-native; seeded enabled (keyless). OXR seeds disabled (no key in env).
         _patch_providers(
             monkeypatch,
-            {"frankfurter": _FakeProvider(
-                "frankfurter", {"SGD": Decimal("1.45"), "NZD": Decimal("1.10")}
-            )},
+            {
+                "frankfurter": _FakeProvider(
+                    "frankfurter", {"SGD": Decimal("1.45"), "NZD": Decimal("1.10")}
+                )
+            },
         )
         monkeypatch.setattr(get_settings(), "service_account_key", _BEARER, raising=False)
         client = _client_with_db(factory, monkeypatch)
@@ -477,8 +473,10 @@ async def test_unseeded_household_gets_seeded_and_fetches(monkeypatch):
         # The default chain was seeded (Frankfurter + OXR), and NZD resolved via the keyless one.
         async with factory() as db:
             provs = (
-                await db.execute(select(FxProvider).where(FxProvider.household_id == hh))
-            ).scalars().all()
+                (await db.execute(select(FxProvider).where(FxProvider.household_id == hh)))
+                .scalars()
+                .all()
+            )
         assert {p.provider_type for p in provs} == {"frankfurter", "openexchangerates"}
         nzd_row = await _currency(factory, nzd)
         assert nzd_row.rate_source == "frankfurter"
@@ -544,9 +542,11 @@ async def test_multi_household_independent(monkeypatch):
         await _seed_provider(factory, hh2, "openexchangerates", 0)
         _patch_providers(
             monkeypatch,
-            {"openexchangerates": _FakeProvider(
-                "oxr", {"SGD": Decimal("0.74"), "NZD": Decimal("0.60")}
-            )},
+            {
+                "openexchangerates": _FakeProvider(
+                    "oxr", {"SGD": Decimal("0.74"), "NZD": Decimal("0.60")}
+                )
+            },
         )
         monkeypatch.setattr(get_settings(), "service_account_key", _BEARER, raising=False)
         client = _client_with_db(factory, monkeypatch)

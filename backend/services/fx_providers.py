@@ -58,6 +58,23 @@ PROVIDER_TYPES: dict[str, dict] = {
 # fallback, so FX works out of the box with zero secrets and OXR auto-promotes once a key is added.
 _DEFAULT_CHAIN: list[str] = ["openexchangerates", "frankfurter"]
 
+# Allowlist of secret/env NAMES an owner may bind to a provider. `api_key_secret_ref` is owner-set
+# free text resolved via `getattr(settings, ref.lower())` at fetch time (fx_fetch.py). Unrestricted,
+# it lets an owner read ANY app secret (`session_secret`, `google_client_secret`) and exfiltrate it
+# to the owner-set `base_url` on the daily job. Restrict to the known FX-key names.
+_ALLOWED_SECRET_REFS: frozenset[str] = frozenset(
+    meta["default_secret_ref"] for meta in PROVIDER_TYPES.values() if meta["default_secret_ref"]
+)
+
+
+def _assert_allowed_secret_ref(secret_ref: str | None) -> None:
+    """400 unless a non-null `api_key_secret_ref` is a known FX-key name — blocks resolving an
+    arbitrary `Settings` attribute at fetch time. Clearing it (None) is always allowed."""
+    if secret_ref is not None and secret_ref not in _ALLOWED_SECRET_REFS:
+        errors.bad_request(
+            "Invalid key reference", f"'{secret_ref}' is not an allowed FX API-key reference"
+        )
+
 
 def key_configured(secret_ref: str | None) -> bool:
     """Whether the env/secret named by `secret_ref` is set — presence only, never the value.
@@ -126,6 +143,8 @@ async def create_provider(
         errors.bad_request(
             "Unknown provider type", f"'{data.provider_type}' is not a supported FX provider"
         )
+    if meta["requires_key"]:
+        _assert_allowed_secret_ref(data.api_key_secret_ref)
 
     if data.priority is not None:
         priority = data.priority
@@ -159,6 +178,8 @@ async def update_provider(
 
     if not PROVIDER_TYPES.get(obj.provider_type, {}).get("requires_key", False):
         fields.pop("api_key_secret_ref", None)
+    if "api_key_secret_ref" in fields:
+        _assert_allowed_secret_ref(fields["api_key_secret_ref"])
 
     if "base_url" in fields and not (fields["base_url"] or "").strip():
         errors.bad_request("Invalid base URL", "Base URL cannot be empty")
@@ -179,10 +200,10 @@ async def reorder_providers(
     """Rewrite `priority` to the position in `ordered_ids` (AC1). The id list must match the
     household's providers exactly (every id present, no strangers) → 400 otherwise."""
     rows = (
-        await db.execute(
-            select(FxProvider).where(FxProvider.household_id == household_id)
-        )
-    ).scalars().all()
+        (await db.execute(select(FxProvider).where(FxProvider.household_id == household_id)))
+        .scalars()
+        .all()
+    )
     if set(ordered_ids) != {r.id for r in rows}:
         errors.bad_request(
             "Invalid reorder", "The id list must match the household's providers exactly"

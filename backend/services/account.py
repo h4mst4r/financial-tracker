@@ -11,7 +11,7 @@ multi-owner add/remove is `set_account_owners`/`replace_owners` (Story 4.3, `PUT
 
 import logging
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import delete, exists, func, or_, select
@@ -29,7 +29,7 @@ from backend.schemas.account import (
     AccountSnapshotUpdate,
     AccountUpdate,
 )
-from backend.services.audit import _scalar_snapshot, audit
+from backend.services.audit import _scalar_snapshot, _serialize_scalar, audit
 from backend.services.base import assert_no_dependencies
 
 logger = logging.getLogger(__name__)
@@ -96,22 +96,12 @@ _SNAPSHOT_SKIP = frozenset(
 )
 
 
-def _ser(value: object) -> object | None:
-    """JSON-safe scalar (the audit `json.dumps` can't take Decimal/date). `account_number` masking
-    is re-applied by `audit.log` at write time."""
-    if value is None:
-        return None
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    return value
-
-
 def _snapshot(account: Account) -> dict:
-    """Scalar audit snapshot — every business column (skips the identity/audit block)."""
+    """Scalar audit snapshot — every business column (skips the identity/audit block). Reuses the
+    audit module's `_serialize_scalar` (Decimal/date → JSON-safe); `account_number` masking is
+    re-applied by `audit.log` at write time."""
     return {
-        col.key: _ser(getattr(account, col.key))
+        col.key: _serialize_scalar(getattr(account, col.key))
         for col in account.__table__.columns
         if col.key not in _SNAPSHOT_SKIP
     }
@@ -166,9 +156,7 @@ async def set_account_owners(
     members = set(
         (
             await db.execute(
-                select(Person.id).where(
-                    Person.household_id == household_id, Person.id.in_(desired)
-                )
+                select(Person.id).where(Person.household_id == household_id, Person.id.in_(desired))
             )
         )
         .scalars()
@@ -176,9 +164,7 @@ async def set_account_owners(
     )
     invalid = [pid for pid in desired if pid not in members]
     if invalid:
-        errors.bad_request(
-            "Invalid owners", f"{sorted(invalid)} are not members of this household"
-        )
+        errors.bad_request("Invalid owners", f"{sorted(invalid)} are not members of this household")
 
     existing = (
         (await db.execute(select(AccountOwner).where(AccountOwner.account_id == account_id)))
@@ -341,9 +327,7 @@ async def get_account(db: AsyncSession, household_id: str, account_id: str) -> A
     return await get_or_404(db, Account, account_id, household_id=household_id)
 
 
-async def owner_ids_for(
-    db: AsyncSession, account_ids: Sequence[str]
-) -> dict[str, list[str]]:
+async def owner_ids_for(db: AsyncSession, account_ids: Sequence[str]) -> dict[str, list[str]]:
     """Map each account id → its owner person-ids in one grouped query (no N+1)."""
     if not account_ids:
         return {}
@@ -763,9 +747,7 @@ async def delete_blockers(db: AsyncSession, household_id: str) -> dict[str, str]
     return blockers
 
 
-async def single_delete_blocker(
-    db: AsyncSession, household_id: str, account_id: str
-) -> str | None:
+async def single_delete_blocker(db: AsyncSession, household_id: str, account_id: str) -> str | None:
     """The hard-delete blocker reason for one account, or None if it is deletable. Same checks +
     precedence as `delete_blockers`, for single-row responses."""
 

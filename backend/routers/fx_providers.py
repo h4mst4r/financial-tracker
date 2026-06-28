@@ -74,6 +74,18 @@ async def list_fx_provider_types(
     ]
 
 
+@router.get("/fx-providers/{provider_id}")
+async def get_fx_provider(
+    provider_id: str,
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> FxProviderResponse:
+    """A single household-scoped provider (any member). 404 incl. cross-household. Declared after
+    the static `/types` route so it isn't shadowed."""
+    provider = await fx_service.get_provider(db, household_id, provider_id)
+    return _to_response(provider)
+
+
 @router.post("/fx-providers", status_code=201)
 async def create_fx_provider(
     data: FxProviderCreate,

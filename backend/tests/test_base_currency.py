@@ -100,15 +100,27 @@ async def _seed(
         )
         db.add(
             Currency(
-                household_id=hh_id, code="SGD", name="SGD", symbol="S$", is_base=True,
-                is_display_active=True, rate_to_base=Decimal("1.0"), fee_pct=Decimal("0"),
+                household_id=hh_id,
+                code="SGD",
+                name="SGD",
+                symbol="S$",
+                is_base=True,
+                is_display_active=True,
+                rate_to_base=Decimal("1.0"),
+                fee_pct=Decimal("0"),
             )
         )
         for code, rate in rates.items():
             db.add(
                 Currency(
-                    household_id=hh_id, code=code, name=code, symbol=code, is_base=False,
-                    is_display_active=True, rate_to_base=Decimal(rate), fee_pct=Decimal("0"),
+                    household_id=hh_id,
+                    code=code,
+                    name=code,
+                    symbol=code,
+                    is_base=False,
+                    is_display_active=True,
+                    rate_to_base=Decimal(rate),
+                    fee_pct=Decimal("0"),
                     # A real (fetched) rate — the base-change guard rejects last_rate_at=None.
                     last_rate_at=datetime.now(UTC),
                 )
@@ -134,8 +146,10 @@ def _auth(client: TestClient, sid: str, csrf: str) -> None:
 async def _currencies(factory, hh_id: str) -> dict[str, Currency]:
     async with factory() as db:
         rows = (
-            await db.execute(select(Currency).where(Currency.household_id == hh_id))
-        ).scalars().all()
+            (await db.execute(select(Currency).where(Currency.household_id == hh_id)))
+            .scalars()
+            .all()
+        )
         return {c.code: c for c in rows}
 
 
@@ -191,19 +205,38 @@ async def test_change_base_currency_recomputes_events(monkeypatch):
         by_code = await _currencies(factory, hh_id)
         async with factory() as db:
             # Historical rows (relative to the OLD base SGD) for D1 only.
-            db.add(FxRateHistory(currency_id=by_code["USD"].id, rate_date=d1,
-                                 rate_to_base=Decimal("1.40"), source="test"))
-            db.add(FxRateHistory(currency_id=by_code["NZD"].id, rate_date=d1,
-                                 rate_to_base=Decimal("0.90"), source="test"))
+            db.add(
+                FxRateHistory(
+                    currency_id=by_code["USD"].id,
+                    rate_date=d1,
+                    rate_to_base=Decimal("1.40"),
+                    source="test",
+                )
+            )
+            db.add(
+                FxRateHistory(
+                    currency_id=by_code["NZD"].id,
+                    rate_date=d1,
+                    rate_to_base=Decimal("0.90"),
+                    source="test",
+                )
+            )
 
             def _ev(code, amount, ev_date):
                 amt = Decimal(amount)
                 # STI subtypes ("transaction" etc.) arrive in Epic 5; these re-base rows just need a
                 # non-null `event_type` (single-class STI, ARCH §4.5 — no ORM polymorphic map).
                 return FinancialEvent(
-                    household_id=hh_id, created_by=person_id, event_type="financial_event",
-                    name=f"{code} txn", event_date=ev_date, currency=code, amount=amt,
-                    fx_rate=Decimal("1"), amount_base_calculated=amt, amount_base=amt,
+                    household_id=hh_id,
+                    created_by=person_id,
+                    event_type="financial_event",
+                    name=f"{code} txn",
+                    event_date=ev_date,
+                    currency=code,
+                    amount=amt,
+                    fx_rate=Decimal("1"),
+                    amount_base_calculated=amt,
+                    amount_base=amt,
                 )
 
             db.add(_ev("NZD", "100", d1))  # becomes the new base
@@ -224,7 +257,9 @@ async def test_change_base_currency_recomputes_events(monkeypatch):
                     await db.execute(
                         select(FinancialEvent).where(FinancialEvent.household_id == hh_id)
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             }
         # The new-base event: rate 1, base == amount, no FX date.
         nzd = events[("NZD", d1)]
@@ -311,8 +346,14 @@ async def test_never_fetched_currency_400(monkeypatch):
         async with factory() as db:
             db.add(
                 Currency(
-                    household_id=hh_id, code="JPY", name="JPY", symbol="¥", is_base=False,
-                    is_display_active=True, rate_to_base=Decimal("1.0"), fee_pct=Decimal("0"),
+                    household_id=hh_id,
+                    code="JPY",
+                    name="JPY",
+                    symbol="¥",
+                    is_base=False,
+                    is_display_active=True,
+                    rate_to_base=Decimal("1.0"),
+                    fee_pct=Decimal("0"),
                 )
             )
             await db.commit()

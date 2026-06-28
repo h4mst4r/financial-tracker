@@ -10,14 +10,14 @@ detachment-aware `?error=` code (§2.6 step 4), any other failure to `?error=oau
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend import errors
 from backend.config import get_settings
 from backend.database import get_db
 from backend.dependencies import get_current_person
-from backend.errors import problem
 from backend.models.identity import Person
 from backend.rate_limit import AUTH_RATE_LIMIT, limiter
 from backend.services import auth as auth_service
@@ -183,16 +183,7 @@ async def dev_login(
     `/auth/me`-shaped body and any refactor to share it land in Story 2.4a.
     """
     if not get_settings().auth_bypass_enabled:
-        raise HTTPException(
-            status_code=404,
-            detail=problem(
-                type_="not_found",
-                title="Not found",
-                status=404,
-                detail="Not found",
-                instance=request.url.path,
-            ),
-        )
+        errors.not_found(instance=request.url.path)
 
     session = await auth_service.ensure_dev_session(
         db, ip=request.client.host if request.client else None

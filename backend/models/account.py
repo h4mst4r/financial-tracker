@@ -17,10 +17,12 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from backend.models.base import Base, BaseEntity
+from backend.models.base import Base, BaseEntity, _utcnow
 
 
 class Account(BaseEntity):
@@ -31,16 +33,18 @@ class Account(BaseEntity):
 
     __tablename__ = "accounts"
 
-    account_type: Mapped[str] = mapped_column(String, nullable=False)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Shared columns
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     institution: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     colour: Mapped[str | None] = mapped_column(String(7), nullable=True)
     # Per-instance full-saturation fill opt-in (calm tint default; vivid = full-saturation fill).
     # Cross-entity column (also on categories/currencies) — ARCH §3.5, FR-SYS-016, Story 4.1.
-    vivid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    vivid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     # The account's native currency (ISO 4217) — `opening_balance`/snapshots are denominated in it
     # (ARCH §3.5, FR-A-001, Story 4.4). Validated against household currencies on create; editable
     # only until the account has history, then locked (changing it reinterprets stored values).
@@ -101,7 +105,7 @@ class Account(BaseEntity):
     coverage_personal_accident: Mapped[Decimal | None] = mapped_column(
         Numeric(15, 4), nullable=True
     )
-    coverage_hospital: Mapped[str | None] = mapped_column(String, nullable=True)
+    coverage_hospital: Mapped[str | None] = mapped_column(Text, nullable=True)
     surrender_value: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
     surrender_inquiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -123,7 +127,9 @@ class AccountOwner(Base):
     account_id: Mapped[str] = mapped_column(String(36), ForeignKey("accounts.id"), primary_key=True)
     person_id: Mapped[str] = mapped_column(String(36), ForeignKey("persons.id"), primary_key=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
 
 
 class AccountSnapshot(BaseEntity):
@@ -142,7 +148,7 @@ class AccountSnapshot(BaseEntity):
     formula_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("formulas.id"), nullable=True
     )
-    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_account_snapshots_account_id_snapshot_date", "account_id", "snapshot_date"),

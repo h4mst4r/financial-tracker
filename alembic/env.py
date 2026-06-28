@@ -17,8 +17,7 @@ from alembic import context
 # Project root on sys.path so `backend.*` imports resolve from any cwd.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import backend.models  # noqa: E402,F401  # ensure every entity module is imported
-from backend.models import Base  # noqa: E402
+from backend.models import Base  # noqa: E402  # __init__ imports every entity → all tables on Base.metadata
 
 config = context.config
 if config.config_file_name:

@@ -13,24 +13,26 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from backend.schemas.constraints import Str30, Str100, Str200, Str500
+
 
 class FxProviderCreate(BaseModel):
     # `provider_type` must be a registry key (validated in the service). `name`/`base_url` default
     # from the registry when omitted; `priority` appends to the chain end. No raw key field — only
     # the secret reference (a NAME), and it is ignored for keyless provider types.
-    provider_type: str
-    name: str | None = None
-    base_url: str | None = None
-    api_key_secret_ref: str | None = None
+    provider_type: Str30
+    name: Str100 | None = None
+    base_url: Str500 | None = None
+    api_key_secret_ref: Str200 | None = None
     priority: int | None = None
     is_enabled: bool = True
 
 
 class FxProviderUpdate(BaseModel):
     # No `provider_type` — the type identity is immutable (it selects the future fetcher impl, 3.7).
-    name: str | None = None
-    base_url: str | None = None
-    api_key_secret_ref: str | None = None
+    name: Str100 | None = None
+    base_url: Str500 | None = None
+    api_key_secret_ref: Str200 | None = None
     priority: int | None = None
     is_enabled: bool | None = None
 

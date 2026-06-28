@@ -14,14 +14,16 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from backend.schemas.constraints import Hex, Pct, Str3, Str5, Str100
+
 
 class CurrencyCreate(BaseModel):
     # No `is_base` — create is always non-base (AC2). No `rate_to_base`/`fee_pct` — the placeholder
     # rate is set by the service (real fetch is Story 3.7); fee editing is Story 3.8.
-    code: str
-    name: str
-    symbol: str
-    colour: str | None = None
+    code: Str3
+    name: Str100
+    symbol: Str5
+    colour: Hex | None = None
     vivid: bool = False
     is_display_active: bool = True
 
@@ -31,12 +33,12 @@ class CurrencyUpdate(BaseModel):
     # 3.9), no `rate_to_base` (Story 3.7). `fee_pct` is owned by Story 3.8 — stored as the
     # percentage number itself (`1.5` = 1.5%; ARCH §3.8 "Fee convention"). Editing the base
     # currency's name/symbol/colour/vivid is allowed; `is_base` simply isn't here so it can't flip.
-    name: str | None = None
-    symbol: str | None = None
-    colour: str | None = None
+    name: Str100 | None = None
+    symbol: Str5 | None = None
+    colour: Hex | None = None
     vivid: bool | None = None
     is_display_active: bool | None = None
-    fee_pct: Decimal | None = None
+    fee_pct: Pct | None = None
 
 
 class CurrencyResponse(BaseModel):

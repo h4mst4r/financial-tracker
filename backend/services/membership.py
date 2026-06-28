@@ -14,12 +14,10 @@ named in §2.8a Path B/C is deferred to Epic 4 — no owned entities exist until
 import logging
 from datetime import UTC, datetime
 
-from fastapi import HTTPException
 from sqlalchemy import Column, Table, delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
-from backend.errors import problem
 from backend.models.base import Base
 from backend.models.identity import Household, Person, Session
 from backend.services.audit import audit
@@ -32,14 +30,6 @@ _TEARDOWN_SKIP = {"audit_logs", "persons"}
 
 # Assignable roles for `set_member_role` — the owner role is not transferable here (FR-P-005).
 _ASSIGNABLE_ROLES = {"admin", "member"}
-
-
-def _conflict(detail: str) -> None:
-    """Raise 409 Conflict (RFC 7807) — no generic 409 helper exists in `errors`."""
-    raise HTTPException(
-        status_code=409,
-        detail=problem(type_="conflict", title="Conflict", status=409, detail=detail),
-    )
 
 
 def _household_tables() -> list[Table]:
@@ -103,7 +93,7 @@ async def leave_household(
     cannot leave a household they own (no ownership transfer in MVP) — 409; they must delete it.
     """
     if person.role == "owner":
-        _conflict("An owner cannot leave the household; delete it instead.")
+        errors.conflict("An owner cannot leave the household; delete it instead.")
 
     person.household_id = None
     person.detachment_reason = "left"
@@ -135,9 +125,9 @@ async def remove_member(db: AsyncSession, household_id: str, actor_id: str, targ
     if target is None:
         errors.not_found("member", target_id)
     if target.role == "owner":
-        _conflict("The household owner cannot be removed.")
+        errors.conflict("The household owner cannot be removed.")
     if target.id == actor_id:
-        _conflict("Use leave to exit the household, not remove.")
+        errors.conflict("Use leave to exit the household, not remove.")
 
     target.household_id = None
     target.detachment_reason = "removed"
@@ -182,7 +172,7 @@ async def set_member_role(
     if role not in _ASSIGNABLE_ROLES:
         errors.bad_request("Invalid role", f"'{role}' is not an assignable role (admin/member)")
     if target.role == "owner":
-        _conflict("The owner's role cannot be changed.")
+        errors.conflict("The owner's role cannot be changed.")
 
     before = {"role": target.role}
     target.role = role
@@ -212,11 +202,11 @@ async def archive_member(
     """
     target = await _load_member(db, household_id, target_id)
     if target.role == "owner":
-        _conflict("The household owner cannot be archived.")
+        errors.conflict("The household owner cannot be archived.")
     if target.id == actor_id:
-        _conflict("Use leave to exit the household, not archive yourself.")
+        errors.conflict("Use leave to exit the household, not archive yourself.")
     if target.archived:
-        _conflict("This member is already archived.")
+        errors.conflict("This member is already archived.")
 
     target.archived = True
     target.archived_at = datetime.now(UTC)
@@ -243,7 +233,7 @@ async def restore_member(
     """
     target = await _load_member(db, household_id, target_id)
     if not target.archived:
-        _conflict("This member is not archived.")
+        errors.conflict("This member is not archived.")
 
     target.archived = False
     target.archived_at = None
@@ -270,7 +260,7 @@ async def delete_member(db: AsyncSession, household_id: str, actor_id: str, targ
     """
     target = await _load_member(db, household_id, target_id)
     if target.role == "owner":
-        _conflict("The household owner cannot be deleted.")
+        errors.conflict("The household owner cannot be deleted.")
 
     referrers = await _person_referrers(db, target.id)
     if referrers:

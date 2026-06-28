@@ -239,6 +239,50 @@ async def test_create_keyless_ignores_secret_ref(monkeypatch):
         await engine.dispose()
 
 
+async def test_secret_ref_allowlist_blocks_arbitrary_settings_read(monkeypatch):
+    """S1: `api_key_secret_ref` must be a known FX-key name. Binding an arbitrary `Settings` attr
+    (e.g. `session_secret`) is rejected 400 on create AND patch, so the fetch-time
+    `getattr(settings, ref.lower())` can never resolve an unrelated app secret."""
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        client.get("/api/fx-providers")  # seed the defaults
+
+        # CREATE binding a stray Settings attribute → 400 (the exploit vector).
+        bad = client.post(
+            "/api/fx-providers",
+            json={
+                "provider_type": "exchangerate_api",
+                "api_key_secret_ref": "SESSION_SECRET",  # nosec B105
+            },
+        )
+        assert bad.status_code == 400
+
+        # The known FX-key name is accepted.
+        ok = client.post(
+            "/api/fx-providers",
+            json={
+                "provider_type": "exchangerate_api",
+                "api_key_secret_ref": "EXCHANGERATE_API_KEY",  # nosec B105
+            },
+        )
+        assert ok.status_code == 201
+        new_id = ok.json()["id"]
+
+        # PATCH-ing to a stray Settings attribute is likewise rejected.
+        patched = client.patch(
+            f"/api/fx-providers/{new_id}",
+            json={"api_key_secret_ref": "GOOGLE_CLIENT_SECRET"},  # nosec B105
+        )
+        assert patched.status_code == 400
+    finally:
+        await engine.dispose()
+
+
 async def test_create_bad_type_400(monkeypatch):
     engine, factory = await _make_factory()
     try:
@@ -309,7 +353,8 @@ async def test_update_enable_toggle_and_keyless_ref_ignored(monkeypatch):
 
         # A secret ref on the keyless Frankfurter row is ignored (stays NULL).
         resp2 = client.patch(
-            f"/api/fx-providers/{frank}", json={"api_key_secret_ref": "X"}  # nosec B105
+            f"/api/fx-providers/{frank}",
+            json={"api_key_secret_ref": "X"},  # nosec B105
         )
         assert resp2.json()["api_key_secret_ref"] is None
     finally:

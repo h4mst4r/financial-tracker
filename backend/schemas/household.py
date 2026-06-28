@@ -12,6 +12,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
+from backend.schemas.constraints import Str3, Str20, Str64, Str100, Str320
+
 
 class _CamelModel(BaseModel):
     """Base for the household/auth surface — snake_case fields, camelCase wire keys (§2.14.C)."""
@@ -20,15 +22,15 @@ class _CamelModel(BaseModel):
 
 
 class HouseholdUpdate(_CamelModel):
-    name: str | None = None
-    timezone: str | None = None
+    name: Str100 | None = None
+    timezone: Str64 | None = None
 
 
 class BaseCurrencyUpdate(_CamelModel):
     """Body for `POST /api/household/base-currency` (Story 3.9, FR-CU-005, owner-only). The code is
     validated in the service against the household's currencies (no pydantic enum)."""
 
-    base_currency: str
+    base_currency: Str3
 
 
 class MemberOut(_CamelModel):
@@ -54,7 +56,7 @@ class RoleUpdate(_CamelModel):
     """Body for `PATCH /api/household/members/{id}/role` (Story 2.8, FR-P-005). The allowed values
     (`admin`/`member`) are validated in the service (no pydantic enum — like `InvitationCreate`)."""
 
-    role: str
+    role: Str20
 
 
 class InvitationOut(_CamelModel):
@@ -86,7 +88,7 @@ class InvitationCreate(_CamelModel):
     """Body for `POST /api/household/invitations` (Story 2.6a). Email is validated in the service
     (no `EmailStr` — `email-validator` is not a dependency)."""
 
-    invited_email: str
+    invited_email: Str320
 
 
 class InvitationManageOut(_CamelModel):

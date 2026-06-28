@@ -11,18 +11,20 @@ FR-CU-004); Story 2.11 added `display_format`.
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
+from backend.schemas.constraints import Str16, Str20, Str64, Str100
+
 
 class ProfileUpdate(BaseModel):
     """Partial per-person profile/appearance update — snake_case fields, camelCase wire keys."""
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
-    display_name: str | None = None
-    theme: str | None = None
-    font: str | None = None
-    density: str | None = None
-    display_format: str | None = None
-    display_currency: str | None = None
+    display_name: Str100 | None = None
+    theme: Str20 | None = None
+    font: Str20 | None = None
+    density: Str20 | None = None
+    display_format: Str20 | None = None
+    display_currency: Str16 | None = None
     reduce_motion: bool | None = None
     notification_prefs: dict[str, bool] | None = None
 
@@ -37,4 +39,4 @@ class RecentGlyphsOut(BaseModel):
 class RecentGlyphPush(BaseModel):
     """Body for `POST /api/profile/recent-glyphs` — one picked glyph to push to the front."""
 
-    glyph: str
+    glyph: Str64

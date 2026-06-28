@@ -1,6 +1,6 @@
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from backend.database import register_sqlite_pragmas
+from backend.database import async_session_factory, register_sqlite_pragmas
 
 
 async def test_pragmas_set_on_connect(tmp_path):
@@ -19,17 +19,11 @@ async def test_pragmas_set_on_connect(tmp_path):
     assert str(foreign_keys).strip() == "1"
 
 
-async def test_session_factory_disables_expire_on_commit(tmp_path):
-    # Use a test-isolated engine, not the production one.
-    db_path = tmp_path / "session_test.db"
-    test_engine = create_async_engine(f"sqlite+aiosqlite:///{db_path.as_posix()}")
-    test_factory = async_sessionmaker(test_engine, expire_on_commit=False, class_=AsyncSession)
+async def test_production_session_factory_disables_expire_on_commit():
+    # Assert the PRODUCTION factory's config (§4.3 — ORM attrs stay readable after get_db commits),
+    # not a throwaway factory built with the kwarg in the test (that would assert nothing).
+    session = async_session_factory()
     try:
-        session = test_factory()
-        try:
-            assert session.sync_session.expire_on_commit is False
-        finally:
-            await session.rollback()
-            await session.close()
+        assert session.sync_session.expire_on_commit is False
     finally:
-        await test_engine.dispose()
+        await session.close()

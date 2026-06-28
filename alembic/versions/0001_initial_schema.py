@@ -2,7 +2,7 @@
 
 Revision ID: 0001_initial_schema
 Revises:
-Create Date: 2026-06-14 23:11:01.440270
+Create Date: 2026-06-24 00:42:07.157812
 """
 
 from collections.abc import Sequence
@@ -69,6 +69,7 @@ def upgrade() -> None:
         sa.Column("last_rate_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("rate_source", sa.String(length=100), nullable=True),
         sa.Column("colour", sa.String(length=7), nullable=True),
+        sa.Column("vivid", sa.Boolean(), server_default=sa.text("0"), nullable=False),
         sa.ForeignKeyConstraint(
             ["household_id"],
             ["households.id"],
@@ -102,7 +103,7 @@ def upgrade() -> None:
         sa.Column("display_name", sa.String(length=100), nullable=True),
         sa.Column("picture_url", sa.Text(), nullable=True),
         sa.Column("role", sa.String(length=20), nullable=False),
-        sa.Column("display_currency", sa.String(length=3), nullable=False),
+        sa.Column("display_currency", sa.String(length=16), nullable=False),
         sa.Column("default_view", sa.String(length=20), nullable=False),
         sa.Column("google_sub", sa.String(length=255), nullable=True),
         sa.Column("last_active_at", sa.DateTime(timezone=True), nullable=True),
@@ -111,9 +112,11 @@ def upgrade() -> None:
         sa.Column("colour", sa.String(length=7), nullable=True),
         sa.Column("font", sa.String(length=20), nullable=False),
         sa.Column("density", sa.String(length=20), nullable=False),
+        sa.Column("display_format", sa.String(length=20), nullable=False),
         sa.Column("reduce_motion", sa.Boolean(), nullable=False),
         sa.Column("notification_prefs", sa.Text(), nullable=True),
         sa.Column("dashboard_layout", sa.Text(), nullable=True),
+        sa.Column("recent_glyphs", sa.Text(), nullable=True),
         sa.Column("detachment_reason", sa.String(length=30), nullable=True),
         sa.Column("detached_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -123,7 +126,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.ForeignKeyConstraint(
             ["archived_by"],
             ["persons.id"],
@@ -170,7 +173,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.ForeignKeyConstraint(
             ["archived_by"],
             ["persons.id"],
@@ -218,6 +221,7 @@ def upgrade() -> None:
         sa.Column("category_type", sa.String(length=10), nullable=False),
         sa.Column("parent_id", sa.String(length=36), nullable=True),
         sa.Column("depth", sa.Integer(), nullable=False),
+        sa.Column("vivid", sa.Boolean(), server_default=sa.text("0"), nullable=False),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("household_id", sa.String(length=36), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -227,7 +231,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.CheckConstraint("depth <= 1", name="ck_categories_depth_max_1"),
         sa.ForeignKeyConstraint(
             ["archived_by"],
@@ -304,7 +308,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.ForeignKeyConstraint(
             ["archived_by"],
             ["persons.id"],
@@ -388,11 +392,13 @@ def upgrade() -> None:
     )
     op.create_table(
         "accounts",
-        sa.Column("account_type", sa.String(), nullable=False),
+        sa.Column("account_type", sa.String(length=20), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=False),
         sa.Column("institution", sa.String(length=200), nullable=True),
-        sa.Column("notes", sa.String(), nullable=True),
+        sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("colour", sa.String(length=7), nullable=True),
+        sa.Column("vivid", sa.Boolean(), server_default=sa.text("0"), nullable=False),
+        sa.Column("currency", sa.String(length=3), nullable=False),
         sa.Column("opening_balance", sa.Numeric(precision=15, scale=4), nullable=True),
         sa.Column("opening_balance_date", sa.Date(), nullable=True),
         sa.Column("depreciation_formula_id", sa.String(length=36), nullable=True),
@@ -408,6 +414,7 @@ def upgrade() -> None:
         sa.Column("reward_points", sa.Integer(), nullable=True),
         sa.Column("annual_fee", sa.Numeric(precision=10, scale=2), nullable=True),
         sa.Column("reward_type", sa.String(length=20), nullable=True),
+        sa.Column("reward_rate", sa.Numeric(precision=6, scale=4), nullable=True),
         sa.Column("bonus_limit", sa.Numeric(precision=15, scale=4), nullable=True),
         sa.Column("points_expiry", sa.Date(), nullable=True),
         sa.Column("investment_type", sa.String(length=50), nullable=True),
@@ -426,7 +433,7 @@ def upgrade() -> None:
         sa.Column("coverage_ci", sa.Numeric(precision=15, scale=4), nullable=True),
         sa.Column("coverage_early_ci", sa.Numeric(precision=15, scale=4), nullable=True),
         sa.Column("coverage_personal_accident", sa.Numeric(precision=15, scale=4), nullable=True),
-        sa.Column("coverage_hospital", sa.String(), nullable=True),
+        sa.Column("coverage_hospital", sa.Text(), nullable=True),
         sa.Column("surrender_value", sa.Numeric(precision=15, scale=4), nullable=True),
         sa.Column("surrender_inquiry_date", sa.Date(), nullable=True),
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -438,7 +445,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.ForeignKeyConstraint(
             ["archived_by"],
             ["persons.id"],
@@ -501,7 +508,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.ForeignKeyConstraint(
             ["archived_by"],
             ["persons.id"],
@@ -566,7 +573,7 @@ def upgrade() -> None:
         sa.Column("value_base", sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column("source", sa.String(length=30), nullable=False),
         sa.Column("formula_id", sa.String(length=36), nullable=True),
-        sa.Column("note", sa.String(), nullable=True),
+        sa.Column("note", sa.Text(), nullable=True),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("household_id", sa.String(length=36), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -576,7 +583,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.ForeignKeyConstraint(
             ["account_id"],
             ["accounts.id"],
@@ -622,7 +629,7 @@ def upgrade() -> None:
 
     op.create_table(
         "financial_events",
-        sa.Column("event_type", sa.String(), nullable=False),
+        sa.Column("event_type", sa.String(length=20), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=True),
         sa.Column("event_date", sa.Date(), nullable=False),
         sa.Column("transaction_status", sa.String(length=20), nullable=False),
@@ -665,7 +672,7 @@ def upgrade() -> None:
         sa.Column("archived", sa.Boolean(), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
         sa.Column("currency", sa.String(length=3), nullable=False),
         sa.Column("amount", sa.Numeric(precision=15, scale=4), nullable=False),
         sa.Column("fx_rate", sa.Numeric(precision=10, scale=6), nullable=False),

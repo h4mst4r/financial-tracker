@@ -84,9 +84,7 @@ async def list_rate_histories(
     return {cid: series[-_HISTORY_LIMIT:] for cid, series in grouped.items()}
 
 
-async def create_currency(
-    db: AsyncSession, household_id: str, data: CurrencyCreate
-) -> Currency:
+async def create_currency(db: AsyncSession, household_id: str, data: CurrencyCreate) -> Currency:
     """Add an ISO-4217 currency (AC 1). Created **non-base** with a placeholder rate (real fetch is
     Story 3.7). 400 on a bad code; 409 on a duplicate code in the household. No audit (§3.10)."""
     code = data.code.strip().upper()
@@ -94,9 +92,7 @@ async def create_currency(
         errors.bad_request("Invalid currency code", f"'{data.code}' is not a valid ISO 4217 code")
 
     existing = await db.execute(
-        select(Currency.id).where(
-            Currency.household_id == household_id, Currency.code == code
-        )
+        select(Currency.id).where(Currency.household_id == household_id, Currency.code == code)
     )
     if existing.first() is not None:
         errors.duplicate_name("Currency", code)
@@ -199,9 +195,7 @@ async def change_base_currency(
     if new is None:
         errors.not_found("Currency", new_code)
     if new.is_base:
-        errors.bad_request(
-            "Already the base currency", f"{new_code} is already the base currency"
-        )
+        errors.bad_request("Already the base currency", f"{new_code} is already the base currency")
     # n2o = the new currency's CURRENT rate_to_base (new → old base). Re-basing divides by it.
     # A never-fetched currency carries the placeholder rate_to_base=1.0 (create_currency), so the
     # real "no rate yet" signal is `last_rate_at is None`, NOT a zero rate — block it (re-basing by
@@ -283,10 +277,14 @@ async def recompute_amount_base(db: AsyncSession, household_id: str, new_base_co
         history = {(cid, rdate): rate for cid, rdate, rate in rows}
 
     events = (
-        await db.execute(
-            select(FinancialEvent).where(FinancialEvent.household_id == household_id)
+        (
+            await db.execute(
+                select(FinancialEvent).where(FinancialEvent.household_id == household_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for event in events:
         if event.currency == new_base_code:

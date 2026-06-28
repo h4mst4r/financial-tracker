@@ -47,7 +47,14 @@ import {
   Modal,
   EmptyState,
   ConfirmationDialog,
+  Table,
+  dateColumn,
+  textColumn,
+  moneyColumn,
+  selectColumn,
+  actionsColumn,
 } from '../components/primitives'
+import type { ColumnDef } from '../components/primitives'
 import { PublicPage } from '../components/PublicPage'
 import { AppShell } from '../components/shell/AppShell'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
@@ -490,6 +497,17 @@ export function DesignSystem() {
               for a non-sub selection) is visible alongside the ledger set above. */}
           <p className="text-sm text-text-secondary mt-lg mb-sm">CategoryTree surface action set</p>
           <BulkActionBar count={2} onClear={() => {}} actions={categoryBulkActions} />
+        </section>
+
+        {/* Table<T> — the one tabular primitive (§8.7, bible #table). Record-ledger profile: select ·
+            sortable date · inline-editable name/amount · ⋮ · pinned quick-add row. (Story 5.0a.) */}
+        <section id="table" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Table</h2>
+          <p className="text-sm text-text-secondary mb-md">
+            Record-ledger profile — sortable headers, double-click a Name or Amount cell to edit in place
+            (Enter/blur commits, Esc cancels), pinned quick-add row.
+          </p>
+          <TableDemo />
         </section>
 
         {/* ─────────────────────────── Foundation (bible §0) ─────────────────────────── */}
@@ -991,5 +1009,84 @@ export function DesignSystem() {
         </div>
       </div>
     </main>
+  )
+}
+
+interface DemoRow {
+  id: string
+  status: 'active' | 'archived'
+  date: string
+  name: string
+  amount: string
+  currency: string
+}
+
+// A self-contained record-ledger Table demo (the real exported primitive) for /design-system.
+function TableDemo() {
+  const [rows, setRows] = useState<DemoRow[]>([
+    { id: 'r1', status: 'active', date: '2026-06-12', name: 'Netflix', amount: '-20.20', currency: 'SGD' },
+    { id: 'r2', status: 'active', date: '2026-06-11', name: 'NTUC FairPrice', amount: '-84.20', currency: 'SGD' },
+    { id: 'r3', status: 'active', date: '2026-06-01', name: 'Salary', amount: '6500.00', currency: 'SGD' },
+  ])
+  const select = useMultiSelect()
+  const [qaName, setQaName] = useState('')
+  const [qaAmount, setQaAmount] = useState('')
+
+  // Bare signed figure (no currency — Cur is its own column in the full ledger, deferred to 5.2); mono + signColour.
+  const fmt = (raw: string) =>
+    `${Number(raw) < 0 ? '−' : '+'}${Math.abs(Number(raw)).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  const onCellCommit = (row: DemoRow, key: string, value: string) =>
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, [key]: value } : r)))
+
+  const addRow = () => {
+    if (!qaName.trim()) return
+    setRows((rs) => [
+      { id: `r${Date.now()}`, status: 'active', date: '2026-06-13', name: qaName, amount: qaAmount || '0.00', currency: 'SGD' },
+      ...rs,
+    ])
+    setQaName('')
+    setQaAmount('')
+  }
+
+  const columns: ColumnDef<DemoRow>[] = [
+    selectColumn<DemoRow>({ isSelected: (r) => select.isSelected(r.id), onToggle: (r) => select.toggle(r.id), rowLabel: (r) => r.name, width: '3rem' }),
+    dateColumn<DemoRow>({ key: 'date', get: (r) => r.date, editable: true }),
+    textColumn<DemoRow>({ key: 'name', header: 'Name', get: (r) => r.name, editable: true, placeholder: 'Name' }),
+    moneyColumn<DemoRow>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: (r) => r.currency, format: fmt, signColour: true, editable: true }),
+    actionsColumn<DemoRow>({ items: (r) => [{ label: `Edit ${r.name}`, onClick: () => {} }], width: '4rem' }),
+  ]
+
+  // Compact quick-add input — bible .qadd uses small 28px inline fields, not the full 40px form Input.
+  const qaInput = 'h-7 w-full rounded-md border border-border bg-surface-raised px-2 text-sm text-text-primary focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-glow-primary'
+
+  return (
+    <Table
+      rows={rows}
+      columns={columns}
+      rowKey={(r) => r.id}
+      inlineEdit
+      onCellCommit={onCellCommit}
+      pinnedTop={
+        // Quick-add row — accent-subtle tint per bible .qadd; leading ＋ badge marks it (normal rows show a checkbox).
+        <tr className="bg-accent-subtle">
+          <td className="border-b border-border px-sm py-control text-center">
+            <button type="button" aria-label="Quick add" onClick={addRow}>
+              <Badge variant="info">＋</Badge>
+            </button>
+          </td>
+          <td className="border-b border-border px-sm py-control text-text-muted">today</td>
+          <td className="border-b border-border px-sm py-control">
+            <input className={qaInput} value={qaName} placeholder="Name" onChange={(e) => setQaName(e.target.value)} />
+          </td>
+          <td className="border-b border-border px-sm py-control">
+            <input className={`${qaInput} text-right font-mono`} value={qaAmount} inputMode="decimal" placeholder="amount" onChange={(e) => setQaAmount(e.target.value)} />
+          </td>
+          <td className="border-b border-border px-sm py-control text-right">
+            <button type="button" className="h-7 rounded-md bg-primary px-2 text-xs font-medium text-on-primary" onClick={addRow}>Add</button>
+          </td>
+        </tr>
+      }
+    />
   )
 }

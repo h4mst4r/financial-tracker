@@ -35,7 +35,7 @@ class FinancialEvent(BaseEntity, MonetaryValueMixin):
 
     __tablename__ = "financial_events"
 
-    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Base event columns
     name: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -92,12 +92,12 @@ class FinancialEvent(BaseEntity, MonetaryValueMixin):
     is_debt_repayment: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     debt_cleared_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
 
-    # ponytail: single-class STI per ARCH §4.5 — the Pydantic schema union (Epic 5), NOT an ORM
-    # polymorphic map, carries the subtype split. A `polymorphic_on` mapper with no registered
-    # subclass makes `select(FinancialEvent)` of a row whose `event_type` is
-    # `transaction`/`transfer`/`recurring_payment` raise `AssertionError: No such
-    # polymorphic_identity`. Story 4.6 is the first to select event entities + seed real
-    # `event_type`s, so it strips the mapper the model shipped with.
+    # Single-class STI: one table, `event_type` discriminator, all subtype columns nullable.
+    # We do NOT register ORM polymorphic subclasses — serialization is via the discriminated-union
+    # schemas (ARCH §4.5), and queries are cross-subtype. A `polymorphic_on` mapper here would
+    # make SQLAlchemy try to load each row as a registered subclass and raise "No such
+    # polymorphic_identity 'transaction'" on every SELECT. Add subclasses only if ORM polymorphism
+    # needed.
 
     __table_args__ = (
         CheckConstraint(

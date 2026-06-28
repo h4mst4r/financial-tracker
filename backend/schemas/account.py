@@ -15,24 +15,25 @@ edits the shared fields + the ledger-backed `opening_balance`/`opening_balance_d
 assignment (`*_formula_id`) is Epic 7 and is intentionally absent here.
 """
 
-import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-_HEX_RE = re.compile(r"#[0-9a-fA-F]{6}")
-
-
-def _check_hex(value: str | None) -> str | None:
-    """Edge validation (422) — a per-instance colour is `#RRGGBB` or None (ARCH §4.8 tier 1)."""
-    if value is None:
-        return value
-    if not _HEX_RE.fullmatch(value):
-        raise ValueError("colour must be a #RRGGBB hex string")
-    return value
-
+from backend.schemas.constraints import (
+    AnnualFee,
+    Hex,
+    InterestRate,
+    Money,
+    NoteText,
+    RewardRate,
+    Str3,
+    Str20,
+    Str50,
+    Str100,
+    Str200,
+)
 
 # ─── Create (discriminated union) ───
 
@@ -40,13 +41,13 @@ def _check_hex(value: str | None) -> str | None:
 class _AccountCreateShared(BaseModel):
     """The columns every subtype's Create carries (the §3.5 shared block)."""
 
-    name: str
+    name: Str200
     # The account's native currency (ISO 4217, required) — validated against the household's
     # configured currencies in the service (Story 4.4, AC1).
-    currency: str
-    institution: str | None = None
-    notes: str | None = None
-    colour: str | None = None
+    currency: Str3
+    institution: Str200 | None = None
+    notes: NoteText | None = None
+    colour: Hex | None = None
     vivid: bool = False
     # The account's owners (Story 4.3). Optional: omitted/None → the creator becomes the sole owner
     # (the Story 4.1 default); when given (non-empty, all household members) the account is created
@@ -54,69 +55,64 @@ class _AccountCreateShared(BaseModel):
     # row from the rest, so `model_dump(exclude={"owner_ids"})` is used.
     owner_ids: list[str] | None = None
 
-    @field_validator("colour")
-    @classmethod
-    def _validate_colour(cls, value: str | None) -> str | None:
-        return _check_hex(value)
-
 
 class BankAccountCreate(_AccountCreateShared):
     account_type: Literal["bank"]
     # Ledger-backed → opening balance + date REQUIRED (FR-A-008, AC1).
-    opening_balance: Decimal
+    opening_balance: Money
     opening_balance_date: date
-    account_number: str | None = None
-    interest_rate: Decimal | None = None
-    interest_frequency: str | None = None
-    reserved_amount: Decimal | None = None
+    account_number: Str100 | None = None
+    interest_rate: InterestRate | None = None
+    interest_frequency: Str20 | None = None
+    reserved_amount: Money | None = None
 
 
 class CreditCardCreate(_AccountCreateShared):
     account_type: Literal["credit_card"]
     # Ledger-backed → opening balance + date REQUIRED (FR-A-008, AC1).
-    opening_balance: Decimal
+    opening_balance: Money
     opening_balance_date: date
-    credit_limit: Decimal | None = None
+    credit_limit: Money | None = None
     billing_day: int | None = None
     due_day: int | None = None
     reward_points: int | None = None
-    annual_fee: Decimal | None = None
+    annual_fee: AnnualFee | None = None
     reward_type: Literal["points", "cashback", "miles", "none"] | None = None
-    # cashback % (Story 4.12); points/miles use reward_points. Bounded to the Numeric(6,4) column
-    # (≥0, ≤2 int digits, ≤4 dp) so an out-of-range rate is a clean 422, not a Postgres overflow.
-    reward_rate: Decimal | None = Field(default=None, ge=0, max_digits=6, decimal_places=4)
-    bonus_limit: Decimal | None = None
+    # cashback % (Story 4.12); points/miles use reward_points. `RewardRate` bounds it to the
+    # Numeric(6,4) column (≥0, ≤2 int digits, ≤4 dp) so an out-of-range rate is a clean 422.
+    reward_rate: RewardRate | None = None
+    bonus_limit: Money | None = None
     points_expiry: date | None = None
 
 
 class CapitalAccountCreate(_AccountCreateShared):
     account_type: Literal["capital"]
-    investment_type: str | None = None
-    cost_basis: Decimal | None = None
+    investment_type: Str50 | None = None
+    cost_basis: Money | None = None
 
 
 class AssetAccountCreate(_AccountCreateShared):
     account_type: Literal["asset"]
-    asset_type: str | None = None
-    registration_no: str | None = None
+    asset_type: Str50 | None = None
+    registration_no: Str100 | None = None
     purchase_date: date | None = None
-    purchase_value: Decimal | None = None
+    purchase_value: Money | None = None
 
 
 class InsuranceAccountCreate(_AccountCreateShared):
     account_type: Literal["insurance"]
-    policy_no: str | None = None
-    insurer: str | None = None
+    policy_no: Str100 | None = None
+    insurer: Str200 | None = None
     policy_type: Literal["life", "term", "health"] | None = None
     policy_status: Literal["active", "cancelled"] | None = None
-    premium_frequency: str | None = None
-    coverage_death: Decimal | None = None
-    coverage_tpd: Decimal | None = None
-    coverage_ci: Decimal | None = None
-    coverage_early_ci: Decimal | None = None
-    coverage_personal_accident: Decimal | None = None
-    coverage_hospital: str | None = None
-    surrender_value: Decimal | None = None
+    premium_frequency: Str20 | None = None
+    coverage_death: Money | None = None
+    coverage_tpd: Money | None = None
+    coverage_ci: Money | None = None
+    coverage_early_ci: Money | None = None
+    coverage_personal_accident: Money | None = None
+    coverage_hospital: NoteText | None = None
+    surrender_value: Money | None = None
     surrender_inquiry_date: date | None = None
 
 
@@ -139,59 +135,54 @@ class AccountUpdate(BaseModel):
     Stories 4.7/4.8 PATCH the deep fields with no schema change."""
 
     # Shared
-    name: str | None = None
+    name: Str200 | None = None
     # Native currency — editable ONLY while the account has no history (service-gated, AC1).
-    currency: str | None = None
-    institution: str | None = None
-    notes: str | None = None
-    colour: str | None = None
+    currency: Str3 | None = None
+    institution: Str200 | None = None
+    notes: NoteText | None = None
+    colour: Hex | None = None
     vivid: bool | None = None
     # Ledger-backed
-    opening_balance: Decimal | None = None
+    opening_balance: Money | None = None
     opening_balance_date: date | None = None
     # Bank
-    account_number: str | None = None
-    interest_rate: Decimal | None = None
-    interest_frequency: str | None = None
-    reserved_amount: Decimal | None = None
+    account_number: Str100 | None = None
+    interest_rate: InterestRate | None = None
+    interest_frequency: Str20 | None = None
+    reserved_amount: Money | None = None
     # Credit card
-    credit_limit: Decimal | None = None
+    credit_limit: Money | None = None
     billing_day: int | None = None
     due_day: int | None = None
     reward_points: int | None = None
-    annual_fee: Decimal | None = None
+    annual_fee: AnnualFee | None = None
     reward_type: Literal["points", "cashback", "miles", "none"] | None = None
-    # cashback % (Story 4.12) — bounded to the Numeric(6,4) column.
-    reward_rate: Decimal | None = Field(default=None, ge=0, max_digits=6, decimal_places=4)
-    bonus_limit: Decimal | None = None
+    # cashback % (Story 4.12) — `RewardRate` bounds it to the Numeric(6,4) column (≥0).
+    reward_rate: RewardRate | None = None
+    bonus_limit: Money | None = None
     points_expiry: date | None = None
     # Capital
-    investment_type: str | None = None
-    cost_basis: Decimal | None = None
+    investment_type: Str50 | None = None
+    cost_basis: Money | None = None
     # Asset
-    asset_type: str | None = None
-    registration_no: str | None = None
+    asset_type: Str50 | None = None
+    registration_no: Str100 | None = None
     purchase_date: date | None = None
-    purchase_value: Decimal | None = None
+    purchase_value: Money | None = None
     # Insurance
-    policy_no: str | None = None
-    insurer: str | None = None
+    policy_no: Str100 | None = None
+    insurer: Str200 | None = None
     policy_type: Literal["life", "term", "health"] | None = None
     policy_status: Literal["active", "cancelled"] | None = None
-    premium_frequency: str | None = None
-    coverage_death: Decimal | None = None
-    coverage_tpd: Decimal | None = None
-    coverage_ci: Decimal | None = None
-    coverage_early_ci: Decimal | None = None
-    coverage_personal_accident: Decimal | None = None
-    coverage_hospital: str | None = None
-    surrender_value: Decimal | None = None
+    premium_frequency: Str20 | None = None
+    coverage_death: Money | None = None
+    coverage_tpd: Money | None = None
+    coverage_ci: Money | None = None
+    coverage_early_ci: Money | None = None
+    coverage_personal_accident: Money | None = None
+    coverage_hospital: NoteText | None = None
+    surrender_value: Money | None = None
     surrender_inquiry_date: date | None = None
-
-    @field_validator("colour")
-    @classmethod
-    def _validate_colour(cls, value: str | None) -> str | None:
-        return _check_hex(value)
 
 
 # ─── Response (discriminated union) ───
@@ -350,10 +341,10 @@ class AccountSnapshotCreate(BaseModel):
     (the system-only `formula|computed|import` are rejected by Pydantic → 422)."""
 
     snapshot_date: date
-    value: Decimal
-    currency: str
+    value: Money
+    currency: Str3
     source: Literal["manual", "reconciliation", "appraisal"]
-    note: str | None = None
+    note: NoteText | None = None
 
 
 class AccountSnapshotUpdate(BaseModel):
@@ -363,10 +354,10 @@ class AccountSnapshotUpdate(BaseModel):
     → 422)."""
 
     snapshot_date: date | None = None
-    value: Decimal | None = None
-    currency: str | None = None
+    value: Money | None = None
+    currency: Str3 | None = None
     source: Literal["manual", "reconciliation", "appraisal"] | None = None
-    note: str | None = None
+    note: NoteText | None = None
 
 
 class AccountSnapshotResponse(BaseModel):

@@ -12,8 +12,9 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 # Non-empty, whitespace-stripped key — a blank entity_type/entity_id would persist a junk row the
-# UNIQUE constraint can't catch (empty strings are distinct valid keys).
-_Key = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+# UNIQUE constraint can't catch (empty strings are distinct valid keys). Capped at the wider of the
+# two backing columns (entity_type String(50); entity_id String(36) ⊂ 50) so an oversized key 422s.
+_Key = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 
 class EntityPreferenceUpsert(BaseModel):
