@@ -40,6 +40,17 @@ export function currencySymbol(code: string): string {
   }
 }
 
+/** The household-configured display symbol for a currency code (the currency record's `symbol`,
+ *  falling back to the code itself). Feeds the `MonetaryValue` atom's `symbol` prop so the atom stays
+ *  data-free while still rendering the household's configured symbol (e.g. "S$") rather than the ISO
+ *  narrow symbol Intl would collapse to ("$"). */
+export function symbolForCode(
+  code: string | null | undefined,
+  currencies: { code: string; symbol: string }[],
+): string {
+  return currencies.find((c) => c.code === code)?.symbol ?? code ?? ''
+}
+
 /** A deterministic default hex for a code (§3.8) — stable across the chip and (future) chart series.
  *  Hashes the code into the curated PALETTE so it never collides with the design tokens. */
 export function colourForCode(code: string): string {

@@ -28,6 +28,9 @@ import {
   Dropdown,
   DatePicker,
   MonetaryValueInput,
+  MonetaryValue,
+  DateValue,
+  NumberValue,
   ThemePicker,
   ColourPicker,
   EmojiIconPicker,
@@ -539,6 +542,36 @@ export function DesignSystem() {
           </div>
         </section>
 
+        {/* Value atoms (§7) — the real MonetaryValue / DateValue / NumberValue components */}
+        <section id="value-atoms" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Value atoms</h2>
+          <div className="flex flex-col gap-md text-base">
+            <div className="flex flex-wrap items-center gap-md">
+              <MonetaryValue amount="1234.5" currency="SGD" symbol="S$" variant="columnar" />
+              <MonetaryValue amount="6500" currency="SGD" symbol="S$" variant="hero" />
+              <MonetaryValue amount="-84.2" currency="SGD" symbol="S$" signColour />
+              <MonetaryValue amount="1250" currency="SGD" symbol="S$" signColour showSign />
+              <MonetaryValue amount="2500" currency="JPY" symbol="¥" />
+              <MonetaryValue
+                amount="500"
+                currency="SGD"
+                symbol="S$"
+                dual={{ amount: '568', currency: 'NZD', symbol: 'NZ$' }}
+              />
+              <MonetaryValue amount={null} currency="SGD" />
+            </div>
+            <div className="flex flex-wrap items-center gap-md">
+              <DateValue iso="2026-06-29" />
+              <DateValue iso="2026-06-29" format="YYYY-MM-DD" />
+              <DateValue iso={null} />
+              <NumberValue value="2.5" decimals={1} suffix="%" />
+              <NumberValue value={12345} />
+              <NumberValue value="-3.4" decimals={1} signColour showSign />
+              <NumberValue value={null} />
+            </div>
+          </div>
+        </section>
+
         {/* Icon (wrapper) */}
         <section id="icon" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Icon</h2>
@@ -1045,10 +1078,6 @@ function TableDemo() {
   const [qaName, setQaName] = useState('')
   const [qaAmount, setQaAmount] = useState('')
 
-  // Bare signed figure (no currency — Cur is its own column in the full ledger, deferred to 5.2); mono + signColour.
-  const fmt = (raw: string) =>
-    `${Number(raw) < 0 ? '−' : '+'}${Math.abs(Number(raw)).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-
   const onCellCommit = (row: DemoRow, key: string, value: string) =>
     setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, [key]: value } : r)))
 
@@ -1066,7 +1095,7 @@ function TableDemo() {
     selectColumn<DemoRow>({ isSelected: (r) => select.isSelected(r.id), onToggle: (r) => select.toggle(r.id), rowLabel: (r) => r.name, width: '3rem' }),
     dateColumn<DemoRow>({ key: 'date', get: (r) => r.date, editable: true }),
     textColumn<DemoRow>({ key: 'name', header: 'Name', get: (r) => r.name, editable: true, placeholder: 'Name' }),
-    moneyColumn<DemoRow>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: (r) => r.currency, format: fmt, signColour: true, editable: true }),
+    moneyColumn<DemoRow>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: (r) => r.currency, signColour: true, editable: true }),
     actionsColumn<DemoRow>({ items: (r) => [{ label: `Edit ${r.name}`, onClick: () => {} }], width: '4rem' }),
   ]
 

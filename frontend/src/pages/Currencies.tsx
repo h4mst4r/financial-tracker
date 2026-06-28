@@ -12,6 +12,7 @@ import { ColourPicker } from '../components/primitives/ColourPicker'
 import { Dropdown } from '../components/primitives/Dropdown'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { MiniSparkline } from '../components/primitives/MiniSparkline'
+import { NumberValue } from '../components/primitives/NumberValue'
 import { useAlertStore } from '../stores/alertStore'
 import { useThemeStore } from '../stores/themeStore'
 import { resolveTheme } from '../theme/useAppearance'
@@ -325,7 +326,7 @@ export function Currencies() {
                     </td>
                     {/* Fee = fee_pct as the percentage number, shown as-is (ARCH §3.8 fee convention). */}
                     <td className="px-md py-sm font-mono text-text-secondary">
-                      {c.is_base ? '—' : `${Number(c.fee_pct).toFixed(1)}%`}
+                      {c.is_base ? '—' : <NumberValue value={c.fee_pct} decimals={1} suffix="%" />}
                     </td>
                     <td className="px-md py-sm">
                       {c.is_base ? (

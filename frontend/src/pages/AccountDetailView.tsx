@@ -9,9 +9,10 @@ import { Input } from '../components/primitives/Input'
 import { Dropdown } from '../components/primitives/Dropdown'
 import { DatePicker } from '../components/primitives/DatePicker'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
+import { MonetaryValue } from '../components/primitives/MonetaryValue'
 import { api } from '../api/client'
 import { formatDateDisplay } from '../lib/date'
-import { convertForDisplay, cleanAmount } from '../lib/currency'
+import { convertForDisplay, cleanAmount, symbolForCode } from '../lib/currency'
 import { computeRoi } from '../lib/accountRoi'
 import { ACCOUNT_TYPE_ICON, ACCOUNT_TYPE_LABEL } from '../config/accountIcons'
 import { useAuthStore } from '../stores/authStore'
@@ -81,18 +82,26 @@ export function AccountDetailView({
     ? `color-mix(in srgb, ${onVar ?? 'var(--color-border)'} 25%, transparent)`
     : `color-mix(in srgb, ${entityVar} 30%, var(--color-border))`
 
-  const symbolFor = (code: string) => currencies.find((c) => c.code === code)?.symbol ?? code
-  // A money figure in the active display currency (Story 4.9 lens). `nativeCode` is the figure's own
-  // currency (the account's, or a snapshot row's).
-  const fmtMoney = (raw: string, nativeCode: string) => {
+  // A money figure in the active display currency (Story 4.9 lens), rendered through the §7 atom.
+  // `nativeCode` is the figure's own currency (the account's, or a snapshot row's); `variant` is
+  // `hero` (sans, detail rows / header) or `columnar` (mono, the snapshot ledger).
+  const renderMoney = (raw: string | null, nativeCode: string, variant: 'columnar' | 'hero' = 'hero') => {
+    if (raw == null) return <MonetaryValue amount={null} currency={nativeCode} variant={variant} />
     const { value, code } = convertForDisplay(raw, nativeCode, displayCurrency, currencies)
-    return `${symbolFor(code)} ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return (
+      <MonetaryValue
+        amount={String(value)}
+        currency={code}
+        symbol={symbolForCode(code, currencies)}
+        variant={variant}
+      />
+    )
   }
 
   const hero =
     account.current_value != null && account.current_value_currency != null
-      ? fmtMoney(account.current_value, account.current_value_currency)
-      : '—'
+      ? renderMoney(account.current_value, account.current_value_currency, 'hero')
+      : <MonetaryValue amount={null} currency={account.currency} variant="hero" />
 
   const handleDelete = async (snap: AccountSnapshot) => {
     try {
@@ -149,12 +158,12 @@ export function AccountDetailView({
       >
         <div className="flex flex-col gap-md">
           {identityHeader}
-          <SubtypeDetailRows account={account} vivid={vivid} fmtMoney={fmtMoney} symbolFor={symbolFor} displayCurrency={displayCurrency} currencies={currencies} />
+          <SubtypeDetailRows account={account} vivid={vivid} renderMoney={renderMoney} displayCurrency={displayCurrency} currencies={currencies} />
           <SnapshotLedger
             account={account}
             vivid={vivid}
             isAdmin={isAdmin}
-            fmtMoney={fmtMoney}
+            renderMoney={renderMoney}
             onError={onError}
             onRequestDelete={setConfirmDelete}
           />
@@ -183,16 +192,15 @@ export function AccountDetailView({
 interface RowsProps {
   account: Account
   vivid: boolean
-  fmtMoney: (raw: string, nativeCode: string) => string
-  symbolFor: (code: string) => string
+  renderMoney: (raw: string | null, nativeCode: string, variant?: 'columnar' | 'hero') => ReactNode
   displayCurrency: string
   currencies: Currency[]
 }
 
-function SubtypeDetailRows({ account, vivid, fmtMoney, symbolFor, displayCurrency, currencies }: RowsProps) {
+function SubtypeDetailRows({ account, vivid, renderMoney, displayCurrency, currencies }: RowsProps) {
   const rows: { label: string; node: ReactNode }[] = []
   const money = (label: string, raw: string | null) => {
-    if (raw != null) rows.push({ label, node: fmtMoney(raw, account.currency) })
+    if (raw != null) rows.push({ label, node: renderMoney(raw, account.currency) })
   }
   const text = (label: string, value: string | number | null) => {
     if (value != null && value !== '') rows.push({ label, node: String(value) })
@@ -232,10 +240,22 @@ function SubtypeDetailRows({ account, vivid, fmtMoney, symbolFor, displayCurrenc
     money('Cost basis', account.cost_basis)
     const roi = computeRoi(account, currencies, displayCurrency)
     if (roi) {
-      // Semantic gain/loss yields to the contrast pole on a vivid fill (SCP 2026-06-22).
+      // Semantic gain/loss yields to the contrast pole on a vivid fill (SCP 2026-06-22) — so the tone
+      // is the wrapper's, not the atom's `signColour` (which would force the neutral semantic hue).
       const tone = semanticTextClass(roi.delta === 0 ? null : roi.delta > 0 ? 'success' : 'error', vivid)
-      const label = `${roi.delta < 0 ? '−' : '+'}${symbolFor(roi.code)} ${Math.abs(roi.delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      rows.push({ label: 'ROI', node: <span className={tone}>{label}</span> })
+      rows.push({
+        label: 'ROI',
+        node: (
+          <span className={tone}>
+            <MonetaryValue
+              amount={String(roi.delta)}
+              currency={roi.code}
+              symbol={symbolForCode(roi.code, currencies)}
+              showSign
+            />
+          </span>
+        ),
+      })
     }
   } else if (account.account_type === 'asset') {
     text('Purchase date', account.purchase_date ? formatDateDisplay(account.purchase_date) : null)
@@ -314,12 +334,12 @@ interface LedgerProps {
   account: Account
   vivid: boolean
   isAdmin: boolean
-  fmtMoney: (raw: string, nativeCode: string) => string
+  renderMoney: (raw: string | null, nativeCode: string, variant?: 'columnar' | 'hero') => ReactNode
   onError: (err: unknown) => void
   onRequestDelete: (snap: AccountSnapshot) => void
 }
 
-function SnapshotLedger({ account, vivid, isAdmin, fmtMoney, onError, onRequestDelete }: LedgerProps) {
+function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onRequestDelete }: LedgerProps) {
   const queryClient = useQueryClient()
   const key = ['account-snapshots', account.id]
   const isInsurance = account.account_type === 'insurance'
@@ -485,7 +505,7 @@ function SnapshotLedger({ account, vivid, isAdmin, fmtMoney, onError, onRequestD
                           onCancel={() => setEditing(null)}
                         />
                       ) : (
-                        readCell(snap, 'value', fmtMoney(snap.value, snap.currency), `ml-auto block w-fit font-mono ${primary}`)
+                        readCell(snap, 'value', renderMoney(snap.value, snap.currency, 'columnar'), `ml-auto block w-fit font-mono ${primary}`)
                       )}
                     </td>
                     <td className={td}>

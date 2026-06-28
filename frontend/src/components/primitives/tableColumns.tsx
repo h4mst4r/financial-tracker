@@ -5,24 +5,25 @@ import { DatePicker } from './DatePicker'
 import { Input } from './Input'
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu'
 import { Icon } from './Icon'
-import { formatDateDisplay } from '../../lib/date'
+import { MonetaryValue } from './MonetaryValue'
+import { DateValue } from './DateValue'
 import type { ColumnDef } from './Table'
 
-// Column vocabulary (§8.7) — the reuse unit. Only the entries whose display atom exists today (Story
-// 5.0a). Atom-bound columns are deferred to their atom's story: moneyColumn DISPLAY → MonetaryValue
-// (5.0b), statusColumn → StatusBadge (5.0c), categoryColumn → FilledChip / currency / account / person
+// Column vocabulary (§8.7) — the reuse unit. Date + money displays render through the §7 value atoms
+// (DateValue / MonetaryValue, Story 5F.3). Remaining atom-bound columns are deferred to their story:
+// statusColumn → StatusBadge (5f-4), categoryColumn → FilledChip / currency / account / person
 // (Story 5.2). Each factory returns a ColumnDef<T> bundling display render + inline editControl.
 
 export function dateColumn<T>(opts: {
   key: string
   header?: ReactNode
   get: (row: T) => string
-  // Defaults to the per-person display format (DD-MM-YYYY); dates are never shown raw ISO (§0.3, FR-P-009).
+  // Optional custom formatter (e.g. a fixed "d MMM"); defaults to the DateValue atom (per-person
+  // display format, FR-P-009) — dates are never shown raw ISO (§7).
   format?: (iso: string) => string
   editable?: boolean
   width?: string
 }): ColumnDef<T> {
-  const fmt = opts.format ?? formatDateDisplay
   return {
     key: opts.key,
     header: opts.header ?? 'Date',
@@ -30,8 +31,9 @@ export function dateColumn<T>(opts: {
     width: opts.width,
     sortable: true,
     sortValue: opts.get,
-    // Dates are TEXT (Inter), not mono — §0.3 reserves JetBrains Mono for money figures only.
-    render: (row) => fmt(opts.get(row)),
+    // Dates are TEXT (Inter), not mono — §7 reserves JetBrains Mono for money figures only.
+    render: (row) =>
+      opts.format ? opts.format(opts.get(row)) : <DateValue iso={opts.get(row)} />,
     editable: opts.editable,
     editInitial: opts.get,
     editControl: opts.editable
@@ -75,9 +77,9 @@ export function moneyColumn<T>(opts: {
   /** Raw decimal string (Decimal on the wire — never a float). */
   get: (row: T) => string
   currencyOf: (row: T) => string
-  // ponytail: display via the caller's formatter now; Story 5.0b swaps this for the <MonetaryValue> atom.
-  format: (raw: string, currency: string) => string
-  /** Tint outflow red / inflow green by sign (§12.1, bible .amt-out/.amt-in). 5.0b → MonetaryValue signColour. */
+  /** Household-configured symbol per row; falls back to the ISO narrow symbol. */
+  symbolOf?: (row: T) => string
+  /** Tint outflow red / inflow green by sign (§4/§12.1, bible .amt-out/.amt-in) via MonetaryValue. */
   signColour?: boolean
   editable?: boolean
   width?: string
@@ -89,10 +91,15 @@ export function moneyColumn<T>(opts: {
     width: opts.width,
     sortable: true,
     sortValue: (row) => Number(opts.get(row)),
-    render: (row) => {
-      const tint = opts.signColour ? (Number(opts.get(row)) < 0 ? 'text-error' : 'text-success') : ''
-      return <span className={`font-mono ${tint}`}>{opts.format(opts.get(row), opts.currencyOf(row))}</span>
-    },
+    render: (row) => (
+      <MonetaryValue
+        amount={opts.get(row)}
+        currency={opts.currencyOf(row)}
+        symbol={opts.symbolOf?.(row)}
+        variant="columnar"
+        signColour={opts.signColour}
+      />
+    ),
     editable: opts.editable,
     editInitial: opts.get,
     // Amount-only editor (mono, right) — mirrors the 4.11 single-currency pilot. The amount+currency

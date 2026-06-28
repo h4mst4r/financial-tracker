@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, format, getDaysInMonth, setDate } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import { Wallet, Pencil, Copy, Archive, RotateCcw, Trash2 } from 'lucide-react'
@@ -9,12 +9,13 @@ import { Icon } from '../components/primitives/Icon'
 import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { Avatar } from '../components/primitives/Avatar'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
+import { MonetaryValue } from '../components/primitives/MonetaryValue'
 import type { ContextMenuEntry } from '../components/primitives'
 import { useEntityManager } from '../hooks/useEntityManager'
 import { useEntityPreferences } from '../hooks/useEntityPreferences'
 import { useAlertStore } from '../stores/alertStore'
 import { useAuthStore } from '../stores/authStore'
-import { convertForDisplay } from '../lib/currency'
+import { convertForDisplay, symbolForCode } from '../lib/currency'
 import { computeRoi } from '../lib/accountRoi'
 import { semanticTextClass } from '../theme/semantic'
 import { api, ApiError } from '../api/client'
@@ -207,21 +208,27 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
     )
   }
 
-  const symbolFor = (code: string | null | undefined) =>
-    currencies.find((c) => c.code === code)?.symbol ?? code ?? ''
-
-  // The computed current value, rendered in the active display currency (Story 4.9). In Native mode
-  // (the default) the value stays in its own currency; a chosen currency converts it display-only via
-  // rate_to_base (the native code always stays in the card meta). `null` → '—'.
-  const heroFor = (a: Account) => {
-    if (a.current_value == null || a.current_value_currency == null) return '—'
+  // The computed current value, rendered in the active display currency (Story 4.9) through the §7
+  // hero atom. In Native mode (the default) the value stays in its own currency; a chosen currency
+  // converts it display-only via rate_to_base (the native code always stays in the card meta).
+  // `null` → the atom's `—` (muted).
+  const heroFor = (a: Account): ReactNode => {
+    if (a.current_value == null || a.current_value_currency == null)
+      return <MonetaryValue amount={null} currency={a.currency} variant="hero" />
     const { value, code } = convertForDisplay(
       a.current_value,
       a.current_value_currency,
       displayCurrency,
       currencies,
     )
-    return `${symbolFor(code)} ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return (
+      <MonetaryValue
+        amount={String(value)}
+        currency={code}
+        symbol={symbolForCode(code, currencies)}
+        variant="hero"
+      />
+    )
   }
 
   // The next future occurrence of a credit-card due day: this month if due_day ≥ today's day, else
@@ -245,15 +252,24 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       return `${Number(a.interest_rate)}%${freq}`
     }
     if (a.account_type === 'credit_card') {
-      const parts: string[] = []
+      const parts: ReactNode[] = []
       if (a.due_day != null) parts.push(`due ${nextDueDate(a.due_day)}`)
       if (a.credit_limit != null) {
         // Convert the limit to the active display currency (Story 4.11 pickup) — the hero already
-        // converts; the sub-line must too, or a non-Native lens shows a mixed-currency card.
+        // converts; the sub-line must too, or a non-Native lens shows a mixed-currency card. The §7
+        // atom renders at the currency's minor-units (2dp); the prior bespoke 0dp is intentionally
+        // dropped (the atom owns the format).
         const { value, code } = convertForDisplay(a.credit_limit, a.currency, displayCurrency, currencies)
-        parts.push(`limit ${symbolFor(code)} ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
+        parts.push(
+          <>
+            limit{' '}
+            <MonetaryValue amount={String(value)} currency={code} symbol={symbolForCode(code, currencies)} />
+          </>,
+        )
       }
-      return parts.length ? parts.join(' · ') : undefined
+      return parts.length
+        ? parts.map((p, i) => <Fragment key={i}>{i > 0 ? ' · ' : ''}{p}</Fragment>)
+        : undefined
     }
     if (a.account_type === 'capital') {
       // Derived ROI = current value − cost basis, both in native then shown in the display currency
@@ -262,9 +278,20 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
       // on a vivid card fall back to the contrast pole (semantic colour breaks the pole on a fill).
       const roi = computeRoi(a, currencies, displayCurrency)
       if (!roi) return undefined
-      const text = `ROI ${roi.delta < 0 ? '−' : '+'}${symbolFor(roi.code)} ${Math.abs(roi.delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      // Tone is the wrapper's (yields to the contrast pole on a vivid fill); the atom shows the signed
+      // delta (leading +/−) without its own signColour, which would force the neutral semantic hue.
       const tone = semanticTextClass(roi.delta === 0 ? null : roi.delta > 0 ? 'success' : 'error', a.vivid)
-      return <span className={tone}>{text}</span>
+      return (
+        <span className={tone}>
+          ROI{' '}
+          <MonetaryValue
+            amount={String(roi.delta)}
+            currency={roi.code}
+            symbol={symbolForCode(roi.code, currencies)}
+            showSign
+          />
+        </span>
+      )
     }
     if (a.account_type === 'insurance') {
       return a.policy_type ? `coverage · ${a.policy_type}` : undefined

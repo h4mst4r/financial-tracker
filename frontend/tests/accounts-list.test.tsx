@@ -506,9 +506,9 @@ describe('AccountsList', () => {
       '[data-testid="entity-card"]',
     ) as HTMLElement
     expect(card.textContent).toMatch(/due \d{1,2} \w{3}/) // computed "due D Mon"
-    expect(card.textContent).toContain('limit S$ 20,000')
-    // The hero is the current value, NOT the red Debt-owing hero (that is Epic 8).
-    expect(card.textContent).toContain('S$ -3,180.00')
+    expect(card.textContent).toContain('limit S$ 20,000.00') // §7 atom renders the currency minor-units (2dp)
+    // The hero is the current value, NOT the red Debt-owing hero (that is Epic 8). §7: leading − (U+2212).
+    expect(card.textContent).toContain('−S$ 3,180.00')
   })
 
   test('the subtype slot swaps bank ↔ credit-card fields', async () => {
@@ -590,10 +590,14 @@ describe('AccountsList', () => {
 
   test('a capital card shows the gain-green ROI sub-line (same-ccy)', async () => {
     renderPage(['capital'])
-    await screen.findByText('Growth Fund')
-    const roi = screen.getByText('ROI +S$ 4,200.00')
-    expect(roi).toBeTruthy()
-    expect(roi.className).toContain('text-success')
+    const card = (await screen.findByText('Growth Fund')).closest(
+      '[data-testid="entity-card"]',
+    ) as HTMLElement
+    // The ROI figure is the §7 atom inside the gain-green tone wrapper (the figure isn't a single
+    // text node, so assert via the card text + the toned wrapper).
+    expect(card.textContent).toContain('ROI +S$ 4,200.00')
+    const tone = card.querySelector('.text-success') as HTMLElement
+    expect(tone?.textContent).toContain('+S$ 4,200.00')
   })
 
   test('a capital card renders cross-currency ROI (current value converted to native)', async () => {

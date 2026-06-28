@@ -18,7 +18,7 @@ const baseRows: Row[] = [
 function makeColumns(): ColumnDef<Row>[] {
   return [
     textColumn<Row>({ key: 'name', header: 'Name', get: (r) => r.name, editable: true }),
-    moneyColumn<Row>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: () => 'SGD', format: (raw) => raw, editable: true }),
+    moneyColumn<Row>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: () => 'SGD', editable: true }),
   ]
 }
 

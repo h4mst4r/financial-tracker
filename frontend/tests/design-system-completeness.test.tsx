@@ -37,6 +37,7 @@ const SECTION_MARKER: Record<string, string> = {
   filterbar: '[data-testid="filter-bar"]',
   // Foundation
   'semantic-text': '.monetary-value',
+  'value-atoms': '.monetary-value',
   icon: 'svg',
   // Primitives
   button: 'button',
