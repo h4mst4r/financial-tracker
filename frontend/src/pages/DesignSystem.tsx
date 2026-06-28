@@ -53,8 +53,9 @@ import {
   moneyColumn,
   selectColumn,
   actionsColumn,
+  FilterBar,
 } from '../components/primitives'
-import type { ColumnDef } from '../components/primitives'
+import type { ColumnDef, FilterDescriptor, FilterState } from '../components/primitives'
 import { PublicPage } from '../components/PublicPage'
 import { AppShell } from '../components/shell/AppShell'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
@@ -508,6 +509,18 @@ export function DesignSystem() {
             (Enter/blur commits, Esc cancels), pinned quick-add row.
           </p>
           <TableDemo />
+        </section>
+
+        {/* FilterBar — the one filter row (§1.2a, bible #filterbar). Record-list profile: search ·
+            dateRange · Category · type-segment · Filters overflow popover · clear-all. (Story 5.0d.) */}
+        <section id="filterbar" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">FilterBar</h2>
+          <p className="text-sm text-text-secondary mb-md">
+            Record-list profile — descriptor-driven controls, the secondary filters collapse into the
+            "Filters" overflow popover (with an active-count badge), clear-all; the bar's state serializes
+            to a <code>VisualizationFilter</code>.
+          </p>
+          <FilterBarDemo />
         </section>
 
         {/* ─────────────────────────── Foundation (bible §0) ─────────────────────────── */}
@@ -1089,4 +1102,104 @@ function TableDemo() {
       }
     />
   )
+}
+
+function FilterBarDemo() {
+  // Static demo options (no live data — the bar is data-agnostic, mirror TableDemo's static rows).
+  const [state, setState] = useState<FilterState>({})
+  const descriptors: FilterDescriptor[] = [
+    { key: 'search', label: 'Search', control: 'search', placeholder: 'Search…', primary: true },
+    { key: 'dateRange', label: 'Date', control: 'dateRange', primary: true, toVizField: 'time_range' },
+    {
+      key: 'category',
+      label: 'Category',
+      control: 'dropdown',
+      primary: true,
+      searchable: true,
+      placeholder: 'Category',
+      toVizField: 'category_ids',
+      options: [
+        { value: 'groceries', label: 'Groceries' },
+        { value: 'dining', label: 'Dining' },
+        { value: 'transport', label: 'Transport' },
+        { value: 'salary', label: 'Salary' },
+      ],
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      control: 'segmented',
+      primary: true,
+      toVizField: 'transaction_type',
+      options: [
+        { value: 'all', label: 'All' },
+        { value: 'inflow', label: 'Inflow' },
+        { value: 'outflow', label: 'Outflow' },
+      ],
+    },
+    {
+      key: 'account',
+      label: 'Account',
+      control: 'dropdown',
+      searchable: true,
+      toVizField: 'account_ids',
+      options: [
+        { value: 'dbs', label: 'DBS Multiplier' },
+        { value: 'ocbc', label: 'OCBC 360' },
+        { value: 'cash', label: 'Cash' },
+      ],
+    },
+    {
+      key: 'person',
+      label: 'Person',
+      control: 'dropdown',
+      toVizField: 'person_ids',
+      options: [
+        { value: 'ben', label: 'Ben' },
+        { value: 'alex', label: 'Alex' },
+      ],
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      control: 'dropdown',
+      options: [
+        { value: 'paid', label: 'Paid' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+    {
+      key: 'reconciled',
+      label: 'Reconciled',
+      control: 'dropdown',
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ],
+    },
+    {
+      key: 'gst',
+      label: 'GST',
+      control: 'dropdown',
+      options: [
+        { value: 'claimable', label: 'Claimable' },
+        { value: 'not', label: 'Not claimable' },
+      ],
+    },
+    {
+      key: 'tags',
+      label: 'Tags',
+      control: 'popover',
+      multi: true,
+      toVizField: 'tag_ids',
+      options: [
+        { value: 'vacation', label: 'Vacation' },
+        { value: 'gift', label: 'Gift' },
+        { value: 'work', label: 'Work' },
+      ],
+    },
+  ]
+
+  return <FilterBar descriptors={descriptors} value={state} onChange={setState} />
 }

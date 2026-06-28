@@ -139,6 +139,10 @@ export function Table<T>({
   }
 
   const onCellTrigger = (row: T, col: ColumnDef<T>, trigger: CommitTrigger) => {
+    // blur-within (focus moved to a popup the editor opened INSIDE the cell, e.g. a DatePicker/Dropdown)
+    // must be a true no-op — neither commit nor tear the editor down — or the picker closes the instant
+    // it opens (§12.3a). Only Esc cancels; Enter / blur-out commit.
+    if (trigger === 'blur-within') return
     if (shouldCommit(trigger)) commit(row, col)
     else cancel()
   }
@@ -182,6 +186,15 @@ export function Table<T>({
                     key={col.key}
                     // Bible .ledger th — sentence case (NOT uppercase), 11px/500/text-muted, 8px block padding.
                     className={`whitespace-nowrap border-b border-border px-sm py-xs text-2xs font-medium text-text-muted ${alignClass[align]}`}
+                    aria-sort={
+                      col.sortable
+                        ? isActive
+                          ? activeSort!.dir === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                        : undefined
+                    }
                   >
                     {col.sortable ? (
                       <button

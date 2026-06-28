@@ -34,6 +34,7 @@ const SECTION_MARKER: Record<string, string> = {
   'entity-modal': 'button',
   'bulk-actions': '[data-testid="entity-card"]',
   table: 'table',
+  filterbar: '[data-testid="filter-bar"]',
   // Foundation
   'semantic-text': '.monetary-value',
   icon: 'svg',

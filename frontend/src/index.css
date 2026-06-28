@@ -463,6 +463,10 @@
 @utility w-account-filter { width: 9rem; }
 /* Account modal "add owner…" member dropdown — fits an avatar + name + chevron (Story 4.3, UX §8.2). */
 @utility w-owner-add { width: 11rem; }
+/* FilterBar search box — the §1.2a record-list search input (Story 5.0d, bible #filterbar ~190px). */
+@utility w-filter-search { width: 12rem; }
+/* FilterBar "Filters" overflow popover — the §1.2a secondary-filter grid panel (Story 5.0d, bible ~340px). */
+@utility w-filter-popover { width: 21rem; }
 /* spark-colour pole (Story 4.5): reads var(--spark-colour, var(--entity-colour)). On a vivid card the
    fill IS --entity-colour, so EntityCard sets --spark-colour to the contrast pole (--entity-on-colour)
    to keep the chart visible; calm cards leave it unset and fall back to the identity colour (UX §9.2). */

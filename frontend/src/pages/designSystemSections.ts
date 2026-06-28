@@ -33,6 +33,7 @@ export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
   { id: 'entity-modal', label: 'EntityModal', group: 'Composites' },
   { id: 'bulk-actions', label: 'BulkActionBar', group: 'Composites' },
   { id: 'table', label: 'Table', group: 'Composites' },
+  { id: 'filterbar', label: 'FilterBar', group: 'Composites' },
   { id: 'semantic-text', label: 'Semantic text & amounts', group: 'Foundation' },
   { id: 'icon', label: 'Icon', group: 'Foundation' },
   { id: 'button', label: 'Button', group: 'Primitives' },
@@ -109,4 +110,7 @@ export const PRIMITIVE_DEMO_SECTION: Record<string, string> = {
   moneyColumn: 'table',
   selectColumn: 'table',
   actionsColumn: 'table',
+  // FilterBar + its serializer are demoed in the one #filterbar section (FilterBarDemo).
+  FilterBar: 'filterbar',
+  serializeToVisualizationFilter: 'filterbar',
 }

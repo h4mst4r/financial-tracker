@@ -32,3 +32,16 @@ export { ConfirmationDialog } from './ConfirmationDialog'
 export { Table } from './Table'
 export type { ColumnDef, CellEditContext, TableProps, SortState, SortDir } from './Table'
 export { dateColumn, textColumn, moneyColumn, selectColumn, actionsColumn } from './tableColumns'
+export { FilterBar } from './FilterBar'
+export type {
+  FilterBarProps,
+  FilterDescriptor,
+  FilterState,
+  FilterValue,
+  FilterOption,
+  FilterControl,
+  DateRangeValue,
+  DatePreset,
+  VizField,
+} from './FilterBar'
+export { serializeToVisualizationFilter } from './filterBarLogic'

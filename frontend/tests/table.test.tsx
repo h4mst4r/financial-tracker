@@ -108,6 +108,35 @@ describe('Table — inline cell edit (§12.3a contract)', () => {
     expect(onCellCommit).toHaveBeenCalledTimes(1)
   })
 
+  it('blur-within keeps the editor open (a popup opened INSIDE the cell must not close it — DatePicker/Dropdown contract)', () => {
+    const onCellCommit = vi.fn()
+    // An editControl that renders an extra focusable child inside the cell, mimicking a DatePicker/Dropdown
+    // popup (which nests its panel inside the editor's DOM). Focus moving to it is a "blur-within".
+    const cols: ColumnDef<Row>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        sortable: true,
+        sortValue: (r) => r.name,
+        render: (r) => r.name,
+        editable: true,
+        editInitial: (r) => r.name,
+        editControl: ({ value, setValue }) => (
+          <>
+            <input aria-label="name-edit" value={value} onChange={(e) => setValue(e.target.value)} />
+            <button type="button" data-testid="in-cell-popup">popup</button>
+          </>
+        ),
+      },
+    ]
+    render(<Table rows={baseRows} columns={cols} rowKey={(r) => r.id} inlineEdit onCellCommit={onCellCommit} />)
+    fireEvent.doubleClick(screen.getAllByRole('button', { name: 'Edit Name' })[0])
+    const input = screen.getByLabelText('name-edit')
+    fireEvent.blur(input, { relatedTarget: screen.getByTestId('in-cell-popup') }) // focus → popup inside the cell
+    expect(onCellCommit).not.toHaveBeenCalled() // must NOT commit
+    expect(screen.getByLabelText('name-edit')).toBeInTheDocument() // editor still open (not torn down)
+  })
+
   it('respects canEditRow — a blocked row has no edit affordance', () => {
     render(
       <Table

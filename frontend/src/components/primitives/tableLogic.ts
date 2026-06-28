@@ -32,9 +32,12 @@ export function sortRows<T>(
   return rows
     .map((row, index) => ({ row, index, value: sortValueFor(row, sort.key) }))
     .sort((a, b) => {
-      if (a.value < b.value) return -1 * dir
-      if (a.value > b.value) return 1 * dir
-      return a.index - b.index // stable: preserve input order within ties
+      const cmp =
+        typeof a.value === 'number' && typeof b.value === 'number'
+          ? a.value - b.value
+          : String(a.value).localeCompare(String(b.value))
+      // Tie-break by input index (no `dir`) so ties keep input order in BOTH directions (stable).
+      return cmp !== 0 ? cmp * dir : a.index - b.index
     })
     .map((d) => d.row)
 }
