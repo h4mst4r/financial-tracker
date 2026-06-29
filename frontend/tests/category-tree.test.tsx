@@ -124,12 +124,35 @@ describe('CategoryTree', () => {
   test('a selected row keeps the entity fill + adds the accent ring (3.4)', () => {
     // Selection no longer swaps in a neutral surface fill (owner exec decision 2026-06-22 — no neutral
     // theme tokens on an entity surface); it keeps the entity tint and layers the accent ring on top.
+    // The ring sits on a wrapper OUTSIDE the row's `.archived` grayscale filter, so an archived+selected
+    // row keeps a coloured (not desaturated) ring.
     render(<CategoryTree items={items} {...noop} selectedIds={new Set(['p1'])} />)
     const row = rowOf('Food')
     expect(row.getAttribute('data-selected')).toBe('true')
     expect(row.className).toContain('bg-entity-fill-calm')
     expect(row.className).not.toContain('bg-surface-active')
-    expect(row.className).toContain('ring-accent')
+    expect(row.parentElement?.className).toContain('ring-accent')
+  })
+
+  test('a vivid parent row renders the saturated fill, not the calm tint (FR-SYS-016)', () => {
+    render(<CategoryTree items={[cat({ id: 'pv', name: 'Vivid', vivid: true })]} {...noop} />)
+    const row = rowOf('Vivid')
+    expect(row.className).toContain('bg-entity-fill-vivid')
+    expect(row.className).not.toContain('bg-entity-fill-calm')
+  })
+
+  test('a calm parent row renders the calm tint, not the vivid fill (FR-SYS-016)', () => {
+    render(<CategoryTree items={[cat({ id: 'pc', name: 'Calm', vivid: false })]} {...noop} />)
+    const row = rowOf('Calm')
+    expect(row.className).toContain('bg-entity-fill-calm')
+    expect(row.className).not.toContain('bg-entity-fill-vivid')
+  })
+
+  test('parent sub-count renders as the neutral Badge primitive, not a bespoke pill (§6)', () => {
+    render(<CategoryTree items={items} {...noop} />)
+    const badge = screen.getByText('1 sub') // Food has one child (Groceries)
+    expect(badge.className).toContain('bg-surface-active') // Badge neutral variant
+    expect(badge.className).not.toContain('rounded-full') // not the old hand-rolled pill
   })
 
   test('rows carry no 4px left accent bar element', () => {

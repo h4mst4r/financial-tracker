@@ -108,6 +108,7 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
         <div
           ref={panelRef}
           role="listbox"
+          tabIndex={-1}
           className="fixed z-popover bg-surface-raised border border-border rounded-md shadow-lg"
           style={{ left: pos.x, top: pos.y, width: pos.width }}
           onKeyDown={onKeyDown}

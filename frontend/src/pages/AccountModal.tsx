@@ -19,8 +19,9 @@ import { LEDGER_BACKED, type Account, type AccountType } from '../types/account'
 
 const ownerLabel = (m: Member) => m.displayName ?? m.email
 
-// Multi-owner chips (UX §8.2, bible §8 taginput) — a constrained member multiselect (NOT the
-// Epic-5 free-text TagInput primitive). Selected owners render as avatar + name chips; an "add
+// Multi-owner chips (UX §8.2) — a constrained member multiselect (the spec's `MultiSelectField`
+// create-off + Avatar-token config; this bespoke picker is retrofitted onto the primitive in Story
+// 5.12, once `MultiSelectField` is built in Story 5.10). Selected owners render as avatar + name chips; an "add
 // owner…" Dropdown offers the remaining **active** members. The last chip can't be removed (≥1
 // owner, AC1). `members` is the **full** household roster (active + archived) so an existing
 // archived owner still resolves to a real name/avatar (the add-list below is filtered to active).

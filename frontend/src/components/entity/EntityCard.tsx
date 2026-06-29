@@ -1,11 +1,11 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ACTION_ICON } from '../../config/iconRegistry'
 import { ContextMenu } from '../primitives/ContextMenu'
 import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { Badge } from '../primitives/Badge'
 import { Icon } from '../primitives/Icon'
 import { FavouriteStar } from '../primitives/FavouriteStar'
-import { useEntityColour } from '../../theme/useEntityColour'
+import { useEntityFill } from '../../theme/useEntityFill'
 
 // The generic entity card (UX §2, FR-SYS-016) — colour-fill identity (calm/vivid via --entity-colour),
 // header (icon chip · name · favourite star · ⋮), hero/sparkline/footer slots, and the
@@ -60,42 +60,10 @@ export function EntityCard({
   onClick,
 }: EntityCardProps) {
   // §2.5: the per-instance colour is an inline CSS variable (data, not a design-token literal); the fill
-  // utilities read it. The resolver (SCP 2026-06-22) themes the runtime hex — immersive ramp-snap + the
-  // §0.11 contrast floor — so the card recolours correctly on Game Boy (CSS can't ramp an arbitrary hex).
-  const resolved = useEntityColour(colour)
-  // Calm uses the (remapped) colour as-is; vivid uses the floor-enforced fill + its WCAG text pole.
-  const entityFill = vivid ? resolved?.vividFill : resolved?.colour
-  const onColour = vivid ? resolved?.on : undefined
-  // The card's divider/edge reads --entity-edge (border-entity-edge): vivid → the contrast pole over the
-  // fill (matches text/chip), calm → the entity-tinted edge into the neutral border. Set once here.
-  const edge = entityFill
-    ? vivid
-      ? `color-mix(in srgb, ${onColour} 25%, transparent)`
-      : `color-mix(in srgb, ${entityFill} 30%, var(--color-border))`
-    : undefined
-  const style: CSSProperties = {
-    ...(entityFill ? { '--entity-colour': entityFill } : {}),
-    ...(edge ? { '--entity-edge': edge } : {}),
-    ...(onColour ? { '--entity-on-colour': onColour } : {}),
-    // Entity-axis emphasis poles (§2 on the entity surface): vivid mutes the on-colour pole toward the
-    // fill; calm inherits the :root defaults (the text-entity-fg pole over surface-raised).
-    ...(onColour ? { '--entity-fg': 'var(--entity-on-colour)', '--entity-emph-surface': 'var(--entity-colour)' } : {}),
-    // VIVID: the §2 emphasis stops FLOORED against this fill (§0a per-surface floor) — so muted/faint stay
-    // ≥ their target ratio on a saturated fill instead of the neutral-surface fraction dropping under it.
-    ...(onColour && resolved
-      ? {
-          '--entity-text-default': resolved.vividText.default,
-          '--entity-text-muted': resolved.vividText.muted,
-          '--entity-text-faint': resolved.vividText.faint,
-        }
-      : {}),
-    // On a vivid fill the MiniSparkline switches to the contrast pole (else it'd be drawn in the fill
-    // colour and vanish — UX §9.2). Calm cards leave it unset → the atom keeps the identity colour.
-    ...(onColour ? { '--spark-colour': 'var(--entity-on-colour)' } : {}),
-  } as CSSProperties
-
-  const fillClass = vivid ? 'bg-entity-fill-vivid' : 'bg-entity-fill-calm'
-  const textClass = onColour ? 'text-on-entity' : 'text-entity-fg'
+  // utilities read it. The shared `useEntityFill` seam themes the runtime hex (immersive ramp-snap +
+  // §0.11 floor) and maps calm/vivid into the fill/text utilities — the SAME seam the CategoryTree rows
+  // use, so the vivid opt-in can't render here and silently no-op there.
+  const { style, fillClass, textClass } = useEntityFill(colour, vivid)
   // The ⋮ trigger follows the card's entity foreground (the §2 entity-axis emphasis, NOT opacity — which
   // would render light-on-light on a light vivid fill, the old cyan→white-dots bug): muted at rest,
   // strong on hover, in both modes (the panel sets the poles; calm uses the :root defaults).

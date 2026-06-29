@@ -9,7 +9,7 @@ import { Label } from '../components/primitives/Label'
 import { Input } from '../components/primitives/Input'
 import { SegmentedControl } from '../components/primitives/SegmentedControl'
 import { Dropdown } from '../components/primitives/Dropdown'
-import { ColourPicker } from '../components/primitives/ColourPicker'
+import { ColourPicker, DEFAULT_ENTITY_COLOUR } from '../components/primitives/ColourPicker'
 import { EmojiIconPicker, GlyphView } from '../components/primitives/EmojiIconPicker'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { useEntityManager } from '../hooks/useEntityManager'
@@ -24,7 +24,7 @@ import { CATEGORY_TYPE_META } from '../types/category'
 // sanctioned EntityCard exception). Fixed list view: a tree has no grid form. Create/Edit +
 // Add-subcategory are the only mutations in Story 3.1 (archive/promote/merge are 3.2/3.4).
 
-const DEFAULT_COLOUR = '#3b82f6'
+const DEFAULT_COLOUR = DEFAULT_ENTITY_COLOUR
 
 // Type options with semantic-coloured labels (Expense red · Income green · Both blue) — the label
 // text colour matches the CategoryTree type badge (UX §6 / §0.1 inflow-outflow semantics).

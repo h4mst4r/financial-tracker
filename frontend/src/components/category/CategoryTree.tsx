@@ -21,8 +21,9 @@ import { Badge } from '../primitives/Badge'
 import { Checkbox } from '../primitives/Checkbox'
 import type { Category } from '../../types/category'
 import { CATEGORY_TYPE_META } from '../../types/category'
+import { badgeVariantForStatus } from '../../config/statusRegistry'
 import { resolveMove, ROOT_DROPPABLE, PARENT_PREFIX } from './resolveMove'
-import { useEntityColour } from '../../theme/useEntityColour'
+import { useEntityFill } from '../../theme/useEntityFill'
 
 // Glyphs via the icon registry (L14). Aliased so the flat-strip render sites (§2.11) read unchanged.
 const GripVertical = ACTION_ICON.drag
@@ -46,15 +47,32 @@ const Minus = CONTROL_ICON.leaf
 // zone = promote) or a **childless top-level** (drop on a parent block = nest). A top-level *with
 // children* can't move, so it isn't draggable and carries no grip. Reorder-within-a-level is deferred.
 
-function fillVar(colour: string): CSSProperties {
-  return { '--entity-colour': colour } as CSSProperties
+interface RowFill {
+  style: CSSProperties
+  /** The fill background utility (calm/vivid for parents, the 9% sub-tint for sub rows). */
+  fillClass: string
+  /** Primary text (name) foreground — contrast pole on vivid, the entity-fg pole on calm. */
+  textClass: string
+  /** Control glyphs (grip · chevron · ⋮) — the contrast pole on vivid (so they don't vanish into the
+   *  saturated fill), the raw instance colour on calm. */
+  iconClass: string
 }
 
-// Theme the row's tint colour through the resolver (SCP 2026-06-22) so a user-picked category colour
-// ramp-snaps on immersive themes. Calm surface → use the remapped `.colour`; the sub-tint (9% via
-// `bg-entity-fill-sub`) is derived in CSS off this same resolved value.
-function useRowFill(colour: string): CSSProperties {
-  return fillVar(useEntityColour(colour)?.colour ?? colour)
+// The ONE row-fill helper for both row kinds — a thin skin over the shared `useEntityFill` seam
+// (FR-SYS-016), so a user-picked colour ramp-snaps on immersive themes AND the per-instance vivid opt-in
+// actually renders. A **parent** takes calm/vivid; a **sub** is always the lighter parent-tint
+// (`bg-entity-fill-sub`, 9% of the resolved parent colour, calm only — spec §6 "lighter parent-tint").
+// `sub` just swaps the fill class; the resolved `--entity-colour` and the calm text/icon poles are
+// identical, so there is no second helper. The faint leaf glyph (`–`) uses `text-entity-faint` directly
+// at its one call site — it is vivid-aware (the seam sets `--entity-text-faint` on a vivid fill).
+function useRowFill(colour: string, { vivid = false, sub = false }: { vivid?: boolean; sub?: boolean }): RowFill {
+  const fill = useEntityFill(colour, vivid)
+  return {
+    style: fill.style,
+    fillClass: sub ? 'bg-entity-fill-sub' : fill.fillClass,
+    textClass: fill.textClass,
+    iconClass: fill.vivid ? 'text-on-entity' : 'text-entity',
+  }
 }
 
 function isArchived(c: Category): boolean {
@@ -62,26 +80,27 @@ function isArchived(c: Category): boolean {
 }
 
 function TypeBadge({ type }: { type: Category['category_type'] }) {
-  const meta = CATEGORY_TYPE_META[type]
-  return <Badge variant={meta.badge}>{meta.label}</Badge>
+  return <Badge variant={badgeVariantForStatus('categoryType', type)}>{CATEGORY_TYPE_META[type].label}</Badge>
 }
 
-function SubCountPill({ count }: { count: number }) {
+// Sub-count is the §6 neutral `Badge` ("N subs"), not a bespoke pill — every count/status chip is the
+// one Badge primitive (spec line 732).
+function SubCountBadge({ count }: { count: number }) {
   return (
-    <span className="inline-block text-2xs px-2 py-px rounded-full bg-entity-chip-calm text-entity shrink-0">
+    <Badge variant="neutral" className="shrink-0">
       {count} {count === 1 ? 'sub' : 'subs'}
-    </span>
+    </Badge>
   )
 }
 
-function RowMenu({ items, label }: { items: ContextMenuEntry[]; label: string }) {
+function RowMenu({ items, label, iconClass }: { items: ContextMenuEntry[]; label: string; iconClass: string }) {
   return (
     <ContextMenu
       trigger={
         <MoreVertical
           size={14}
           aria-label={label}
-          className="text-entity opacity-60 hover:opacity-100 shrink-0"
+          className={`${iconClass} opacity-60 hover:opacity-100 shrink-0`}
         />
       }
       items={items}
@@ -125,18 +144,20 @@ function DragHandle({
   listeners,
   setActivatorNodeRef,
   label,
+  iconClass,
 }: {
   attributes: ReturnType<typeof useDraggable>['attributes']
   listeners: ReturnType<typeof useDraggable>['listeners']
   setActivatorNodeRef: (el: HTMLElement | null) => void
   label: string
+  iconClass: string
 }) {
   return (
     <button
       type="button"
       ref={setActivatorNodeRef}
       aria-label={label}
-      className="shrink-0 cursor-grab active:cursor-grabbing text-entity opacity-40 group-hover:opacity-100 transition-opacity focus:outline-none focus:opacity-100"
+      className={`shrink-0 cursor-grab active:cursor-grabbing ${iconClass} opacity-40 group-hover:opacity-100 transition-opacity focus:outline-none focus:opacity-100`}
       {...attributes}
       {...listeners}
     >
@@ -170,56 +191,64 @@ function ParentRow({
     disabled: !draggable,
   })
   const archived = isArchived(category)
+  // Calm/vivid fill via the shared seam (FR-SYS-016) — a vivid category renders bg-entity-fill-vivid,
+  // with control glyphs on the contrast pole (text-on-entity) so they don't vanish into the fill.
+  const fill = useRowFill(color, { vivid: category.vivid })
   return (
-    <div
-      ref={setNodeRef}
-      data-testid="category-tree-row"
-      data-selected={selected || undefined}
-      className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md transition-all duration-100 bg-entity-fill-calm ${
-        selected ? 'ring-2 ring-accent' : ''
-      } ${
-        archived ? 'archived border border-dashed border-border-strong' : ''
-      } ${isDragging ? 'opacity-40' : ''}`}
-      style={useRowFill(color)}
-    >
-      <Checkbox
-        checked={selected}
-        onChange={onToggleSelect}
-        aria-label={`Select ${category.name}`}
-      />
-      {draggable && (
-        <DragHandle
-          attributes={attributes}
-          listeners={listeners}
-          setActivatorNodeRef={setActivatorNodeRef}
-          label={`Drag ${category.name}`}
+    // The selection ring lives on a wrapper OUTSIDE the `.archived` grayscale filter, so selecting an
+    // archived row keeps an accent (not grey) ring — the filter would otherwise desaturate the ring too.
+    <div className={`rounded-md ${selected ? 'ring-2 ring-accent' : ''}`}>
+      <div
+        ref={setNodeRef}
+        data-testid="category-tree-row"
+        data-selected={selected || undefined}
+        className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md transition-all duration-100 ${fill.fillClass} ${
+          archived ? 'archived border border-dashed border-border-strong' : ''
+        } ${isDragging ? 'opacity-40' : ''}`}
+        style={fill.style}
+      >
+        <Checkbox
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Select ${category.name}`}
         />
-      )}
-      {childCount > 0 ? (
-        <button
-          type="button"
-          aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${category.name}`}
-          onClick={onToggle}
-          className="shrink-0 focus:outline-none"
-        >
-          <ChevronRight
-            size={14}
-            className={`text-entity transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}
+        {draggable && (
+          <DragHandle
+            attributes={attributes}
+            listeners={listeners}
+            setActivatorNodeRef={setActivatorNodeRef}
+            label={`Drag ${category.name}`}
+            iconClass={fill.iconClass}
           />
-        </button>
-      ) : (
-        <Minus size={14} className="text-entity-faint shrink-0" />
-      )}
-      <span className="flex items-center justify-center size-6 shrink-0">
-        {category.icon ? <GlyphView glyph={category.icon} size={20} /> : null}
-      </span>
-      <span className="text-sm font-medium text-entity-fg flex-1 truncate min-w-0">
-        {category.name}
-      </span>
-      {archived && <Badge variant="neutral">Archived</Badge>}
-      {childCount > 0 && <SubCountPill count={childCount} />}
-      <TypeBadge type={category.category_type} />
-      <RowMenu items={menu} label={`Actions for ${category.name}`} />
+        )}
+        {childCount > 0 ? (
+          <button
+            type="button"
+            aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${category.name}`}
+            onClick={onToggle}
+            className="shrink-0 focus:outline-none"
+          >
+            <ChevronRight
+              size={14}
+              className={`${fill.iconClass} transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}
+            />
+          </button>
+        ) : (
+          // text-entity-faint is vivid-aware (the seam sets --entity-text-faint on a vivid fill), so the
+          // same §2 emphasis utility stays legible in both modes — no opacity (L3).
+          <Minus size={14} className="text-entity-faint shrink-0" />
+        )}
+        <span className="flex items-center justify-center size-6 shrink-0">
+          {category.icon ? <GlyphView glyph={category.icon} size={20} /> : null}
+        </span>
+        <span className={`text-sm font-medium ${fill.textClass} flex-1 truncate min-w-0`}>
+          {category.name}
+        </span>
+        {archived && <Badge variant="neutral">Archived</Badge>}
+        {childCount > 0 && <SubCountBadge count={childCount} />}
+        <TypeBadge type={category.category_type} />
+        <RowMenu items={menu} label={`Actions for ${category.name}`} iconClass={fill.iconClass} />
+      </div>
     </div>
   )
 }
@@ -230,36 +259,39 @@ function SubRow({ category, draggable, color, menu, selected, onToggleSelect }: 
     disabled: !draggable,
   })
   const archived = isArchived(category)
+  const fill = useRowFill(color, { sub: true })
   return (
-    <div
-      ref={setNodeRef}
-      data-testid="category-tree-row"
-      data-selected={selected || undefined}
-      className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md transition-all duration-100 bg-entity-fill-sub ${
-        selected ? 'ring-2 ring-accent' : ''
-      } ${
-        archived ? 'archived border border-dashed border-border-strong' : ''
-      } ${isDragging ? 'opacity-40' : ''}`}
-      style={useRowFill(color)}
-    >
-      <Checkbox
-        checked={selected}
-        onChange={onToggleSelect}
-        aria-label={`Select ${category.name}`}
-      />
-      {draggable && (
-        <DragHandle
-          attributes={attributes}
-          listeners={listeners}
-          setActivatorNodeRef={setActivatorNodeRef}
-          label={`Drag ${category.name}`}
+    // Selection ring on a wrapper outside the `.archived` grayscale filter (see ParentRow).
+    <div className={`rounded-md ${selected ? 'ring-2 ring-accent' : ''}`}>
+      <div
+        ref={setNodeRef}
+        data-testid="category-tree-row"
+        data-selected={selected || undefined}
+        className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md transition-all duration-100 ${fill.fillClass} ${
+          archived ? 'archived border border-dashed border-border-strong' : ''
+        } ${isDragging ? 'opacity-40' : ''}`}
+        style={fill.style}
+      >
+        <Checkbox
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Select ${category.name}`}
         />
-      )}
-      {/* Sub rows carry no glyph — name only (UX §6 / bible CategoryTree). */}
-      <span className="text-sm text-entity-fg flex-1 truncate min-w-0">{category.name}</span>
-      {archived && <Badge variant="neutral">Archived</Badge>}
-      <TypeBadge type={category.category_type} />
-      <RowMenu items={menu} label={`Actions for ${category.name}`} />
+        {draggable && (
+          <DragHandle
+            attributes={attributes}
+            listeners={listeners}
+            setActivatorNodeRef={setActivatorNodeRef}
+            label={`Drag ${category.name}`}
+            iconClass={fill.iconClass}
+          />
+        )}
+        {/* Sub rows carry no glyph — name only (UX §6 / bible CategoryTree). */}
+        <span className={`text-sm ${fill.textClass} flex-1 truncate min-w-0`}>{category.name}</span>
+        {archived && <Badge variant="neutral">Archived</Badge>}
+        <TypeBadge type={category.category_type} />
+        <RowMenu items={menu} label={`Actions for ${category.name}`} iconClass={fill.iconClass} />
+      </div>
     </div>
   )
 }

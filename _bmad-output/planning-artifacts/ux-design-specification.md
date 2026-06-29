@@ -138,6 +138,10 @@ Signs colour the **figure's text** (amount/sign), not status — **all status co
 | Recurring occurrence | processed → positive · upcoming/skipped → neutral · missed/failed → critical |
 | Transaction (`dot`) | paid → positive · pending → warning · cancelled → neutral |
 | Invitation | accepted → positive · pending → warning · declined/expired/revoked → neutral |
+| Member | active → positive · archived → neutral |
+| FX provider key | set → positive · missing → warning |
+| FX provider enabled | enabled → positive · disabled → neutral |
+| Category type | income → positive · expense → critical · both → info (the §0.1 inflow/outflow semantic) |
 | Budget health | under → positive · near (≥ threshold) → warning · over 100 % → critical |
 | FX base source (Transaction modal) | formula → info · spot → neutral · manual → warning |
 | Alert (`alert_type`) | BUDGET_WARNING → warning · BUDGET_EXCEEDED → critical · RECURRING_MISSED → critical · FX_RATE_STALE → warning · UPCOMING_PAYMENTS → info · FX_API_DOWN → critical · BACKUP_CREATED → positive |
@@ -317,7 +321,7 @@ Canonical set: **loading** (Skeleton) · **empty** (EmptyState) · **error** (in
 
 Each system → a guard, so **`/design-system` (the live primitive gallery) is a *demo/output*, no longer an arbiter** — **this spec's** concrete, named values are the truth and are tested **directly** (token parity against `index.css`), not by eyeballing a rendered bible. Mechanism by *kind*; exact guard files settled when tests are written.
 
-**Guard-authoring law — allowlist-detection, never example-matching (binds Story 5F.7; applies to every guard below).** Every guard that *can* be expressed as a positive invariant **MUST** be: declare the **allowlist of legal homes** for a value/construct, then flag **every other origin** — never match the one syntactic *shape* an audit happened to record. A shape-matcher (e.g. `grep 'variant="(success|warning|error)"'`) catches only the form it was written against and is blind to the **same violation re-expressed** — a `Record<…, BadgeVariant>` map, a ternary, a computed prop, a helper, a value buried in a `types/*.ts` file. That is exactly how hand-rolled/DIY surfaces evade the gate: a value-level sweep found **six** status→tone surfaces bypassing the §4 registry (`ROLE_BADGE`, `INVITATION_BADGE`, three inline `<Badge variant={cond ? … : …}>` ternaries, and `CATEGORY_TYPE_META.badge`) that the original shape-sampled audit and a `variant="…"` grep both missed. **A test that asserts one example is not a guard — it is theatre.** Therefore:
+**Guard-authoring law — allowlist-detection, never example-matching (binds Story 5F.7; applies to every guard below).** Every guard that *can* be expressed as a positive invariant **MUST** be: declare the **allowlist of legal homes** for a value/construct, then flag **every other origin** — never match the one syntactic *shape* an audit happened to record. A shape-matcher (e.g. `grep 'variant="(success|warning|error)"'`) catches only the form it was written against and is blind to the **same violation re-expressed** — a `Record<…, BadgeVariant>` map, a ternary, a computed prop, a helper, a value buried in a `types/*.ts` file. That is exactly how hand-rolled/DIY surfaces evade the gate: a value-level sweep found the §4 **semantic** tone resolved at call sites that a `variant="…"` grep missed — `INVITATION_BADGE`, the inline `<Badge variant={cond ? … : …}>` status ternaries (member active/archived, FX-provider key/enabled), and `CATEGORY_TYPE_META.badge`. All of these are **semantic** badges and so resolve through the **one §4 registry** (add a domain — `invitation`, `member`, `fxProviderKey`/`fxProviderEnabled`, `categoryType`); there is **no separate "category-badge" home** — a semantic badge is a semantic badge. (`ROLE_BADGE` is **not** in this set: roles map to `outline`/`neutral`, which are *not* semantic tones, so a small local map is fine — there is nothing to register.) **A test that asserts one example is not a guard — it is theatre.** Therefore:
 
 - **Express the invariant, not the example.** Ban the status tones `'success' | 'warning' | 'error'` as a `Badge` variant / `Record<…, BadgeVariant>` origin **outside** the allowlisted homes (`statusRegistry`/`Badge`; allowlist the toast API and the `semanticTextClass` sign-colour path). Same pattern for L6 (green/red/amber hex outside the token layer), L14 (lucide value-imports outside the §11 registry homes; `allowTypeImports`), L11 (`.toLocaleString`/`.toFixed`/hand-built dates outside `lib/` + the value atoms), L1 (derived tones outside §0 inputs in a `[data-theme]` block).
 - **Prove non-vacuous in a *non-obvious shape*.** Inject the violation as a `Record`/ternary/helper — not just an inline literal — and confirm the guard goes red. A guard that only reddens on the inline example is vacuous in practice.
@@ -389,9 +393,9 @@ Skins below compose these — `Button` = Pressable + label/icon · `Modal` = Pop
 | **Badge** ✓ | `<span>` (+ Icon, + opt Dot) — *absorbs StatusBadge + FilledChip* | §4 status / §5 entity / neutral `surface-active` · §2 · §8 |
 | **Dot** ○ | tiny circle `<span>` | status = `§4` semantic · legend = viz-series · unread/new = `accent` (§6) · §8 size |
 | **Swatch** ○ | coloured rounded-square `<span>` | the colour as fill · §8 radius-sm · (Pressable when selectable) |
-| **MonetaryValue** ○ | `<span>` — variants `columnar│hero│dual│signColour` | §7 · §4 sign · §2 |
-| **DateValue** ○ | `<span>` | §7 |
-| **NumberValue** ○ | `<span>` | §7 |
+| **MonetaryValue** ✓ | `<span>` — variants `columnar│hero│dual│signColour` | §7 · §4 sign · §2 |
+| **DateValue** ✓ | `<span>` | §7 |
+| **NumberValue** ✓ | `<span>` | §7 |
 | **Watermark** ✓ | large faint `<img>` over `bg` (low opacity) | §1 bg · §8 size |
 | **Logo** ✓ | accent-gradient square (+ optional wordmark) | `brand-gradient` = accent-primary→secondary (§6) · §8 size |
 
@@ -463,7 +467,7 @@ Skins below compose these — `Button` = Pressable + label/icon · `Modal` = Pop
 | primitive | made of | inherits |
 |---|---|---|
 | **Card** ✓ | `<div>` | §1 surface/raised · §10 · §9 shadow · §8 radius-lg · §3 entity · §13 hover-lift |
-| **AlertBanner** ○ | `<div>` + Icon + text (+ Button) | §4 hue → §3 tint · body text = §2 `default` · §8 |
+| **AlertBanner** ✓ | `<div>` + Icon + text (+ Button) | §4 hue → §3 tint · body text = §2 `default` · §8 |
 | **Zone / Info-box** ○ | `<div>` + title + border | §3 tint (semantic/neutral) · §10 dashed/solid · §2 |
 
 ## Data — Table (one primitive, three profiles)
@@ -525,7 +529,7 @@ The **only** new primitive the Viewer needs; everything else it composes already
 | **EntityModal** ✓ | Modal + Field(s) + Cancel/primary Buttons — *detail block below* | §3 entity tint · §17 bottom-sheet `< md`; tall-form → Drawer variant |
 | **BulkActionBar** ✓ | sticky bar + count + Clear `×` (ghost icon Button) + **actions** ∈ {Button · **inline picker** (Dropdown/SegmentedControl — single-target) · destructive→ConfirmationDialog} (destructive after `Divider`) | §9 sticky z-band · §13 bulk-bar-slide |
 | **CategoryTree** ✓ | tree row (Pressable) + expand-chevron (Pressable) + Icon[glyph] + Badge[type] + Badge[archived] + Checkbox + Add-`＋` + DragHandle + ContextMenu | §3 entity tint · §14 drag (`@dnd-kit`) · §13 merge-slide |
-| **FilterBar** ○ | descriptor controls (`search │ dateRange │ dropdown │ segmented │ popover`) + clear-all; **two profiles** (record-list · aggregation) | §1 surface · serialises to `VisualizationFilter` |
+| **FilterBar** ✓ | descriptor controls (`search │ dateRange │ dropdown │ segmented │ popover`) + clear-all; **two profiles** (record-list · aggregation) | §1 surface · serialises to `VisualizationFilter` |
 | **CommandPalette** ○ | Modal (high-centre) + search Input + Menu — **results grouped + capped + counted** (Transactions · Accounts · Categories · Currencies · Budgets · Members, then a **Commands** group: "Go to {module}" / "+ New {entity}") · row = leading `Badge`/`Avatar` + label + muted sublabel + active-row ↵ hint · **ranking** exact > prefix > substring, tie-break `updated_at`, **archived last** · **household-scoped** (respects Individual member filter) · states empty→recents · loading→`Skeleton` rows · none→`EmptyState`+New | §9 modal-tier · §13 modal-in · §17 focus-trap |
 | **AlertPanel** ○ | Popover + header ("Alerts" · Mark-all-read) + **alert-row list** + footer ("View all alerts" → `/alerts`). **Alert row** (each a `Pressable`, not a new primitive): leading `Badge` (alert glyph §11 + tone §4) · title §2-strong · one-line body §2-default · relative `DateValue` §2-muted · unread `Dot` §6 · ⋮ `ContextMenu` (Mark read / Dismiss); tap → its `entity_type/id` (`openWithFilter`/route); read (`read_at`) → desaturated (§3a). **The Alerts page reuses this same row list, full-page.** | §9 dropdown-tier · §1 overlay · §13 quick |
 | **ToastContainer** ✓ | stack host (portal) for Toast — mounted outside AppShell | §9 toast z-band |

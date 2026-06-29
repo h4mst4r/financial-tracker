@@ -463,7 +463,9 @@ export function Currencies() {
           </div>
         )}
 
-        <label className="flex items-center gap-sm md:col-span-2">
+        {/* Not a <label>: the Toggle is self-labelled (aria-label) and renders its own control, so a
+            wrapping <label> has no associatable control — the visible text is a sibling caption. */}
+        <div className="flex items-center gap-sm md:col-span-2">
           <Toggle
             checked={form.isDisplayActive}
             onChange={(isDisplayActive) => setForm((f) => ({ ...f, isDisplayActive }))}
@@ -472,7 +474,7 @@ export function Currencies() {
           <span className="text-sm text-text-default">
             Show in the currency switcher (display-active)
           </span>
-        </label>
+        </div>
       </EntityModal>
 
       <ConfirmationDialog

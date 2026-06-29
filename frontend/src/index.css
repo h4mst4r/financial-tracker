@@ -492,6 +492,10 @@
 /* ── EntityPage card grid (UX §1.3) — auto-fit/minmax so it drops to fewer columns rather than
    forcing scroll-x on touch (Bible #responsive). P4: no inline grid-template arbitrary value. ── */
 @utility grid-cols-entity { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+/* Snapshot-ledger inline-add row (AccountDetailView): three equal columns + an auto action column. */
+@utility grid-cols-snapshot-row { grid-template-columns: 1fr 1fr 1fr auto; }
+/* Icon draw-in transition (Checkbox tick): only opacity + transform animate (the §13 check-draw). */
+@utility transition-draw { transition-property: opacity, transform; }
 
 /* ── EntityCard footprint (loading skeleton tiles + ghost "+ New" tile) — P4: no inline px/rem ── */
 @utility h-entity-card     { height: 9rem; }

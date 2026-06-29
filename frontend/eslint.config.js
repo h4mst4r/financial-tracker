@@ -4,6 +4,7 @@ import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import importX from 'eslint-plugin-import-x'
+import jsxA11y from 'eslint-plugin-jsx-a11y'
 
 // JS-side lint gate (complements the type checker + stylelint). Enforces the project rules CI
 // previously left to review: no `any` (P-coding-standards), imports at the top + grouped order,
@@ -19,6 +20,10 @@ export default tseslint.config(
       js.configs.recommended,
       ...tseslint.configs.recommended,
       reactRefresh.configs.vite,
+      // a11y is part of the L15 gate (Part II) — contrast/never-colour-alone/focus are unit + behavior
+      // tests; the structural a11y rules (alt text, label association, no static-element interactions,
+      // valid aria) are this lint layer (FRONTEND-AUDIT F4 — the plugin was previously not installed).
+      jsxA11y.flatConfigs.recommended,
     ],
     plugins: { 'import-x': importX, 'react-hooks': reactHooks },
     languageOptions: {
@@ -29,6 +34,11 @@ export default tseslint.config(
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+      // autoFocus is intentional UX here, not an a11y defect: pickers focus their search Input on open
+      // and inline-edit cells focus the editor when entered (focus management owned by the 5f-1
+      // behaviors). The L15 focus terminal is covered by the behavior/integration tests, so the blanket
+      // `no-autofocus` ban is off (its absence would regress the focus-on-open affordance).
+      'jsx-a11y/no-autofocus': 'off',
       // Fast-refresh is a dev-server HMR nicety, not correctness — advisory only. Some files
       // legitimately export a tested pure helper alongside their component (e.g. sparkPoints).
       'react-refresh/only-export-components': 'warn',
@@ -41,6 +51,22 @@ export default tseslint.config(
         {
           groups: ['builtin', 'external', 'internal', ['parent', 'sibling', 'index']],
           'newlines-between': 'ignore',
+        },
+      ],
+      // L14 (Part II) — glyphs are routed through the §11 icon registry so a library swap is one edit.
+      // A lucide VALUE import is banned outside the registry homes (the file-override below re-allows
+      // them); `allowTypeImports: true` keeps the type-only `LucideIcon` import legal everywhere.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'lucide-react',
+              message:
+                'Do not import a lucide glyph directly — add it to the §11 icon registry (config/iconRegistry.ts et al.) and render via <Icon>. Type-only `import type { LucideIcon }` is allowed.',
+              allowTypeImports: true,
+            },
+          ],
         },
       ],
       // Reuse over reinvention: a raw HTML element that already has a primitive wrapper must not be
@@ -64,16 +90,32 @@ export default tseslint.config(
           selector: 'JSXOpeningElement[name.name="textarea"]',
           message: 'Do not hand-roll a <textarea>. Import the Input primitive from components/primitives.',
         },
-        // ── AUDIT BACKLOG: uncomment each as its raw uses are migrated to the primitive ──
-        // <button>  → Button   (raw in CategoryTree, BulkActionBar, EntityCard, EntityPage, Sidebar,
-        //                        AccountDetailView, AccountModal, DesignSystem — many legit icon/nav
-        //                        buttons; needs case-by-case triage, not a blanket migration)
+        // L8 (Part II) — a raw element a primitive provides must use the primitive. Promoted to `error`
+        // (these have zero raw uses outside primitives/, so they lock the surface against future drift):
+        {
+          selector: 'JSXOpeningElement[name.name="hr"]',
+          message: 'Do not hand-roll an <hr>. Import the Divider primitive from components/primitives.',
+        },
+        {
+          selector: 'JSXOpeningElement[name.name="progress"]',
+          message: 'Do not hand-roll a <progress>. Import the ProgressBar primitive from components/primitives.',
+        },
+        {
+          selector: 'JSXOpeningElement[name.name="dialog"]',
+          message: 'Do not hand-roll a <dialog>. Import the Modal primitive from components/primitives.',
+        },
+        // ── AUDIT BACKLOG (still deferred — each blocked on a prerequisite, not yet promotable) ──
+        // <button>  → Button   DEFERRED to the Button-variant story. Triage finding (5f-7): the ~15 raw
+        //                        uses (CategoryTree drag handle, EntityCard stretched click-overlay,
+        //                        BulkActionBar/AccountModal/AccountDetailView icon buttons, Sidebar nav)
+        //                        are all icon/bare/click-area buttons. The built Button only has the
+        //                        FILLED variants (primary/secondary/ghost/danger); the spec's icon/text/
+        //                        link variants are NOT built (audit B10). Forcing these into a filled
+        //                        Button breaks parity (P0) — promote once the icon/text/link variants land.
         // <input>   → Input    (raw only in DesignSystem demo)
-        // <table>/<thead>/<tbody>/<tr>/<td>/<th> → Table  (hand-rolled tables in AccountDetailView,
-        //                        Currencies — direct parallel to the radio-button bug)
-        // <hr>      → Divider
-        // <progress>→ ProgressBar
-        // <dialog>  → Modal
+        // <table>/<thead>/<tbody>/<tr>/<td>/<th> → Table  → promote in Story 5.12 (Primitive Retrofit —
+        //                        its ACs migrate F1/F2: the AccountDetailView SnapshotLedger + the
+        //                        Currencies/Members/Invitations/FX-provider lists onto Table).
       ],
     },
   },
@@ -81,5 +123,31 @@ export default tseslint.config(
     // The primitive layer is the one place these controls are allowed to be defined.
     files: ['src/components/primitives/**/*.{ts,tsx}'],
     rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
+    // L14 allowlist — the §11 icon registry homes are the ONE place lucide glyphs are value-imported
+    // (config registries + the nav/public registries + the Icon primitive + the demo gallery). A glyph
+    // swap is a single edit here; everywhere else routes through <Icon>.
+    files: [
+      'src/config/**/*.{ts,tsx}',
+      'src/components/shell/navigation.ts',
+      'src/pages/public/publicPages.ts',
+      'src/components/primitives/Icon.tsx',
+      'src/pages/DesignSystem.tsx',
+    ],
+    rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    // Test files render synthetic interactive `<div>`s as fixtures to exercise the headless behaviors
+    // (e.g. behaviors.test.tsx, favourite-star.test.tsx) — those are test scaffolding, not product UI,
+    // so the structural a11y rules don't apply. Product a11y is enforced on src/**.
+    files: ['tests/**/*.{ts,tsx}'],
+    rules: {
+      'jsx-a11y/no-static-element-interactions': 'off',
+      'jsx-a11y/click-events-have-key-events': 'off',
+      'jsx-a11y/no-noninteractive-tabindex': 'off',
+      // Tests import real lucide glyphs as fixtures to verify the §11 registry / Icon rendering.
+      'no-restricted-imports': 'off',
+    },
   },
 )

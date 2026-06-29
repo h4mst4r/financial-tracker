@@ -134,10 +134,13 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
           }
         `}
       >
-        <span className={selectedOption ? 'text-text-strong' : 'text-text-muted'}>
+        {/* A long option label truncates — a Dropdown trigger is a single-line control and must never
+            wrap to two lines (it would force the trigger taller; e.g. the Currencies "AED — United Arab
+            Emirates Dirham" code field). `min-w-0` lets the flex child shrink so `truncate` can engage. */}
+        <span className={`min-w-0 flex-1 truncate text-left ${selectedOption ? 'text-text-strong' : 'text-text-muted'}`}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <Icon icon={CONTROL_ICON.chevronDown} size={16} className={`transition-transform duration-quick ${open ? 'rotate-180' : ''}`} />
+        <Icon icon={CONTROL_ICON.chevronDown} size={16} className={`shrink-0 transition-transform duration-quick ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -145,6 +148,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
         <div
           ref={panelRef}
           role="listbox"
+          tabIndex={-1}
           className="fixed z-popover bg-surface-raised border border-border rounded-md shadow-lg"
           style={{ left: pos.x, top: pos.y, width: pos.width }}
           onKeyDown={onKeyDown}

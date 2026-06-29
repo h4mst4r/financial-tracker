@@ -34,6 +34,16 @@ export const STATUS_REGISTRY = defineStatusRegistry({
   },
   transaction: { paid: 'positive', pending: 'warning', cancelled: 'neutral' },
   invitation: { accepted: 'positive', pending: 'warning', declined: 'neutral', expired: 'neutral', revoked: 'neutral' },
+  // Member lifecycle + FX-provider config booleans (Settings → ManagementTab). These resolve here
+  // instead of being authored as inline `cond ? 'success' : …` tone literals at the call site (§4 law:
+  // "consume a key, never restyle a status"; the L6 guard bans the literal outside this registry).
+  member: { active: 'positive', archived: 'neutral' },
+  fxProviderKey: { set: 'positive', missing: 'warning' },
+  fxProviderEnabled: { enabled: 'positive', disabled: 'neutral' },
+  // Category type is a SEMANTIC badge (the §4 inflow/outflow colour — income green / expense red /
+  // both blue), so it resolves through this one semantic registry like every other badge, not a
+  // separate "category badge" concept.
+  categoryType: { income: 'positive', expense: 'critical', both: 'info' },
 })
 
 export type StatusDomain = keyof typeof STATUS_REGISTRY

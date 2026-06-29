@@ -31,9 +31,9 @@ import type { FxProvider, FxProviderType } from '../../types/fxProvider'
 
 const TZ_OPTIONS = TIMEZONE_OPTIONS
 
-// Role is entity IDENTITY/category, NOT a §4 traffic-light status — so it uses non-status Badge variants
-// (owner distinguished via the bordered `outline`; admin/member plain `neutral`), never a status tone.
-// Invitation status DOES resolve through the §4 registry (`badgeVariantForStatus('invitation', …)`).
+// Role is plain entity IDENTITY, not a §4 semantic/status badge — owner is the bordered `outline`,
+// admin/member are `neutral`. These are neutral Badge variants (no semantic tone), so they stay a small
+// local map; there is no registry/home to consume.
 const ROLE_BADGE: Record<Member['role'], BadgeVariant> = {
   owner: 'outline',
   admin: 'neutral',
@@ -377,7 +377,7 @@ function MembersSection() {
                   <span className="truncate text-xs text-text-default">{m.email}</span>
                 </div>
                 <Badge variant={ROLE_BADGE[m.role]}>{m.role}</Badge>
-                <Badge variant={archived ? 'neutral' : 'success'}>
+                <Badge variant={badgeVariantForStatus('member', archived ? 'archived' : 'active')}>
                   {archived ? 'archived' : 'active'}
                 </Badge>
                 {items.length > 0 && (
@@ -771,7 +771,7 @@ function IntegrationsSection() {
                 <span className="truncate text-xs text-text-default">{typeLabel(p.provider_type)}</span>
               </div>
               {p.requires_key && (
-                <Badge variant={p.key_configured ? 'success' : 'warning'}>
+                <Badge variant={badgeVariantForStatus('fxProviderKey', p.key_configured ? 'set' : 'missing')}>
                   {p.key_configured ? 'key set' : 'key not set'}
                 </Badge>
               )}
@@ -786,7 +786,7 @@ function IntegrationsSection() {
                   aria-label={`Enable ${p.name}`}
                 />
               ) : (
-                <Badge variant={p.is_enabled ? 'success' : 'neutral'}>
+                <Badge variant={badgeVariantForStatus('fxProviderEnabled', p.is_enabled ? 'enabled' : 'disabled')}>
                   {p.is_enabled ? 'enabled' : 'disabled'}
                 </Badge>
               )}
@@ -887,14 +887,16 @@ function IntegrationsSection() {
             </div>
           )}
 
-          <label className="flex items-center gap-sm">
+          {/* Not a <label>: the Toggle is self-labelled (aria-label) and renders its own control, so a
+              wrapping <label> has no associatable control — the visible text is a sibling caption. */}
+          <div className="flex items-center gap-sm">
             <Toggle
               checked={form.isEnabled}
               onChange={(isEnabled) => setForm((f) => ({ ...f, isEnabled }))}
               aria-label="Enabled"
             />
             <span className="text-sm text-text-default">Enabled</span>
-          </label>
+          </div>
         </div>
       </Modal>
 

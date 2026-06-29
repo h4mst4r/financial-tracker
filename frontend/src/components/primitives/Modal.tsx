@@ -92,6 +92,9 @@ export function Modal({
   return (
     <Portal>
     <div
+      // Presentational dismiss catcher — outside-click closes; the keyboard dismiss path is Esc (owned by
+      // the usePopover behavior) + the in-dialog Close button, so this layer carries no interactive role.
+      role="presentation"
       className="fixed inset-0 z-modal flex items-center justify-center p-md"
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}

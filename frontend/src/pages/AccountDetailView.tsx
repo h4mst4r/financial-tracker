@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ACTION_ICON } from '../config/iconRegistry'
 import { useEntityColour } from '../theme/useEntityColour'
+import { entityEdge } from '../theme/colour'
 import { semanticTextClass } from '../theme/semantic'
 import { Modal } from '../components/primitives/Modal'
 import { Icon } from '../components/primitives/Icon'
@@ -78,9 +79,7 @@ export function AccountDetailView({
   // Every divider/border inside the panel reads --entity-edge (border-entity-edge). On vivid it's the
   // contrast pole washed over the fill (like the chip/scrollbar); on calm it's the entity-tinted edge
   // blended into the neutral border. One value, set once here — no per-element calm/vivid branching.
-  const edgeVar = vivid
-    ? `color-mix(in srgb, ${onVar ?? 'var(--color-border)'} 25%, transparent)`
-    : `color-mix(in srgb, ${entityVar} 30%, var(--color-border))`
+  const edgeVar = entityEdge({ entityFill: entityVar, onColour: onVar ?? 'var(--color-border)', vivid })
 
   // A money figure in the active display currency (Story 4.9 lens), rendered through the §7 atom.
   // `nativeCode` is the figure's own currency (the account's, or a snapshot row's); `variant` is
@@ -322,6 +321,8 @@ function AmountEditor({
 }) {
   return (
     <span
+      // Presentational wrapper delegating Enter/Esc from the inner amount editor (the real control).
+      role="presentation"
       className="flex items-center gap-2xs"
       onKeyDown={(e) => {
         if (e.key === 'Enter') onCommit()
@@ -504,7 +505,7 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
                     <td className={td}>
                       {isEditing(snap.id, 'snapshot_date') ? (
                         // Esc exits the cell (§12.3a); the picker's own outside-click closes its popup.
-                        <span onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}>
+                        <span role="presentation" onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}>
                           <DatePicker value={snap.snapshot_date} onChange={(iso) => patchField(snap, { snapshot_date: iso })} />
                         </span>
                       ) : (
@@ -528,7 +529,7 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
                     </td>
                     <td className={td}>
                       {isEditing(snap.id, 'source') ? (
-                        <span onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}>
+                        <span role="presentation" onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}>
                           <Dropdown value={snap.source} options={SOURCE_OPTIONS} onChange={(v) => patchField(snap, { source: v })} />
                         </span>
                       ) : (
@@ -556,7 +557,7 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
           {/* Inline add-row (admin) — pinned below the scroll. Native currency only. */}
           {isAdmin &&
             (adding ? (
-              <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-xs border-t border-entity-edge px-sm py-xs text-sm">
+              <div className="grid grid-cols-snapshot-row items-center gap-xs border-t border-entity-edge px-sm py-xs text-sm">
                 <DatePicker value={addDate} onChange={setAddDate} />
                 <span className="flex items-center gap-2xs">
                   <span className={`shrink-0 text-2xs ${muted}`}>{account.currency}</span>

@@ -20,15 +20,17 @@ export interface Category extends BaseEntity {
 
 export type CategoryType = Category['category_type']
 
-// Type → semantic colour. Income = inflow green (`success`), Expense = outflow red (`error`) —
-// matching the app-wide inflow/outflow semantics (UX §0.1); Both = neutral blue (`info`). All three
-// are semantic tokens, so they remap per theme. `badge` is the Badge variant, `text` the text-colour
-// utility (used for the modal Type dropdown labels). Shared by CategoryTree + the Categories page.
+// Type → label + text-colour utility (used for the modal Type dropdown labels). Income = inflow green,
+// Expense = outflow red, Both = neutral blue — the app-wide inflow/outflow semantics (UX §0.1). All are
+// semantic text tokens, so they remap per theme. Shared by CategoryTree + the Categories page. The Badge
+// VARIANT for the type is a SEMANTIC badge and resolves through the §4 registry's `categoryType` domain
+// (`config/statusRegistry.ts`) — `badgeVariantForStatus('categoryType', type)` — so the tone literals live
+// in the one semantic registry, not in a `types/*.ts` map (Part II L6 guard-authoring law).
 export const CATEGORY_TYPE_META: Record<
   CategoryType,
-  { label: string; badge: 'success' | 'error' | 'info'; text: string }
+  { label: string; text: string }
 > = {
-  income: { label: 'Income', badge: 'success', text: 'text-success' },
-  expense: { label: 'Expense', badge: 'error', text: 'text-error' },
-  both: { label: 'Both', badge: 'info', text: 'text-info' },
+  income: { label: 'Income', text: 'text-success' },
+  expense: { label: 'Expense', text: 'text-error' },
+  both: { label: 'Both', text: 'text-info' },
 }

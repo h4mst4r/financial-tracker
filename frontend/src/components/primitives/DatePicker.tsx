@@ -146,7 +146,6 @@ export function DatePicker({
           ref={panelRef}
           role="dialog"
           aria-label="Choose a date"
-          onKeyDown={onGridKeyDown}
           className="fixed z-popover w-date-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
           style={{ left: pos.x, top: pos.y }}
         >
@@ -180,8 +179,9 @@ export function DatePicker({
             ))}
           </div>
 
-          {/* Day grid */}
-          <div className="grid grid-cols-7 gap-0.5">
+          {/* Day grid — the roving keyboard handler lives here (role="grid" supports it); focus rests on
+              the cursor day button and arrow keys bubble up. */}
+          <div role="grid" tabIndex={-1} onKeyDown={onGridKeyDown} className="grid grid-cols-7 gap-0.5">
             {days.map((day) => {
               const isSelected = selected != null && isSameDay(day, selected)
               const isToday = isSameDay(day, today)
@@ -194,7 +194,7 @@ export function DatePicker({
                   type="button"
                   tabIndex={isCursor ? 0 : -1}
                   aria-label={format(day, 'd MMMM yyyy')}
-                  aria-selected={isSelected}
+                  aria-pressed={isSelected}
                   onClick={() => pick(day)}
                   className={`
                     h-7 rounded text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-accent

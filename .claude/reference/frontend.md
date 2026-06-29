@@ -531,12 +531,17 @@ gate), ban the **forbidden value at the literal level with an allowlist of legal
 one syntactic *shape* the audit happened to record. A shape-ban catches the example and is blind to the
 **same sin re-expressed**: a status tone `'success'` evades `grep variant="(success|warning|error)"` the
 moment it's a `Record<…, BadgeVariant>` map value, a ternary, or a computed prop. This is the exact hole
-that let `INVITATION_BADGE`/`ROLE_BADGE` (hand-rolled local variant maps in `ManagementTab`) sail through
-the gate — DIY surfaces evade shape-greps by construction.
+that let `INVITATION_BADGE` + the inline status ternaries (hand-rolled in `ManagementTab`) sail through the
+gate — DIY surfaces evade shape-greps by construction.
 
 - **Status tones:** ban the literals `'success' | 'warning' | 'error'` anywhere outside
-  `config/statusRegistry.ts` + `components/primitives/Badge.tsx`. (Status resolves via
-  `statusTone(domain, key)` → `BADGE_VARIANT_FOR_TONE`.)
+  `config/statusRegistry.ts` + `components/primitives/Badge.tsx`. **Every semantic badge is a §4 registry
+  domain** — `currencyFreshness`, `fxProvider`, `member`, `invitation`, `categoryType` (income/expense/both),
+  … — resolved via `statusTone(domain, key)` → `BADGE_VARIANT_FOR_TONE` (or `badgeVariantForStatus`). There is
+  **no separate "category-badge" home**. *(Roles map to `outline`/`neutral` — not semantic tones — so a tiny
+  local `Record<role, BadgeVariant>` is fine; the guard only flags the banned tone literals.)* Scope the
+  Record-value half of the guard to the `Record<…, BadgeVariant>` object literal, not the whole file (else a
+  harmless neutral role map sharing a file with an unrelated toast `variant: 'error'` false-positives).
 - **Semantic colour (L6):** ban green/red/amber **hex** outside the token layer.
 - **Icons (L14):** ban lucide **value**-imports outside the §11 registry homes (`config/**`,
   `shell/navigation.ts`, `public/publicPages.ts`, `primitives/Icon.tsx`, demo `DesignSystem.tsx`);
@@ -547,7 +552,8 @@ the gate — DIY surfaces evade shape-greps by construction.
 (not just an inline literal) and confirm red. A value-invariant only works once every legal use has a
 **home**: define the missing registry domain *first* (e.g. an `invitation` status domain) so the ban has
 no false-positive escape. The guards must catch every *mechanical* re-expression; manual audit then
-backstops only genuine *semantic* judgments (is this badge a status or a category badge?).
+backstops only genuine *semantic* judgments (is this a semantic badge — so a §4 domain — or a plain
+neutral identity badge like a role?).
 
 ### 4.2 Stock Python `.gitignore` Silently Swallows `frontend/src` Dirs Named `lib`/`build`/`dist`/`var`
 

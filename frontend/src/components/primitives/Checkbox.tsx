@@ -41,7 +41,7 @@ export function Checkbox({ checked, onChange, disabled, id, label, 'aria-label':
         <Icon
           icon={ACTION_ICON.select}
           size={14}
-          className={`text-on-primary transition-[opacity,transform] duration-draw ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}
+          className={`text-on-primary transition-draw duration-draw ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}
         />
       </span>
       {label && <span className="text-sm font-medium text-text-strong">{label}</span>}

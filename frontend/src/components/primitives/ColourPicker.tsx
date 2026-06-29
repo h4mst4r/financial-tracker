@@ -19,6 +19,11 @@ const PALETTE = [
   '#ef4444', '#3b82f6', '#a855f7', '#64748b', '#0ea5e9', '#84cc16', '#eab308', '#fb7185',
 ] as const
 
+// The default entity colour (blue) — a single source for any surface that needs a starting colour for a
+// new entity (e.g. the Categories create form). Lives here in the colour-data home (ColourPicker owns the
+// palette) so the hex isn't authored at the consumer call site (L7/P4).
+export const DEFAULT_ENTITY_COLOUR = '#3b82f6'
+
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
 interface ColourPickerProps {

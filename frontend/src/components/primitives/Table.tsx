@@ -251,6 +251,9 @@ export function Table<T>({
                             // Enter/Esc bubble here; blur-out (focus left the whole cell) commits, blur
                             // INTO a popup opened by the editor (Dropdown/DatePicker) does not (§12.3a).
                             <span
+                              // Presentational wrapper that delegates Enter/Esc bubbling from the inner
+                              // edit control to the cell commit/cancel (the control is the real widget).
+                              role="presentation"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') onCellTrigger(row, col, 'enter')
                                 if (e.key === 'Escape') onCellTrigger(row, col, 'escape')

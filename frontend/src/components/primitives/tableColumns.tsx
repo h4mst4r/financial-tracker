@@ -11,8 +11,9 @@ import type { ColumnDef } from './Table'
 
 // Column vocabulary (§8.7) — the reuse unit. Date + money displays render through the §7 value atoms
 // (DateValue / MonetaryValue, Story 5F.3). Remaining atom-bound columns are deferred to their story:
-// statusColumn → StatusBadge (5f-4), categoryColumn → FilledChip / currency / account / person
-// (Story 5.2). Each factory returns a ColumnDef<T> bundling display render + inline editControl.
+// statusColumn → Badge via the §4 status registry (5f-4), categoryColumn → Badge (entity tone) /
+// currency / account / person (Story 5.2) — `StatusBadge`/`FilledChip` are dissolved into `Badge`.
+// Each factory returns a ColumnDef<T> bundling display render + inline editControl.
 
 export function dateColumn<T>(opts: {
   key: string

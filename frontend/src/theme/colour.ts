@@ -177,6 +177,20 @@ export function enforceTextOnSurface(colour: string, surface: string, opts?: { l
   return c
 }
 
+/**
+ * The per-instance entity edge/divider colour as a CSS `color-mix` STRING (consumed as `--entity-edge`):
+ * vivid → the contrast pole over the fill (matches text/chip); calm → the entity fill tinted into the
+ * neutral border. The `color-mix` lives HERE (the resolver seam), not authored per-element in a component
+ * (L4). `onColour` is the caller's already-resolved contrast pole (with whatever fallback it needs).
+ */
+export function entityEdge(opts: { entityFill?: string; onColour?: string; vivid: boolean }): string | undefined {
+  const { entityFill, onColour, vivid } = opts
+  if (!entityFill) return undefined
+  return vivid
+    ? `color-mix(in srgb, ${onColour} 25%, transparent)`
+    : `color-mix(in srgb, ${entityFill} 30%, var(--color-border))`
+}
+
 /** Stable FNV-1a string hash → unsigned int, for the collision nudge. */
 export function hashEntityId(id: string): number {
   let h = 0x811c9dc5

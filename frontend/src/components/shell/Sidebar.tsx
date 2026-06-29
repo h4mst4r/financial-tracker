@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { NavLink } from 'react-router-dom'
+import { Portal } from '../primitives/behaviors/Portal'
 import { CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon, Tooltip, Divider } from '../primitives'
 import { BrandMark } from '../BrandMark'
@@ -97,17 +97,18 @@ function MobileNav() {
         <Icon icon={CONTROL_ICON.menu} /> Menu
       </button>
 
-      {open &&
-        createPortal(
-          <div className="z-sidebar fixed inset-0 flex flex-col justify-end" onClick={() => setOpen(false)}>
-            <div className="absolute inset-0 bg-backdrop" />
+      {open && (
+        <Portal>
+          <div className="z-sidebar fixed inset-0 flex flex-col justify-end">
+            {/* Presentational dismiss catcher — a sibling of the sheet, so clicks inside the sheet don't
+                reach it (no stopPropagation needed); keyboard dismiss is the Close button below. */}
+            <div role="presentation" className="absolute inset-0 bg-backdrop" onClick={() => setOpen(false)} />
             <div
               ref={sheetRef}
               role="dialog"
               aria-label="Navigation"
               tabIndex={-1}
               className="relative max-h-bottom-sheet overflow-y-auto rounded-t-lg border-t border-border bg-surface px-sm pb-lg pt-sm"
-              onClick={(e) => e.stopPropagation()}
             >
               <button
                 aria-label="Close menu"
@@ -128,9 +129,9 @@ function MobileNav() {
                 <NavItemLink item={SETTINGS_ITEM} rail={false} onSelect={() => setOpen(false)} />
               </div>
             </div>
-          </div>,
-          document.body,
-        )}
+          </div>
+        </Portal>
+      )}
     </>
   )
 }

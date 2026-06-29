@@ -25,9 +25,11 @@ describe('DatePicker', () => {
   test('keyboard: arrow + Enter selects relative to the cursor', () => {
     const { onChange } = renderPicker()
     fireEvent.click(screen.getByRole('button', { name: /11-06-2026/ }))
-    const dialog = screen.getByRole('dialog')
-    fireEvent.keyDown(dialog, { key: 'ArrowRight' }) // 11 → 12
-    fireEvent.keyDown(dialog, { key: 'Enter' })
+    // The roving keyboard handler lives on the day grid (a11y: role="grid" supports it; focus rests on
+    // the cursor day button and arrow keys bubble up to the grid).
+    const grid = screen.getByRole('grid')
+    fireEvent.keyDown(grid, { key: 'ArrowRight' }) // 11 → 12
+    fireEvent.keyDown(grid, { key: 'Enter' })
     expect(onChange).toHaveBeenCalledWith('2026-06-12')
   })
 

@@ -3,6 +3,7 @@ import { Button, Badge } from '../components/primitives'
 import { PublicPage } from '../components/PublicPage'
 import { BrandMark } from '../components/BrandMark'
 import { branding } from '../config/branding'
+import { BADGE_VARIANT_FOR_TONE } from '../config/statusRegistry'
 import { api } from '../api/client'
 
 /** Start the Google OAuth flow — a real navigation to the backend (ARCH §1.2), not a fetch. */
@@ -49,7 +50,9 @@ export function Login({ oauthError = false }: { oauthError?: boolean }) {
           <Button variant="ghost" onClick={devLogin}>
             Dev login
           </Button>
-          <Badge variant="warning">DEV BYPASS ON</Badge>
+          {/* Static dev-environment indicator — consumes the §4 `warning` tone via the bridge (no
+              call-site tone literal; L6). */}
+          <Badge variant={BADGE_VARIANT_FOR_TONE.warning}>DEV BYPASS ON</Badge>
         </div>
       )}
     </PublicPage>
