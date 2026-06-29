@@ -7,11 +7,11 @@ import { type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react'
 // Native `<button>` skins (Button, Toggle, SegmentedControl segments) gate their `onClick` through this
 // and reuse the class fragments; the browser supplies the rest of the press semantics.
 
-// The §13 press-scale and the disabled treatment live here as the single source (the B10 token promotion
-// and the B14 opacity→§3a-utility cleanup are later 5F stories — until then these are the canonical
-// fragments, authored once).
+// The §13 press-scale and the disabled treatment live here as the single source (the B10 press-scale token
+// promotion is a later 5F story). DISABLED_CLASS is the §3a `disabled` utility (5f-5): a relative
+// surface-mix + faint text + not-allowed (NOT opacity, which bleeds the bg + breaks the floor, B14/L5).
 export const PRESS_SCALE = 'active:scale-[0.97] transition-transform duration-press'
-export const DISABLED_CLASS = 'opacity-50 cursor-not-allowed'
+export const DISABLED_CLASS = 'disabled'
 
 export interface UsePressableOptions {
   disabled?: boolean

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleDollarSign, Pencil, Trash2, MoreVertical } from 'lucide-react'
+import { ACTION_ICON } from '../config/iconRegistry'
+import { EMPTY_STATE } from '../config/emptyStateRegistry'
 import { EntityPage, EntityModal } from '../components/entity'
 import { Label } from '../components/primitives/Label'
 import { Input } from '../components/primitives/Input'
 import { Toggle } from '../components/primitives/Toggle'
 import { Badge } from '../components/primitives/Badge'
+import { Icon } from '../components/primitives/Icon'
 import { ContextMenu } from '../components/primitives/ContextMenu'
 import type { ContextMenuEntry } from '../components/primitives'
 import { ColourPicker } from '../components/primitives/ColourPicker'
@@ -13,6 +15,7 @@ import { Dropdown } from '../components/primitives/Dropdown'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { NumberValue } from '../components/primitives/NumberValue'
+import { statusTone, BADGE_VARIANT_FOR_TONE, type StatusKey } from '../config/statusRegistry'
 import { useAlertStore } from '../stores/alertStore'
 import { useThemeStore } from '../stores/themeStore'
 import { resolveTheme } from '../theme/useAppearance'
@@ -39,6 +42,10 @@ import {
 // switcher (Story 9.7) are deliberately out of scope.
 
 const CODE_RE = /^[A-Z]{3}$/
+
+// Currency-freshness status → Badge variant via the §4 registry (no inline status→tone mapping; B7/L6).
+const freshnessVariant = (key: StatusKey<'currencyFreshness'>) =>
+  BADGE_VARIANT_FOR_TONE[statusTone('currencyFreshness', key)]
 
 interface FormState {
   id: string | null
@@ -233,13 +240,13 @@ export function Currencies() {
     !/^#[0-9a-fA-F]{6}$/.test(form.colour)
 
   const rowMenu = (c: Currency): ContextMenuEntry[] => {
-    const items: ContextMenuEntry[] = [{ label: 'Edit', icon: Pencil, onClick: () => openEdit(c) }]
+    const items: ContextMenuEntry[] = [{ label: 'Edit', icon: ACTION_ICON.edit, onClick: () => openEdit(c) }]
     // The base currency is fixed and non-removable (AC2) — no Delete entry.
     if (!c.is_base) {
       items.push({ divider: true })
       items.push({
         label: 'Delete',
-        icon: Trash2,
+        icon: ACTION_ICON.delete,
         destructive: true,
         onClick: () => setConfirmDelete(c),
       })
@@ -267,9 +274,9 @@ export function Currencies() {
         isError={query.isError}
         onRetry={() => query.refetch()}
         isEmpty={currencies.length === 0}
-        emptyIcon={CircleDollarSign}
-        emptyTitle="No currencies yet"
-        emptyDescription="Add a currency to transact and view in it."
+        emptyIcon={EMPTY_STATE.currencies.icon}
+        emptyTitle={EMPTY_STATE.currencies.title}
+        emptyDescription={EMPTY_STATE.currencies.description}
       >
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm" data-testid="currencies-table">
@@ -303,20 +310,20 @@ export function Currencies() {
                     >
                       {c.code}
                     </td>
-                    <td className="px-md py-sm text-text-primary">{c.name}</td>
-                    <td className="px-md py-sm font-mono text-text-secondary">
+                    <td className="px-md py-sm text-text-strong">{c.name}</td>
+                    <td className="px-md py-sm font-mono text-text-default">
                       {displayRate(c.rate_to_base, baseCode, c.code, c.is_base)}
                     </td>
                     {/* Status (UX §10): base = fresh (no time, matches bible §10); non-base shows the
                         freshness badge with the last-updated time, absolute on hover. */}
                     <td className="px-md py-sm">
                       {c.is_base ? (
-                        <Badge variant="success">fresh</Badge>
+                        <Badge variant={freshnessVariant('fresh')}>fresh</Badge>
                       ) : c.last_rate_at === null ? (
-                        <Badge variant="warning">never</Badge>
+                        <Badge variant={freshnessVariant('never')}>never</Badge>
                       ) : (
                         <span title={absoluteRateTime(c.last_rate_at)}>
-                          <Badge variant={stale ? 'warning' : 'success'}>
+                          <Badge variant={freshnessVariant(stale ? 'stale' : 'fresh')}>
                             {stale
                               ? `stale ${staleHours(c.last_rate_at)}h`
                               : `fresh · ${relativeAge(c.last_rate_at)}`}
@@ -325,7 +332,7 @@ export function Currencies() {
                       )}
                     </td>
                     {/* Fee = fee_pct as the percentage number, shown as-is (ARCH §3.8 fee convention). */}
-                    <td className="px-md py-sm font-mono text-text-secondary">
+                    <td className="px-md py-sm font-mono text-text-default">
                       {c.is_base ? '—' : <NumberValue value={c.fee_pct} decimals={1} suffix="%" />}
                     </td>
                     <td className="px-md py-sm">
@@ -357,7 +364,8 @@ export function Currencies() {
                     <td className="px-md py-sm text-right">
                       <ContextMenu
                         trigger={
-                          <MoreVertical
+                          <Icon
+                            icon={ACTION_ICON.more}
                             size={16}
                             className="text-text-muted opacity-60 hover:opacity-100"
                           />
@@ -425,12 +433,15 @@ export function Currencies() {
 
         <div className="flex flex-col gap-xs md:col-span-2">
           <Label htmlFor="cur-colour">Colour</Label>
+          {/* Currency identity is TEXT-ONLY (UX §5 — the code/name's colour, no fill), so the vivid-fill
+              toggle is meaningless here: a text-only entity has no fill to be vivid (§3). */}
           <ColourPicker
             id="cur-colour"
             value={form.colour}
             onChange={(colour) => setForm((f) => ({ ...f, colour }))}
             vivid={form.vivid}
             onVividChange={(vivid) => setForm((f) => ({ ...f, vivid }))}
+            showVivid={false}
           />
         </div>
 
@@ -458,7 +469,7 @@ export function Currencies() {
             onChange={(isDisplayActive) => setForm((f) => ({ ...f, isDisplayActive }))}
             aria-label="Display active"
           />
-          <span className="text-sm text-text-secondary">
+          <span className="text-sm text-text-default">
             Show in the currency switcher (display-active)
           </span>
         </label>

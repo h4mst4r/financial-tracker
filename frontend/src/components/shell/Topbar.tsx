@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { User, LogOut } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
 import { Avatar, ContextMenu } from '../primitives'
 import type { ContextMenuEntry } from '../primitives'
 import { DisplayCurrencyPicker } from './DisplayCurrencyPicker'
@@ -22,11 +22,11 @@ export function Topbar() {
   const menuItems: ContextMenuEntry[] = [
     // Profile → the Settings Profile tab (Story 2.9 made it the default tab); the sidebar Settings
     // link targets the same page. Personal preferences vs household config are tabs within /settings.
-    { label: 'Profile', icon: User, onClick: () => navigate('/settings') },
+    { label: 'Profile', icon: ACTION_ICON.profile, onClick: () => navigate('/settings') },
     { divider: true },
     // Disable while a logout is in flight so a rapid second click can't fire a 2nd request (whose
     // now-deleted session would 401 → api-client hard-reload, overriding the SPA navigate).
-    { label: 'Sign out', icon: LogOut, destructive: true, disabled: isPending, onClick: logout },
+    { label: 'Sign out', icon: ACTION_ICON.signOut, destructive: true, disabled: isPending, onClick: logout },
   ]
 
   return (

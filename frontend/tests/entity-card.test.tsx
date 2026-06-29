@@ -52,10 +52,11 @@ describe('EntityCard (story 1.9b)', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  it('renders the archived treatment (opacity, dashed border, badge)', () => {
+  it('renders the archived treatment (archived util, dashed border, badge)', () => {
     render(<EntityCard name="Old Vault" archived />)
     const card = screen.getByTestId('entity-card')
-    expect(card).toHaveClass('opacity-60')
+    // The `archived` utility carries the sanctioned opacity-60 + grayscale (tokenised, 5f-5/B14).
+    expect(card).toHaveClass('archived')
     expect(card).toHaveClass('border-dashed')
     expect(screen.getByText('Archived')).toBeInTheDocument()
   })
@@ -80,11 +81,10 @@ describe('EntityCard (story 1.9b)', () => {
     expect(screen.getByLabelText('Actions')).toBeInTheDocument()
   })
 
-  it('⋮ trigger tints to the entity colour on calm, and the on-entity pole on vivid', () => {
-    // Every element on an entity surface tints to the instance colour (icons included) — no flat
-    // neutral token. Calm: text-entity (the instance colour). Vivid: inherits the root on-entity pole,
-    // muted via opacity (NOT text-text-secondary, which would render light-on-light on a light vivid
-    // fill — the white-dots-on-cyan regression).
+  it('⋮ trigger follows the entity-axis emphasis (muted at rest, strong on hover), not opacity', () => {
+    // The ⋮ is rendered through the §2 entity-axis emphasis (5f-5): the panel's foreground pole muted
+    // toward the entity surface, in BOTH modes — NOT opacity (which would render light-on-light on a
+    // light vivid fill, the white-dots-on-cyan regression) and NOT a flat neutral token.
     const { rerender } = render(
       <EntityCard
         name="Calm"
@@ -92,9 +92,9 @@ describe('EntityCard (story 1.9b)', () => {
         menuItems={[{ label: 'Edit', icon: Pencil, onClick: vi.fn() }]}
       />,
     )
-    // Calm: entity-tinted, never the flat neutral token.
-    expect(screen.getByLabelText('Actions')).toHaveClass('text-entity')
-    expect(screen.getByLabelText('Actions')).not.toHaveClass('text-text-secondary')
+    expect(screen.getByLabelText('Actions')).toHaveClass('text-entity-muted')
+    expect(screen.getByLabelText('Actions')).toHaveClass('hover:text-entity-strong')
+    expect(screen.getByLabelText('Actions')).not.toHaveClass('text-text-default')
 
     rerender(
       <EntityCard
@@ -105,8 +105,8 @@ describe('EntityCard (story 1.9b)', () => {
       />,
     )
     const trigger = screen.getByLabelText('Actions')
-    // Vivid: inherits the root on-entity colour, muted via opacity — no fixed text token.
-    expect(trigger).toHaveClass('opacity-70')
-    expect(trigger).not.toHaveClass('text-text-secondary')
+    // Vivid uses the same entity-axis class — the panel re-points the pole/surface vars, not the class.
+    expect(trigger).toHaveClass('text-entity-muted')
+    expect(trigger).not.toHaveClass('opacity-70')
   })
 })

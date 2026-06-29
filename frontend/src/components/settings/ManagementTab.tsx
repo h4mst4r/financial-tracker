@@ -1,18 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Archive,
-  ArchiveRestore,
-  ArrowDown,
-  ArrowUp,
-  Lock,
-  MailX,
-  MoreVertical,
-  Pencil,
-  Plus,
-  Trash2,
-  UserMinus,
-} from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
+import { EMPTY_STATE } from '../../config/emptyStateRegistry'
+import { statusTone, BADGE_VARIANT_FOR_TONE, badgeVariantForStatus } from '../../config/statusRegistry'
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
 import { Dropdown } from '../primitives/Dropdown'
@@ -41,18 +31,13 @@ import type { FxProvider, FxProviderType } from '../../types/fxProvider'
 
 const TZ_OPTIONS = TIMEZONE_OPTIONS
 
+// Role is entity IDENTITY/category, NOT a §4 traffic-light status — so it uses non-status Badge variants
+// (owner distinguished via the bordered `outline`; admin/member plain `neutral`), never a status tone.
+// Invitation status DOES resolve through the §4 registry (`badgeVariantForStatus('invitation', …)`).
 const ROLE_BADGE: Record<Member['role'], BadgeVariant> = {
-  owner: 'info',
+  owner: 'outline',
   admin: 'neutral',
   member: 'neutral',
-}
-
-const INVITATION_BADGE: Record<string, BadgeVariant> = {
-  pending: 'warning',
-  accepted: 'success',
-  declined: 'neutral',
-  revoked: 'error',
-  expired: 'error',
 }
 
 /**
@@ -125,10 +110,10 @@ function HouseholdConfig() {
   return (
     <section className="flex flex-col gap-md">
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-medium text-text-primary">Household</h2>
+        <h2 className="text-lg font-medium text-text-strong">Household</h2>
         {!isOwner && (
           <span className="flex items-center gap-1 text-xs text-text-muted">
-            <Icon icon={Lock} size={12} /> Owner only
+            <Icon icon={ACTION_ICON.locked} size={12} /> Owner only
           </span>
         )}
       </div>
@@ -317,12 +302,12 @@ function MembersSection() {
         m.role === 'admin'
           ? {
               label: 'Demote to member',
-              icon: ArrowDown,
+              icon: ACTION_ICON.roleDown,
               onClick: () => setRole.mutate({ personId: m.personId, role: 'member' }),
             }
           : {
               label: 'Promote to admin',
-              icon: ArrowUp,
+              icon: ACTION_ICON.roleUp,
               onClick: () => setRole.mutate({ personId: m.personId, role: 'admin' }),
             },
       )
@@ -333,19 +318,19 @@ function MembersSection() {
         m.status === 'archived'
           ? {
               label: 'Restore',
-              icon: ArchiveRestore,
+              icon: ACTION_ICON.restoreMember,
               onClick: () => setPending({ member: m, kind: 'restore' }),
             }
           : {
               label: 'Archive',
-              icon: Archive,
+              icon: ACTION_ICON.archive,
               destructive: true,
               onClick: () => setPending({ member: m, kind: 'archive' }),
             },
       )
       items.push({
         label: 'Remove',
-        icon: UserMinus,
+        icon: ACTION_ICON.removeMember,
         destructive: true,
         onClick: () => setPending({ member: m, kind: 'remove' }),
       })
@@ -354,7 +339,7 @@ function MembersSection() {
     if (isOwner && !isOwnerRow) {
       items.push({
         label: 'Delete',
-        icon: Trash2,
+        icon: ACTION_ICON.delete,
         destructive: true,
         disabled: !m.canDelete,
         disabledReason: 'Has data — archive instead',
@@ -366,7 +351,7 @@ function MembersSection() {
 
   return (
     <section className="flex flex-col gap-md">
-      <h2 className="text-lg font-medium text-text-primary">Members</h2>
+      <h2 className="text-lg font-medium text-text-strong">Members</h2>
       {isLoading ? (
         <Skeleton className="h-control" />
       ) : (
@@ -386,10 +371,10 @@ function MembersSection() {
                   size={32}
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium text-text-primary">
+                  <span className="truncate text-sm font-medium text-text-strong">
                     {m.displayName ?? m.email}
                   </span>
-                  <span className="truncate text-xs text-text-secondary">{m.email}</span>
+                  <span className="truncate text-xs text-text-default">{m.email}</span>
                 </div>
                 <Badge variant={ROLE_BADGE[m.role]}>{m.role}</Badge>
                 <Badge variant={archived ? 'neutral' : 'success'}>
@@ -399,10 +384,10 @@ function MembersSection() {
                   <ContextMenu
                     trigger={
                       <span
-                        className="flex items-center text-text-secondary hover:text-text-primary"
+                        className="flex items-center text-text-default hover:text-text-strong"
                         aria-label={`Actions for ${m.displayName ?? m.email}`}
                       >
-                        <Icon icon={MoreVertical} size={16} />
+                        <Icon icon={ACTION_ICON.more} size={16} />
                       </span>
                     }
                     items={items}
@@ -448,7 +433,7 @@ function ReadOnlyInvitationsSection() {
 
   return (
     <section className="flex flex-col gap-md">
-      <h2 className="text-lg font-medium text-text-primary">Invitations</h2>
+      <h2 className="text-lg font-medium text-text-strong">Invitations</h2>
       {isLoading ? (
         <Skeleton className="h-control" />
       ) : data && data.items.length > 0 ? (
@@ -458,20 +443,16 @@ function ReadOnlyInvitationsSection() {
               key={`${inv.invitedEmail}-${inv.createdAt}`}
               className="flex items-center gap-sm px-sm py-sm"
             >
-              <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
+              <span className="min-w-0 flex-1 truncate text-sm text-text-strong">
                 {inv.invitedEmail}
               </span>
-              <Badge variant={INVITATION_BADGE[inv.status] ?? 'neutral'}>{inv.status}</Badge>
-              <span className="text-xs text-text-secondary">{formatDateDisplay(inv.expiresAt)}</span>
+              <Badge variant={badgeVariantForStatus('invitation', inv.status)}>{inv.status}</Badge>
+              <span className="text-xs text-text-default">{formatDateDisplay(inv.expiresAt)}</span>
             </li>
           ))}
         </ul>
       ) : (
-        <EmptyState
-          icon={MailX}
-          title="No invitations yet"
-          description="Invitations you send will appear here."
-        />
+        <EmptyState {...EMPTY_STATE.invitations} />
       )}
     </section>
   )
@@ -529,10 +510,10 @@ function AdminInvitationsSection() {
   return (
     <section className="flex flex-col gap-md">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-text-primary">Invitations</h2>
+        <h2 className="text-lg font-medium text-text-strong">Invitations</h2>
         <Button variant="secondary" onClick={() => setInviteOpen(true)}>
           <span className="flex items-center gap-2xs">
-            <Icon icon={Plus} size={16} /> Invite
+            <Icon icon={ACTION_ICON.add} size={16} /> Invite
           </span>
         </Button>
       </div>
@@ -547,11 +528,11 @@ function AdminInvitationsSection() {
             const actionable = inv.status === 'pending' || inv.status === 'expired'
             return (
               <li key={inv.invitationId} className="flex items-center gap-sm px-sm py-sm">
-                <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
+                <span className="min-w-0 flex-1 truncate text-sm text-text-strong">
                   {inv.invitedEmail}
                 </span>
-                <Badge variant={INVITATION_BADGE[inv.status] ?? 'neutral'}>{inv.status}</Badge>
-                <span className="text-xs text-text-secondary">
+                <Badge variant={badgeVariantForStatus('invitation', inv.status)}>{inv.status}</Badge>
+                <span className="text-xs text-text-default">
                   {formatDateDisplay(inv.expiresAt)}
                 </span>
                 <div className="flex items-center gap-2xs">
@@ -590,22 +571,12 @@ function AdminInvitationsSection() {
           })}
         </ul>
       ) : (
-        <EmptyState
-          icon={MailX}
-          title="No invitations yet"
-          description="Invitations you send will appear here."
-        />
+        <EmptyState {...EMPTY_STATE.invitations} />
       )}
 
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </section>
   )
-}
-
-const FX_STATUS_BADGE: Record<string, BadgeVariant> = {
-  ok: 'success',
-  stale: 'warning',
-  down: 'error',
 }
 
 interface FxFormState {
@@ -751,39 +722,39 @@ function IntegrationsSection() {
     return [
       {
         label: 'Move up',
-        icon: ArrowUp,
+        icon: ACTION_ICON.roleUp,
         disabled: index === 0,
         onClick: () => move(index, -1),
       },
       {
         label: 'Move down',
-        icon: ArrowDown,
+        icon: ACTION_ICON.roleDown,
         disabled: index === providers.length - 1,
         onClick: () => move(index, 1),
       },
-      { label: 'Edit', icon: Pencil, onClick: () => openEdit(p) },
+      { label: 'Edit', icon: ACTION_ICON.edit, onClick: () => openEdit(p) },
       { divider: true },
-      { label: 'Remove', icon: Trash2, destructive: true, onClick: () => setConfirmRemove(p) },
+      { label: 'Remove', icon: ACTION_ICON.delete, destructive: true, onClick: () => setConfirmRemove(p) },
     ]
   }
 
   return (
     <section className="flex flex-col gap-md">
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-medium text-text-primary">Integrations</h2>
+        <h2 className="text-lg font-medium text-text-strong">Integrations</h2>
         {!isOwner && (
           <span className="flex items-center gap-1 text-xs text-text-muted">
-            <Icon icon={Lock} size={12} /> Owner only
+            <Icon icon={ACTION_ICON.locked} size={12} /> Owner only
           </span>
         )}
       </div>
 
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-text-secondary">FX rate providers</h3>
+        <h3 className="text-sm font-medium text-text-default">FX rate providers</h3>
         {isOwner && (
           <Button variant="secondary" onClick={openCreate}>
             <span className="flex items-center gap-2xs">
-              <Icon icon={Plus} size={16} /> Add provider
+              <Icon icon={ACTION_ICON.add} size={16} /> Add provider
             </span>
           </Button>
         )}
@@ -796,8 +767,8 @@ function IntegrationsSection() {
           {providers.map((p, index) => (
             <li key={p.id} className="flex items-center gap-sm px-sm py-sm">
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-medium text-text-primary">{p.name}</span>
-                <span className="truncate text-xs text-text-secondary">{typeLabel(p.provider_type)}</span>
+                <span className="truncate text-sm font-medium text-text-strong">{p.name}</span>
+                <span className="truncate text-xs text-text-default">{typeLabel(p.provider_type)}</span>
               </div>
               {p.requires_key && (
                 <Badge variant={p.key_configured ? 'success' : 'warning'}>
@@ -805,7 +776,7 @@ function IntegrationsSection() {
                 </Badge>
               )}
               {/* No live status until the Story 3.7 fetch job runs — null renders "unknown". */}
-              <Badge variant={p.last_status ? FX_STATUS_BADGE[p.last_status] : 'neutral'}>
+              <Badge variant={BADGE_VARIANT_FOR_TONE[statusTone('fxProvider', p.last_status ?? 'unknown')]}>
                 {p.last_status ?? 'unknown'}
               </Badge>
               {isOwner ? (
@@ -823,10 +794,10 @@ function IntegrationsSection() {
                 <ContextMenu
                   trigger={
                     <span
-                      className="flex items-center text-text-secondary hover:text-text-primary"
+                      className="flex items-center text-text-default hover:text-text-strong"
                       aria-label={`Actions for ${p.name}`}
                     >
-                      <Icon icon={MoreVertical} size={16} />
+                      <Icon icon={ACTION_ICON.more} size={16} />
                     </span>
                   }
                   items={rowMenu(p, index)}
@@ -840,7 +811,7 @@ function IntegrationsSection() {
       {/* Bank connections — post-MVP placeholder (UX §5.2): dashed, dimmed, no functional control. */}
       <div className="flex items-center justify-between gap-md rounded-md border border-dashed border-border bg-surface p-md opacity-60">
         <div className="flex min-w-0 flex-col">
-          <span className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+          <span className="flex items-center gap-2 text-sm font-medium text-text-default">
             Bank connections <Badge variant="neutral">Coming soon</Badge>
           </span>
           <span className="text-xs text-text-muted">
@@ -922,7 +893,7 @@ function IntegrationsSection() {
               onChange={(isEnabled) => setForm((f) => ({ ...f, isEnabled }))}
               aria-label="Enabled"
             />
-            <span className="text-sm text-text-secondary">Enabled</span>
+            <span className="text-sm text-text-default">Enabled</span>
           </label>
         </div>
       </Modal>
@@ -971,8 +942,8 @@ function LeaveHousehold() {
   return (
     <div className="flex items-center justify-between gap-md">
       <div className="flex min-w-0 flex-col">
-        <span className="text-sm font-medium text-text-primary">Leave household</span>
-        <span className="text-xs text-text-secondary">
+        <span className="text-sm font-medium text-text-strong">Leave household</span>
+        <span className="text-xs text-text-default">
           You lose access to this household. Your data is kept and restored if you re-join.
         </span>
       </div>
@@ -1007,8 +978,8 @@ function DeleteHousehold() {
   return (
     <div className="flex items-center justify-between gap-md">
       <div className="flex min-w-0 flex-col">
-        <span className="text-sm font-medium text-text-primary">Delete household</span>
-        <span className="text-xs text-text-secondary">
+        <span className="text-sm font-medium text-text-strong">Delete household</span>
+        <span className="text-xs text-text-default">
           Permanently deletes the household and all its data, and signs out every member. This cannot
           be undone.
         </span>
@@ -1036,8 +1007,8 @@ function DeleteHousehold() {
         }
       >
         <div className="flex flex-col gap-2xs">
-          <p className="text-sm text-text-secondary">
-            This permanently deletes <strong className="text-text-primary">{household?.name}</strong>{' '}
+          <p className="text-sm text-text-default">
+            This permanently deletes <strong className="text-text-strong">{household?.name}</strong>{' '}
             and all its data, and signs out every member. This cannot be undone. Type the household
             name to confirm.
           </p>

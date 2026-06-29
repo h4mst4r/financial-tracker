@@ -23,10 +23,14 @@ bg-surface-overlay — Elevated floating panels on top of raised panels
 
 ### 1.2 Text Tokens
 
+The §2 emphasis scale is `strong / default / muted / faint` — all DERIVED (`text = mix(pole, surface, e)`);
+the names were `primary/secondary` before 5f-5 (value-preserving rename to the §2 vocabulary, no re-point).
 ```
-text-text-primary    — All body text, selected values, labels
-text-text-secondary  — Inactive tabs, placeholder-adjacent labels, sub-labels
-text-text-muted      — Placeholder text, disabled labels ONLY (very low contrast — avoid for interactive text)
+text-text-strong     — Headings, key figures, selected values (the §2 max-emphasis stop; was text-text-primary)
+text-text-default    — Body, primary UI, labels (~7:1; was text-text-secondary)
+text-text-muted      — Caption, meta, sub-labels (the 4.5:1 floor)
+text-text-faint      — Disabled / decorative / large-only (the §2 3:1 SUB-floor — NEVER body content; L3).
+                       Disabled text is `faint` via the one `.disabled` utility (§3a), not a hand-mix.
 text-accent          — Active picker tabs, accent interactive elements (cyan). The accent FOREGROUND:
                        resolves to `var(--color-accent-fg, --color-accent-secondary)`. Standard themes
                        use the fallback (accent-secondary); an immersive palette whose accent-secondary
@@ -159,12 +163,12 @@ All picker triggers (Dropdown, DatePicker, ColourPicker, EmojiIconPicker) use th
 ```tsx
 className={`
   w-full h-10 rounded-md px-3 text-sm
-  bg-surface-raised border text-text-primary
+  bg-surface-raised border text-text-strong
   transition-colors duration-150
   flex items-center gap-2
   focus:outline-none
   ${disabled
-    ? 'opacity-50 cursor-not-allowed'
+    ? 'disabled'
     : open
       ? 'border-border-accent ring-2 ring-glow-accent'
       : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
@@ -186,7 +190,7 @@ className={`
   flex-1 text-xs py-1.5 rounded transition-colors focus:outline-none
   ${isActive
     ? 'bg-accent-active text-accent font-medium'
-    : 'text-text-secondary hover:text-text-primary hover:bg-surface-active'
+    : 'text-text-default hover:text-text-strong hover:bg-surface-active'
   }
 `}
 ```
@@ -198,7 +202,7 @@ className={`
   flex-1 text-xs py-1.5 rounded transition-colors focus:outline-none
   ${isActive
     ? 'bg-control-active text-primary font-medium'
-    : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+    : 'text-text-default hover:text-text-strong hover:bg-surface-hover'
   }
 `}
 ```
@@ -249,12 +253,16 @@ utility — NOT a flat neutral `border-border`. (The colour still never goes on 
 ### 2.5a Colour-Pole Inheritance on Entity Surfaces (panel sets ONE foreground; children inherit)
 
 On any entity-fill surface (EntityCard, its detail view/modal — **calm OR vivid**) the **panel sets the
-foreground colour once and every child inherits it**; mute with `opacity-*`, never a neutral
-`text-text-*` / `bg-surface-*` / `border-border` token. Patching elements one-by-one is the wrong method —
-the fix is inheritance.
+foreground pole once and every child inherits it**; mute with the **§2 entity-axis emphasis utilities**
+(`text-entity-default` / `-muted` / `-faint`, `text-entity-strong` = the full pole) — **never `opacity-*`**
+(it bleeds the bg + breaks the §0.11 floor, B13) and never a neutral `text-text-*` / `bg-surface-*` /
+`border-border` token. The panel sets `--entity-fg` + `--entity-emph-surface` once (vivid → the on-colour
+pole over the fill; calm → the `:root` defaults = the text-entity-fg pole over surface-raised); children
+consume a `text-entity-*` class, never a TSX `color-mix` (L4). Patching elements one-by-one is the wrong
+method — the fix is inheritance.
 
 - **Vivid fill:** foreground = the WCAG contrast pole `contrastText(colour)` (→ `--entity-on-colour` /
-  the `text-on-entity` utility on the root). A child that hardcodes `text-text-secondary` overrides the
+  the `text-on-entity` utility on the root). A child that hardcodes `text-text-default` overrides the
   inherited pole and renders light-on-light on a *light* vivid fill (the EntityCard ⋮-dots-invisible bug).
 - **Calm fill:** foreground = **`text-entity-fg`** (`color-mix(text-primary 60%, --entity-colour)` — the
   pole pulled toward the instance hue). Owner reversed the old neutral-pole rule 2026-06-22 ("ugly with the
@@ -280,7 +288,7 @@ For secondary interactive elements inside a trigger button (e.g., a clear/X butt
   role="button"
   tabIndex={-1}
   aria-label="Clear"
-  className="text-text-muted hover:text-text-primary cursor-pointer transition-colors"
+  className="text-text-muted hover:text-text-strong cursor-pointer transition-colors"
   onClick={handleClear}
 >
   <X size={14} />
@@ -315,7 +323,7 @@ The Tooltip uses CSS hover — never `setTimeout` or `onMouseEnter/Leave` state:
     opacity-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:opacity-100
     transition-opacity duration-150 delay-300
     max-w-tooltip w-max px-2 py-1 rounded text-xs
-    bg-surface-overlay border border-border text-text-primary shadow-lg
+    bg-surface-overlay border border-border text-text-strong shadow-lg
   ">
     {content}
   </span>
@@ -330,11 +338,11 @@ Two-option mode toggles (e.g., Household/My Finances) use the segmented control 
 
 ```tsx
 <div className="flex border border-border rounded-md overflow-hidden">
-  <button className={isFirst ? 'bg-control-active text-primary' : 'text-text-secondary'}>
+  <button className={isFirst ? 'bg-control-active text-primary' : 'text-text-default'}>
     Option A
   </button>
   <span className="w-px bg-border self-stretch" />
-  <button className={!isFirst ? 'bg-control-active text-primary' : 'text-text-secondary'}>
+  <button className={!isFirst ? 'bg-control-active text-primary' : 'text-text-default'}>
     Option B
   </button>
 </div>
@@ -380,10 +388,10 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 >
   <GripVertical size={14} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-grab" />
   {hasChildren
-    ? <ChevronRight size={14} className={`text-text-secondary shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
+    ? <ChevronRight size={14} className={`text-text-default shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
     : <Minus size={14} className="text-text-muted shrink-0" />}
   <span className="text-base shrink-0">{icon}</span>
-  <span className="text-sm font-medium text-text-primary flex-1 truncate min-w-0">{name}</span>
+  <span className="text-sm font-medium text-text-strong flex-1 truncate min-w-0">{name}</span>
   {/* right-aligned: badges, sub-count */}
   <ContextMenu trigger={<MoreVertical size={14} className="text-text-muted opacity-60 hover:opacity-100 shrink-0" />} items={rowMenuItems} />
 </div>
@@ -398,7 +406,7 @@ Tree rows use a flat flex strip, not EntityCard. Each row has a `group` class so
 
 **Expand/collapse:** conditional render (show/hide children), not `display:none`. Animate with `overflow-hidden` + `max-h-0`/`max-h-[9999px]` if transition is needed.
 
-**Archived rows:** `opacity-60 grayscale` + **dashed full border** (`border border-dashed border-border-strong`) + `[Archived]` Badge. (No left-border bar.)
+**Archived rows:** the **`archived`** utility (the sanctioned `opacity-60 grayscale`, tokenised 5f-5) + **dashed full border** (`border border-dashed border-border-strong`) + `[Archived]` Badge. (No left-border bar.) `archived` is the ONE place state-opacity is allowed; everything else uses the §2 emphasis tokens / `.disabled`.
 
 **Selected rows (multi-select):** `bg-surface-active` (neutral) fill **plus** `ring-2 ring-accent` (the §0.9 selection colour, `accent-secondary` / cyan) — the ring is the load-bearing signal (a fill alone is too quiet over an entity tint). Keep the leading `Checkbox` too. The drag-over **drop-target** uses the *other* §0.9 accent — **`ring-2 ring-primary`** (a solid `accent-primary` / indigo ring; **not** the translucent `ring-glow-primary`, which is a 35%-alpha halo that reads muddy as a drop signal) on the hovered parent block + the promote zone. So selection (cyan) and drop-target (indigo) stay distinct. `ring-primary` is the `@utility` alias for solid `accent-primary` (sibling of `ring-accent`; the bare `ring-primary` would collide per §1.4a).
 
@@ -515,6 +523,31 @@ not just `toISOString()` (which always emits `Z` and hides the bug).
   layer routinely breaks another (a `tsc` fix that introduces an eslint unused-var). One green layer ≠ done.
 - Green lint/test ≠ compiles ≠ visually correct — **no layer checks colour/pole**; do the live visual
   verify (governance P1).
+
+### 4.1c Conformance guards: ban the TONE/VALUE, not the EXAMPLE shape
+
+When you author or strengthen a CI guard (the Part II L0–L20 set, or any `no-restricted-syntax`/grep
+gate), ban the **forbidden value at the literal level with an allowlist of legal homes** — never the
+one syntactic *shape* the audit happened to record. A shape-ban catches the example and is blind to the
+**same sin re-expressed**: a status tone `'success'` evades `grep variant="(success|warning|error)"` the
+moment it's a `Record<…, BadgeVariant>` map value, a ternary, or a computed prop. This is the exact hole
+that let `INVITATION_BADGE`/`ROLE_BADGE` (hand-rolled local variant maps in `ManagementTab`) sail through
+the gate — DIY surfaces evade shape-greps by construction.
+
+- **Status tones:** ban the literals `'success' | 'warning' | 'error'` anywhere outside
+  `config/statusRegistry.ts` + `components/primitives/Badge.tsx`. (Status resolves via
+  `statusTone(domain, key)` → `BADGE_VARIANT_FOR_TONE`.)
+- **Semantic colour (L6):** ban green/red/amber **hex** outside the token layer.
+- **Icons (L14):** ban lucide **value**-imports outside the §11 registry homes (`config/**`,
+  `shell/navigation.ts`, `public/publicPages.ts`, `primitives/Icon.tsx`, demo `DesignSystem.tsx`);
+  `allowTypeImports: true` (type-only `LucideIcon` is fine).
+- **Value atoms (L11):** ban `.toLocaleString`/`.toFixed`/hand-built dates outside `lib/` + the atoms.
+
+**Prove every guard non-vacuous in a non-obvious shape** — plant the violation as a `Record` value/map
+(not just an inline literal) and confirm red. A value-invariant only works once every legal use has a
+**home**: define the missing registry domain *first* (e.g. an `invitation` status domain) so the ban has
+no false-positive escape. The guards must catch every *mechanical* re-expression; manual audit then
+backstops only genuine *semantic* judgments (is this badge a status or a category badge?).
 
 ### 4.2 Stock Python `.gitignore` Silently Swallows `frontend/src` Dirs Named `lib`/`build`/`dist`/`var`
 

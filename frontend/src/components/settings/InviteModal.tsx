@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Modal } from '../primitives/Modal'
-import { Button } from '../primitives/Button'
+import { EntityModal } from '../entity/EntityModal'
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
 import { useAlertStore } from '../../stores/alertStore'
@@ -53,22 +52,17 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
   const canSend = trimmed.includes('@') && !create.isPending
 
   return (
-    <Modal
+    <EntityModal
       open={open}
-      onClose={handleClose}
       title="Invite a member"
-      footer={
-        <>
-          <Button variant="ghost" onClick={handleClose} disabled={create.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => create.mutate()} disabled={!canSend}>
-            Send
-          </Button>
-        </>
-      }
+      cancelLabel="Cancel"
+      saveLabel="Send"
+      saveDisabled={!canSend}
+      cancelDisabled={create.isPending}
+      onClose={handleClose}
+      onSave={() => create.mutate()}
     >
-      <div className="flex flex-col gap-2xs">
+      <div className="flex flex-col gap-2xs md:col-span-2">
         <Label htmlFor="invite-email">Google email</Label>
         <Input
           id="invite-email"
@@ -81,6 +75,6 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
         />
         {error && <p className="text-sm text-error">{error}</p>}
       </div>
-    </Modal>
+    </EntityModal>
   )
 }

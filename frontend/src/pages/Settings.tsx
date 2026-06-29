@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Settings as SettingsIcon } from 'lucide-react'
+import { EMPTY_STATE } from '../config/emptyStateRegistry'
 import { SegmentedControl } from '../components/primitives/SegmentedControl'
 import { EmptyState } from '../components/primitives/EmptyState'
 import { ProfileTab } from '../components/settings/ProfileTab'
@@ -21,7 +21,7 @@ export function Settings() {
   return (
     <div className="p-lg">
       <div className="mx-auto flex max-w-3xl flex-col gap-lg">
-        <h1 className="text-2xl font-medium text-text-primary">Settings</h1>
+        <h1 className="text-2xl font-medium text-text-strong">Settings</h1>
         <div className="max-w-input">
           <SegmentedControl value={tab} options={TABS} onChange={setTab} />
         </div>
@@ -30,11 +30,7 @@ export function Settings() {
         ) : tab === 'management' ? (
           <ManagementTab />
         ) : (
-          <EmptyState
-            icon={SettingsIcon}
-            title="Coming soon"
-            description="This section isn't available yet."
-          />
+          <EmptyState {...EMPTY_STATE.settingsPlaceholder} />
         )}
       </div>
     </div>

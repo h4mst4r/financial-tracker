@@ -17,7 +17,6 @@
      in their blocks). Each = the stop's position on the ladder (§1 profile table; surface-active tuned to
      today's hand-brightened selected tone). */
   --f-bg:             0%;
-  --f-bg-secondary:  12%;
   --f-surface:       22%;
   --f-surface-raised:37%;
   --f-surface-hover: 45%;
@@ -27,7 +26,6 @@
   --f-border-light:  73%;
   --f-border-strong:100%;
   --color-bg:              color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-bg));
-  --color-bg-secondary:    color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-bg-secondary));
   --color-surface:         color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface));
   --color-surface-raised:  color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface-raised));
   --color-surface-hover:   color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-surface-hover));
@@ -37,16 +35,26 @@
   --color-border-light:    color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-border-light));
   --color-border-strong:   color-mix(in oklab, var(--ramp-lo), var(--ramp-hi) var(--f-border-strong));
   /* ── Text emphasis — DERIVED (UX §2, D2): text = mix(pole, surface, e%). `pole` = the surface's
-     contrast winner (white on dark themes, near-black on light); muted is solved to the §0.11 4.5:1 floor
-     (today's hand-picked muted was sub-floor — this darkens it to legibility-by-construction). One formula;
-     [data-theme] sets only `--text-pole` + the per-profile emphasis fractions. (DARK defaults here.) */
+     contrast winner (white on dark themes, near-black on light). The §2 scale is `strong / default /
+     muted / faint`: strong = max emphasis (near pole), default = ~7:1 body, muted is solved to the §0.11
+     4.5:1 floor, faint is the §2 sub-floor (solved to 3:1 — disabled/decorative/large-only, NEVER body).
+     One formula; [data-theme] sets only `--text-pole` + the per-profile emphasis fractions. (DARK
+     defaults here.) NB: `--color-text-strong/default` were `-primary/-secondary` before 5f-5 — the rename
+     aligned the build to the §2 vocabulary; values are unchanged. */
   --text-pole: #ffffff;
-  --e-text-primary:  10%;
-  --e-text-secondary:39%;
-  --e-text-muted:    46%;  /* solved to the §0.11 4.5:1 floor in OKLab — clears it on base-dark + brown */
-  --color-text-primary:   color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-primary));
-  --color-text-secondary: color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-secondary));
+  --e-text-strong:   10%;
+  --e-text-default:  39%;
+  --e-text-muted:    46%;  /* solved to the §0.11 4.5:1 floor in OKLab — clears it on base-dark surface AND surface-raised */
+  --e-text-faint:    58%;  /* §2 sub-floor solved to 3:1 on base-dark surface-raised (the worst-case lighter surface; was 63% which fell to ~2.9:1 on raised — human-test-run finding) */
+  --color-text-strong:    color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-strong));
+  --color-text-default:   color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-default));
   --color-text-muted:     color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-muted));
+  --color-text-faint:     color-mix(in oklab, var(--text-pole), var(--color-surface) var(--e-text-faint));
+
+  /* ── Disabled (UX §3a) — a control's fill blends toward its OWN surface by this RELATIVE amount (never a
+     raw opacity, which bleeds the bg + breaks the §0.11 floor); text → faint; cursor not-allowed. One
+     `disabled` utility consumes it (below). Shared across themes. (B14, L5.) ── */
+  --disabled: 40%;
 
   /* ── Colour · role-2 interaction/feedback (UX §0.9, frontend.md §1.3–§1.6) ── */
   --color-accent-primary:   #6366f1;
@@ -95,8 +103,9 @@
   --color-info-fill:    color-mix(in oklab, var(--color-info) 18%, transparent);
   --color-error-fill:   color-mix(in oklab, var(--color-error) 18%, transparent);
 
-  /* Favourite (gold star, §2.3). Fixed gold by default; immersive Game Boy remaps it (below). */
-  --color-favourite: #fbbf24;
+  /* accent-important (§6 — the favourite star anchor). Fixed gold by default; immersive Game Boy remaps
+     it (below). */
+  --color-accent-important: #fbbf24;
 
   /* ── Colour · role-4 entity-type defaults (UX §0.1; per-instance overrides via --entity-colour) ── */
   --color-entity-account:  #6366f1;
@@ -140,7 +149,6 @@
   --radius-md:  8px;
   --radius-lg:  12px;
   --radius-xl:  16px;
-  --radius-2xl: 24px;
   --radius-full: 9999px;
 
   /* ── Elevation/shadow — DERIVED (UX §9, B15): author the opacity extremes [lo, hi] + tint; the 4 steps
@@ -170,6 +178,7 @@
   --z-sticky:   200;
   --z-sidebar:  300;
   --z-modal:    400;
+  --z-popover:  450;   /* field-picker panels (Dropdown/DatePicker/…) portalled ABOVE the modal they open from */
   --z-toast:    500;
   --z-tooltip:  600;
 
@@ -181,7 +190,6 @@
   --duration-quick:   130ms;   /* hover-lift                              */
   --duration-base:    200ms;   /* modal scale+fade, expand/collapse       */
   --duration-drawer:  250ms;   /* drawer slide-from-edge                  */
-  --duration-pop:     280ms;   /* viz rebuild — CRT saturation pop        */
   --duration-draw:    300ms;   /* pin-pop / check-draw                    */
   --duration-slide:   420ms;   /* category merge / dedup slide            */
   --duration-emphatic:500ms;   /* error bounce, hard-delete drift         */
@@ -203,7 +211,14 @@
 
 /* Default for the runtime per-instance entity colour so a fill utility used without an
    inline `style={{ '--entity-colour': … }}` override still renders (components set it inline, §2.5). */
-:root { --entity-colour: var(--color-entity-account); }
+:root {
+  --entity-colour: var(--color-entity-account);
+  /* Entity-axis emphasis poles (UX §2 on the entity surface — drives text-entity-{default,muted,faint}).
+     CALM defaults: --entity-fg mirrors the text-entity-fg foreground; --entity-emph-surface is the surface
+     muted text mixes toward. A VIVID panel overrides BOTH (→ --entity-on-colour over --entity-colour). */
+  --entity-fg: color-mix(in srgb, var(--color-text-strong) 75%, var(--entity-colour));
+  --entity-emph-surface: var(--color-surface-raised);
+}
 
 /* ── Z-index utilities (z-index is not a @theme namespace, so wrap each) ── */
 @utility z-below    { z-index: var(--z-below); }
@@ -213,6 +228,7 @@
 @utility z-sticky   { z-index: var(--z-sticky); }
 @utility z-sidebar  { z-index: var(--z-sidebar); }
 @utility z-modal    { z-index: var(--z-modal); }
+@utility z-popover  { z-index: var(--z-popover); }
 @utility z-toast    { z-index: var(--z-toast); }
 @utility z-tooltip  { z-index: var(--z-tooltip); }
 
@@ -251,7 +267,59 @@
    The readable text pole pulled toward the instance hue, so a calm entity surface reads in the entity's
    colour family, never flat grey. The panel sets this as its `color`; children inherit and mute via opacity
    (works calm AND vivid). Vivid surfaces set text-on-entity instead. Anchored 60% to the pole for contrast. */
-@utility text-entity-fg { color: color-mix(in srgb, var(--color-text-primary) 75%, var(--entity-colour)); }
+@utility text-entity-fg { color: color-mix(in srgb, var(--color-text-strong) 75%, var(--entity-colour)); }
+
+/* ── Entity-axis text emphasis (UX §2 applied on the entity surface) — replaces opacity-as-emphasis on the
+   immersive entity panels (EntityCard / AccountDetailView, B13). muted/faint mix the panel's inherited
+   foreground pole (--entity-fg) toward its surface (--entity-emph-surface) by the SAME §2 fractions as the
+   neutral axis, so the entity colour survives AND the §0.11 floor holds — opacity can't honour a per-surface
+   floor on a saturated vivid fill. The panel sets the two vars once (calm = the :root defaults; vivid
+   overrides both); children consume a class, never a TSX color-mix (L4). (L3.) ── */
+@utility text-entity-strong  { color: var(--entity-fg); }
+/* On VIVID the panel sets --entity-text-* to per-instance stops floored against the fill (theme/colour.ts
+   entityEmphasis — §0a per-surface floor). On CALM those vars are unset → fall back to the §2 fraction mix
+   over the calm surface (≈ the neutral floor, the calm surface being a light tint of surface-raised). */
+@utility text-entity-default { color: var(--entity-text-default, color-mix(in oklab, var(--entity-fg), var(--entity-emph-surface) var(--e-text-default))); }
+@utility text-entity-muted   { color: var(--entity-text-muted,   color-mix(in oklab, var(--entity-fg), var(--entity-emph-surface) var(--e-text-muted))); }
+@utility text-entity-faint   { color: var(--entity-text-faint,   color-mix(in oklab, var(--entity-fg), var(--entity-emph-surface) var(--e-text-faint))); }
+
+/* Entity-control well (UX §1 line 71 "Input = inset of the resolved surface"). A form control sitting ON
+   an entity panel (AccountDetailView) recesses from the panel's resolved surface instead of the flat
+   neutral surface-raised — so the box reads as part of the card (calm/vivid), not a foreign navy well.
+   The PANEL scopes `.entity-controls.{vivid|calm}` (it already set --entity-colour/--entity-on-colour);
+   the mix lives HERE (L4 — no per-element color-mix in TSX). UNLAYERED so it beats the controls' base
+   `bg-surface-raised`/`text-text-strong`/`border-border` utilities. The portalled picker PANELS live in
+   <body> — outside this scope — so they keep the standard overlay surface (the trigger box tints; the
+   popover stays neutral). vivid = a darker step of the fill (on-colour text clears it); calm = a stronger
+   entity tint over raised (theme pole text). */
+.entity-controls.vivid { --control-surface: color-mix(in oklab, var(--entity-colour), var(--color-bg) 15%); --control-fg: var(--entity-on-colour, var(--color-text-strong)); }
+.entity-controls.calm  { --control-surface: color-mix(in oklab, var(--entity-colour) 22%, var(--color-surface-raised)); --control-fg: var(--color-text-strong); }
+.entity-controls :where(input, button[aria-haspopup]) {
+  background-color: var(--control-surface);
+  color: var(--control-fg);
+  border-color: var(--entity-edge, var(--color-border));
+}
+
+/* Archived treatment (UX §3.2) — the ONE sanctioned state-opacity (kept per the audit; tokenised here so
+   the raw `opacity-60 grayscale` literal is gone, B14). Pair with the dashed border at the call site. */
+@utility archived { opacity: 0.6; filter: grayscale(1); }
+
+/* ── Disabled state (UX §3a, B14/L5) — the ONE disabled treatment, consumed by every control. An UNLAYERED
+   class (not @utility) so it reliably wins over a control's base text/border utilities (unlayered beats the
+   Tailwind `utilities` layer) regardless of utility ordering — no per-component hand-mix.
+   §3a is "the FILL blended toward its surface by --disabled" — so the control keeps its OWN fill (accent,
+   surface-raised, …) and a surface-coloured inset wash composites --disabled toward the surface ON TOP of
+   it. This PRESERVES identity/hue (a disabled Game-Boy accent button stays green, an immersive theme's
+   remap survives) instead of replacing the fill with a structural grey. It is NOT element `opacity` (which
+   bleeds the page bg through + breaks the floor) — the wash is the opaque surface tone at --disabled alpha
+   composited over the fill, a deterministic relative surface-mix. Text → faint; cursor not-allowed; border
+   dimmed toward surface. Hover/press/focus are gated `enabled:` at the control, so none fire. ── */
+.disabled {
+  cursor: not-allowed;
+  color: var(--color-text-faint);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--color-surface) var(--disabled), transparent);
+  border-color: color-mix(in oklab, var(--color-border), var(--color-surface) var(--disabled));
+}
 
 /* ── Monetary figures in columnar contexts only (UX §0.3) ── */
 @utility monetary-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -360,7 +428,6 @@
 @utility duration-quick    { --tw-duration: calc(var(--duration-quick)    * var(--motion-factor)); transition-duration: calc(var(--duration-quick)    * var(--motion-factor)); }
 @utility duration-base     { --tw-duration: calc(var(--duration-base)     * var(--motion-factor)); transition-duration: calc(var(--duration-base)     * var(--motion-factor)); }
 @utility duration-drawer   { --tw-duration: calc(var(--duration-drawer)   * var(--motion-factor)); transition-duration: calc(var(--duration-drawer)   * var(--motion-factor)); }
-@utility duration-pop      { --tw-duration: calc(var(--duration-pop)      * var(--motion-factor)); transition-duration: calc(var(--duration-pop)      * var(--motion-factor)); }
 @utility duration-draw     { --tw-duration: calc(var(--duration-draw)     * var(--motion-factor)); transition-duration: calc(var(--duration-draw)     * var(--motion-factor)); }
 @utility duration-slide    { --tw-duration: calc(var(--duration-slide)    * var(--motion-factor)); transition-duration: calc(var(--duration-slide)    * var(--motion-factor)); }
 @utility duration-emphatic { --tw-duration: calc(var(--duration-emphatic) * var(--motion-factor)); transition-duration: calc(var(--duration-emphatic) * var(--motion-factor)); }
@@ -535,7 +602,6 @@
 [data-theme="base-light"],
 [data-theme="retro"] {
   --f-bg: 91%;
-  --f-bg-secondary: 81%;
   --f-surface: 100%;
   --f-surface-raised: 100%;
   --f-surface-hover: 86%;
@@ -544,11 +610,12 @@
   --f-surface-active: 72.5%;
   --f-border-light: 35%;
   --f-border-strong: 0%;
-  /* Text: pole = near-black; emphasis fractions tuned (muted solved to the 4.5:1 floor). */
+  /* Text: pole = near-black; emphasis fractions tuned (muted solved to the 4.5:1 floor, faint to 3:1). */
   --text-pole: #0a0a0a;
-  --e-text-primary: 11%;
-  --e-text-secondary: 34%;
+  --e-text-strong: 11%;
+  --e-text-default: 34%;
   --e-text-muted: 42%;
+  --e-text-faint: 55%;  /* solved to 3:1 on retro's surface-raised (retro's near-white raised fell to ~2.6:1 at 61% — human-test-run finding); base-light clears it comfortably */
 }
 
 /* ── Base · Light (immersive: no) — §0 inputs only; ladder/text/shadow derive (@theme). ── */
@@ -610,6 +677,13 @@
   --ramp-hi: #705d4c;   /* lightest (border-strong) */
   /* Warm-white pole so the §2-derived text keeps brown's warm cast (not neutral). */
   --text-pole: #fdf6ee;
+  /* brown's L-extremes give surface/raised less headroom than base-dark, so the root dark-profile
+     emphasis fractions land `muted` under 4.5:1 and `faint` under 3:1 on `surface-raised` (cards/modals).
+     Solved against brown's RAISED (the worst-case surface text sits on), so the §2 floor holds there too,
+     not just on `surface` (human-test-run finding — see 5f-2/5f-5 Dev Notes). strong inherits root (10%). */
+  --e-text-default: 30%;
+  --e-text-muted:   40%;
+  --e-text-faint:   54%;
   --shadow-lo: 0.30;
   --shadow-hi: 0.55;
   --shadow-rgb: 0 0 0;
@@ -639,7 +713,6 @@
   --ramp-lo: #0d380f;
   --ramp-hi: #487f48;
   --f-bg: 0%;
-  --f-bg-secondary: 8%;
   --f-border: 25%;
   --f-border-light: 43%;
   --f-surface: 60%;
@@ -649,9 +722,10 @@
   --f-surface-hover: 84%;
   --f-surface-active: 100%;
   --text-pole: #9bbc0f;
-  --e-text-primary: 0%;
-  --e-text-secondary: 17%;
+  --e-text-strong: 0%;
+  --e-text-default: 17%;
   --e-text-muted: 49%;
+  --e-text-faint: 60%;  /* immersive 4-green ramp is ~3:1 by nature → faint is FLOOR-EXEMPT like muted (icon/shape carries meaning, §0.2) */
   --shadow-lo: 0.40;
   --shadow-hi: 0.60;
   --shadow-rgb: 0 0 0;
@@ -667,7 +741,7 @@
   --color-entity-account:  #8bac0f;
   --color-entity-category: #306230;
   --color-entity-currency: #9bbc0f;
-  --color-favourite:       #9bbc0f;
+  --color-accent-important: #9bbc0f;
   --color-chart-1: #9bbc0f; --color-chart-2: #7a9a1a; --color-chart-3: #5e8226; --color-chart-4: #306230;
   --color-chart-5: #214c21; --color-chart-6: #8bac0f; --color-chart-7: #486f24; --color-chart-8: #143d14;
 }

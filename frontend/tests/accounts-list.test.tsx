@@ -147,7 +147,7 @@ function renderPage(subtypes: Account['account_type'][] = ['bank', 'credit_card'
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   )
-  render(<AccountsList subtypes={subtypes} title="Accounts" newLabel="account" />, { wrapper })
+  render(<AccountsList subtypes={subtypes} title="Accounts" newLabel="account" emptyKey="accounts" />, { wrapper })
 }
 
 beforeEach(() => {

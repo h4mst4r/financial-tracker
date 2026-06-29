@@ -7,7 +7,7 @@ import { Topbar } from './Topbar'
  *  by the sidebar stacking context (ARCH §6.1). */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div data-testid="app-shell" className="flex h-screen bg-bg text-text-primary">
+    <div data-testid="app-shell" className="flex h-screen bg-bg text-text-strong">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />

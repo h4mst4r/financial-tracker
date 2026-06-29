@@ -1,7 +1,8 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { addMonths, format, getDaysInMonth, setDate } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
-import { Wallet, Pencil, Copy, Archive, RotateCcw, Trash2 } from 'lucide-react'
+import { ACTION_ICON } from '../config/iconRegistry'
+import { EMPTY_STATE, type EmptyStateKey } from '../config/emptyStateRegistry'
 import { EntityPage } from '../components/entity'
 import { EntityCard } from '../components/entity/EntityCard'
 import { Dropdown } from '../components/primitives/Dropdown'
@@ -39,14 +40,16 @@ import { AccountDetailView } from './AccountDetailView'
 interface AccountsListProps {
   subtypes: AccountType[]
   title: string
-  /** Singular noun for the "+ New" button + empty state. */
+  /** Singular noun for the "+ New" button. */
   newLabel: string
+  /** Which empty-state copy this route shows (config/emptyStateRegistry). */
+  emptyKey: EmptyStateKey
 }
 
 // Minimal English pluraliser for the entity nouns used here (account → accounts, policy → policies).
 const plural = (word: string) => (/[^aeiou]y$/.test(word) ? `${word.slice(0, -1)}ies` : `${word}s`)
 
-export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
+export function AccountsList({ subtypes, title, newLabel, emptyKey }: AccountsListProps) {
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Account | null>(null)
@@ -200,7 +203,7 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
           )
         })}
         {overflow > 0 && (
-          <span className="-ml-2xs flex size-5 items-center justify-center rounded-full bg-surface-active text-2xs text-text-secondary ring-2 ring-surface">
+          <span className="-ml-2xs flex size-5 items-center justify-center rounded-full bg-surface-active text-2xs text-text-default ring-2 ring-surface">
             +{overflow}
           </span>
         )}
@@ -302,10 +305,10 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
   // The adaptive §8.1 ⋮ set: Edit · Duplicate · — · Archive/Restore · Delete-if-empty. Archive ↔
   // Restore by status; Delete is disabled with a reason when the server reports can_delete=false.
   const rowMenu = (a: Account): ContextMenuEntry[] => [
-    { label: 'Edit', icon: Pencil, onClick: () => openEdit(a) },
+    { label: 'Edit', icon: ACTION_ICON.edit, onClick: () => openEdit(a) },
     {
       label: 'Duplicate',
-      icon: Copy,
+      icon: ACTION_ICON.duplicate,
       onClick: () =>
         runAction(() => manager.duplicate(a.id), 'Could not duplicate the account.', 'Account duplicated'),
     },
@@ -313,14 +316,14 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
     a.status === 'archived'
       ? {
           label: 'Restore',
-          icon: RotateCcw,
+          icon: ACTION_ICON.restore,
           onClick: () =>
             runAction(() => manager.restore(a.id), 'Could not restore the account.', 'Account restored'),
         }
-      : { label: 'Archive', icon: Archive, onClick: () => setConfirmArchive(a) },
+      : { label: 'Archive', icon: ACTION_ICON.archive, onClick: () => setConfirmArchive(a) },
     {
       label: 'Delete',
-      icon: Trash2,
+      icon: ACTION_ICON.delete,
       destructive: true,
       disabled: !a.can_delete,
       disabledReason: a.delete_blocked_reason ?? undefined,
@@ -389,9 +392,9 @@ export function AccountsList({ subtypes, title, newLabel }: AccountsListProps) {
         isError={manager.isError}
         onRetry={manager.refetch}
         isEmpty={visible.length === 0}
-        emptyIcon={Wallet}
-        emptyTitle={`No ${plural(newLabel)} yet`}
-        emptyDescription={`Add ${newLabel === 'account' ? 'an' : 'a'} ${newLabel} to start tracking it.`}
+        emptyIcon={EMPTY_STATE[emptyKey].icon}
+        emptyTitle={EMPTY_STATE[emptyKey].title}
+        emptyDescription={EMPTY_STATE[emptyKey].description}
       >
         {visible.map((a) => renderCard(a))}
       </EntityPage>

@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { ACTION_ICON, CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { THEME_OPTIONS } from '../../theme/palettes'
 import type { ThemeId } from '../../theme/palettes'
+import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
+import { useAnchoredPosition } from './behaviors/useAnchoredPosition'
 import { useMenu } from './behaviors/useMenu'
 import { useField } from './behaviors/useField'
 
@@ -32,7 +34,8 @@ function Swatch({ colour }: { colour: string }) {
  */
 export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const selected = THEME_OPTIONS.find((o) => o.value === value)
@@ -54,7 +57,9 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
   })
 
   // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
-  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+  // Panel is PORTALLED (escapes a clipping modal) → containment is the panel + the trigger; anchored.
+  usePopover({ open, onClose: () => setOpen(false), containRef: panelRef, triggerRef })
+  const pos = useAnchoredPosition(open, triggerRef, panelRef)
 
   useEffect(() => {
     if (open && activeIndex >= 0) optionRefs.current[activeIndex]?.focus()
@@ -67,8 +72,9 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         onClick={handleTriggerClick}
@@ -76,12 +82,12 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
         aria-expanded={open}
         className={`
           w-full h-control py-control px-sm rounded-md text-sm
-          bg-surface-raised border text-text-primary
+          bg-surface-raised border text-text-strong
           transition-colors duration-quick
           flex items-center justify-between gap-2
           focus:outline-none
           ${disabled
-            ? 'opacity-50 cursor-not-allowed'
+            ? 'disabled'
             : open
               ? 'border-border-accent ring-2 ring-glow-accent'
               : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
@@ -90,17 +96,20 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
       >
         <span className="flex items-center gap-2">
           {selected && <Swatch colour={selected.swatch} />}
-          <span className={selected ? 'text-text-primary' : 'text-text-muted'}>
+          <span className={selected ? 'text-text-strong' : 'text-text-muted'}>
             {selected ? selected.label : 'Select a theme'}
           </span>
         </span>
-        <Icon icon={ChevronDown} size={16} className={`transition-transform duration-quick ${open ? 'rotate-180' : ''}`} />
+        <Icon icon={CONTROL_ICON.chevronDown} size={16} className={`transition-transform duration-quick ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
+        <Portal>
         <div
+          ref={panelRef}
           role="listbox"
-          className="absolute z-dropdown mt-1 w-full bg-surface-raised border border-border rounded-md shadow-lg"
+          className="fixed z-popover bg-surface-raised border border-border rounded-md shadow-lg"
+          style={{ left: pos.x, top: pos.y, width: pos.width }}
           onKeyDown={onKeyDown}
         >
           {THEME_OPTIONS.map((opt, i) => (
@@ -114,7 +123,7 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
               className={`
                 w-full flex items-center justify-between px-sm py-2 text-sm
                 ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}
-                ${opt.value === value ? 'text-primary' : 'text-text-primary'}
+                ${opt.value === value ? 'text-primary' : 'text-text-strong'}
               `}
               onClick={() => selectTheme(opt.value)}
             >
@@ -122,10 +131,11 @@ export function ThemePicker({ value, onChange, id, disabled }: ThemePickerProps)
                 <Swatch colour={opt.swatch} />
                 {opt.label}
               </span>
-              {opt.value === value && <Icon icon={Check} size={16} className="text-primary" />}
+              {opt.value === value && <Icon icon={ACTION_ICON.select} size={16} className="text-primary" />}
             </button>
           ))}
         </div>
+        </Portal>
       )}
     </div>
   )

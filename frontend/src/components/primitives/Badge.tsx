@@ -9,8 +9,8 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  neutral: 'bg-surface-active text-text-secondary',
-  outline: 'bg-transparent border border-border-strong text-text-secondary',
+  neutral: 'bg-surface-active text-text-default',
+  outline: 'bg-transparent border border-border-strong text-text-default',
   success: 'bg-success-fill text-success',
   warning: 'bg-warning-fill text-warning',
   info: 'bg-info-fill text-info',

@@ -3,7 +3,9 @@ import {
   contrastRatio,
   contrastText,
   enforceFloor,
+  entityEmphasis,
   oklabLightness,
+  resolveEntityColour,
 } from '../src/theme/colour'
 
 describe('contrastRatio', () => {
@@ -65,5 +67,43 @@ describe('enforceFloor', () => {
 
   it('is memoized (same object reference on repeat)', () => {
     expect(enforceFloor('#777777')).toBe(enforceFloor('#777777'))
+  })
+})
+
+// The §0a/§2 per-surface floor — the guarantee the 5f-5 review missed: emphasis stops resolved against a
+// VIVID fill must stay ≥ their target ratio, NOT reuse the neutral-surface fraction (which dropped under
+// the floor on saturated fills). "Legible by construction, not by clamp" (§0a).
+describe('entityEmphasis (per-surface §2 floor on a vivid fill)', () => {
+  // Saturated mid-fills across the hue wheel + the floored fills the resolver actually produces.
+  const fills = ['#f43f5e', '#ef4444', '#6366f1', '#06b6d4', '#22c55e', '#8b5cf6', '#64748b']
+
+  for (const hex of fills) {
+    const { vividFill, on, vividText } = resolveEntityColour(hex, hex, 'base-dark')
+
+    it(`muted clears 4.5:1 against the floored fill ${hex}`, () => {
+      expect(contrastRatio(vividText.muted, vividFill)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it(`faint clears its 3:1 sub-floor against ${hex}`, () => {
+      expect(contrastRatio(vividText.faint, vividFill)).toBeGreaterThanOrEqual(3)
+    })
+
+    it(`default is no fainter than muted, and never below the floor on ${hex}`, () => {
+      // default targets ~7:1 but collapses toward the pole when headroom is tight — it must never be
+      // MORE muted than muted, and never under the floor.
+      expect(contrastRatio(vividText.default, vividFill)).toBeGreaterThanOrEqual(
+        contrastRatio(vividText.muted, vividFill) - 0.01,
+      )
+      expect(contrastRatio(vividText.default, vividFill)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it(`strong (the pole ${on}) is the most legible stop on ${hex}`, () => {
+      const r = (c: string) => contrastRatio(c, vividFill)
+      expect(r(on)).toBeGreaterThanOrEqual(r(vividText.default) - 0.01)
+    })
+  }
+
+  it('reuses the cached result', () => {
+    expect(entityEmphasis('#ef4444', '#ffffff')).toBe(entityEmphasis('#ef4444', '#ffffff'))
   })
 })

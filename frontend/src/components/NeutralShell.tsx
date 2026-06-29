@@ -5,5 +5,5 @@ import type { ReactNode } from 'react'
  *  first-login New Household modal (Story 2.4c) and the invite / conflict dialogs (Story 2.6) will
  *  later occupy. */
 export function NeutralShell({ children }: { children?: ReactNode }) {
-  return <main className="min-h-screen bg-bg text-text-primary">{children}</main>
+  return <main className="min-h-screen bg-bg text-text-strong">{children}</main>
 }

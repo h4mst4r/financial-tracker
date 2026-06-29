@@ -104,6 +104,52 @@ export function compositeCalm(entityHex: string, surfaceHex: string, alpha = 0.1
   return rgbToHex(ch(er, sr), ch(eg, sg), ch(eb, sb))
 }
 
+/** The §2 text-emphasis stops resolved AGAINST a specific surface fill (default/muted/faint). */
+export interface EntityEmphasis {
+  /** ~7:1 target — body / primary UI on the entity surface. */
+  default: string
+  /** 4.5:1 floor — secondary / caption / meta. */
+  muted: string
+  /** 3:1 sub-floor — decorative / large-only. */
+  faint: string
+}
+
+const emphasisCache = new Map<string, EntityEmphasis>()
+
+/**
+ * §2 emphasis on an entity surface, floored PER-SURFACE (UX §0a/§2: `e = lerp(floor, pole, f)`,
+ * `floor` = THIS surface's 4.5:1 point — "legible by construction, not by clamp"). text = mix(pole,
+ * surface, e); we take the LARGEST e whose result still clears the stop's target ratio against the
+ * surface — i.e. the most-muted colour that stays legible. On a saturated `vivid` fill the pole barely
+ * clears the floor, so headroom is tiny and the stops collapse toward the pole (you cannot dim text on a
+ * saturated fill and stay legible — so we don't). This replaces reusing the NEUTRAL-surface emphasis
+ * fraction on a vivid fill, which silently dropped `muted`/`faint` under the floor.
+ */
+function emphasisStop(pole: string, surface: string, target: number): string {
+  // contrast is monotonic in e (text → surface ⇒ ratio → 1), so step from the pole and stop at the
+  // first e that falls below target; the last legible mix is the stop.
+  let best = pole
+  for (let e = 0.04; e <= 1.0001; e += 0.04) {
+    const c = mixHex(pole, surface, Math.min(e, 1))
+    if (contrastRatio(c, surface) >= target) best = c
+    else break
+  }
+  return best
+}
+
+export function entityEmphasis(surfaceFill: string, pole: string): EntityEmphasis {
+  const key = `${surfaceFill}|${pole}`
+  const cached = emphasisCache.get(key)
+  if (cached) return cached
+  const result: EntityEmphasis = {
+    default: emphasisStop(pole, surfaceFill, 7),
+    muted: emphasisStop(pole, surfaceFill, 4.5),
+    faint: emphasisStop(pole, surfaceFill, 3),
+  }
+  emphasisCache.set(key, result)
+  return result
+}
+
 const textOnSurfaceCache = new Map<string, string>()
 
 /**
@@ -186,6 +232,9 @@ export interface ResolvedEntityColour {
   vividFill: string
   /** The contrast text pole for the vivid fill — drives `--entity-on-colour`. */
   on: typeof LIGHT | typeof DARK
+  /** §2 emphasis stops floored against the VIVID fill (drive `--entity-text-{default,muted,faint}` on a
+   *  vivid surface, so muted/faint stay ≥ their target ratio — not the neutral-surface fraction). */
+  vividText: EntityEmphasis
 }
 
 /**
@@ -197,5 +246,5 @@ export interface ResolvedEntityColour {
 export function resolveEntityColour(hex: string, entityId: string, theme: ResolvedThemeId): ResolvedEntityColour {
   const colour = remapEntityColour(hex, entityId, theme)
   const { fill, text } = enforceFloor(colour)
-  return { colour, vividFill: fill, on: text }
+  return { colour, vividFill: fill, on: text, vividText: entityEmphasis(fill, text) }
 }

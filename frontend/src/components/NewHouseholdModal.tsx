@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Modal } from './primitives/Modal'
-import { Button } from './primitives/Button'
+import { EntityModal } from './entity/EntityModal'
 import { Input } from './primitives/Input'
 import { Label } from './primitives/Label'
 import { Dropdown } from './primitives/Dropdown'
@@ -54,45 +53,35 @@ export function NewHouseholdModal() {
   if (!isFirstLogin) return null
 
   return (
-    <Modal
+    <EntityModal
       open
-      onClose={() => skip.mutate()}
       title="Set up your household"
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => skip.mutate()} disabled={pending}>
-            Skip
-          </Button>
-          <Button onClick={() => save.mutate()} disabled={pending}>
-            Save
-          </Button>
-        </>
-      }
+      cancelLabel="Skip"
+      saveLabel="Save"
+      saveDisabled={pending}
+      cancelDisabled={pending}
+      // Skip is a cancel that also stamps setup-complete server-side (so a reload doesn't re-open).
+      onClose={() => skip.mutate()}
+      onSave={() => save.mutate()}
     >
-      <p className="text-sm text-text-secondary mb-md">
+      <p className="text-sm text-text-default md:col-span-2">
         We&rsquo;ve created your household with sensible defaults &mdash; adjust them now or change
         later in Settings.
       </p>
-      <div className="flex flex-col gap-sm">
-        <div className="flex flex-col gap-2xs">
-          <Label htmlFor="new-household-name">Household name</Label>
-          <Input
-            id="new-household-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2xs">
-          <Label htmlFor="new-household-timezone">Timezone</Label>
-          <Dropdown
-            id="new-household-timezone"
-            searchable
-            value={timezone}
-            options={TZ_OPTIONS}
-            onChange={setTimezone}
-          />
-        </div>
+      <div className="flex flex-col gap-2xs md:col-span-2">
+        <Label htmlFor="new-household-name">Household name</Label>
+        <Input id="new-household-name" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
-    </Modal>
+      <div className="flex flex-col gap-2xs md:col-span-2">
+        <Label htmlFor="new-household-timezone">Timezone</Label>
+        <Dropdown
+          id="new-household-timezone"
+          searchable
+          value={timezone}
+          options={TZ_OPTIONS}
+          onChange={setTimezone}
+        />
+      </div>
+    </EntityModal>
   )
 }

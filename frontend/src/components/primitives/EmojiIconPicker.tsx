@@ -1,15 +1,12 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  House, Car, ShoppingCart, Utensils, Plane, Heart, Gift, Briefcase,
-  GraduationCap, Zap, PiggyBank, TrendingUp, X, type LucideIcon,
-  Phone, Wifi, Fuel, Bus, TrainFront, HeartPulse, Dumbbell, Book, Tv, Music,
-  Gamepad2, Shirt, PawPrint, Wrench, Receipt, Landmark, CreditCard, Banknote,
-  Baby, Palette, Coffee, Stethoscope, Plug, Sprout, Hammer, Scissors,
-} from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
+import { CATEGORY_GLYPHS } from '../../config/categoryIcons'
 import { Icon } from './Icon'
 import { api } from '../../api/client'
+import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
+import { useAnchoredPosition } from './behaviors/useAnchoredPosition'
 import { useField } from './behaviors/useField'
 
 // EmojiIconPicker (UX §8.3). The glyph picker for entities with a custom glyph (categories only).
@@ -20,16 +17,9 @@ import { useField } from './behaviors/useField'
 // shared `GlyphView` can render them with `currentColor`. The same `GlyphView` renders glyphs in the
 // CategoryTree and the Recent row.
 
-const LUCIDE_GLYPHS: Record<string, LucideIcon> = {
-  house: House, car: Car, cart: ShoppingCart, food: Utensils, plane: Plane,
-  heart: Heart, gift: Gift, work: Briefcase, school: GraduationCap, power: Zap,
-  savings: PiggyBank, growth: TrendingUp, phone: Phone, wifi: Wifi, fuel: Fuel,
-  bus: Bus, train: TrainFront, health: HeartPulse, fitness: Dumbbell, book: Book,
-  tv: Tv, music: Music, games: Gamepad2, clothes: Shirt, pets: PawPrint,
-  repair: Wrench, receipt: Receipt, bank: Landmark, card: CreditCard,
-  cash: Banknote, kids: Baby, hobbies: Palette, coffee: Coffee,
-  medical: Stethoscope, plug: Plug, garden: Sprout, tools: Hammer, beauty: Scissors,
-}
+// The category-glyph library lives in the icon registry (config/categoryIcons.ts; UX §11). Aliased
+// here so the GlyphView lookups below read unchanged.
+const LUCIDE_GLYPHS = CATEGORY_GLYPHS
 
 const EMOJI_GLYPHS: { char: string; keywords: string }[] = [
   // Food & drink
@@ -124,7 +114,7 @@ const LUCIDE_PREFIX = 'lucide:'
 
 /** Render a stored glyph — a Lucide icon (`lucide:<name>`) or a raw emoji char. Shared by the
  *  picker grid, the Recent row, and the CategoryTree rows so the format stays in one place.
- *  Lucide icons render in the themed text colour (`currentColor`, default `text-text-primary` — so
+ *  Lucide icons render in the themed text colour (`currentColor`, default `text-text-strong` — so
  *  they're white on dark / dark on light, UX §8.3); emojis are full-colour unicode. `className`
  *  overrides the icon colour (e.g. contrast-aware text on a vivid fill). */
 export function GlyphView({
@@ -138,7 +128,7 @@ export function GlyphView({
 }) {
   if (glyph.startsWith(LUCIDE_PREFIX)) {
     const lucide = LUCIDE_GLYPHS[glyph.slice(LUCIDE_PREFIX.length)]
-    return lucide ? <Icon icon={lucide} size={size} className={className ?? 'text-text-primary'} /> : null
+    return lucide ? <Icon icon={lucide} size={size} className={className ?? 'text-text-strong'} /> : null
   }
   return (
     <span className="font-emoji" style={{ fontSize: size, lineHeight: 1 }}>
@@ -160,7 +150,8 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('emojis')
   const [search, setSearch] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
 
   const recent = useQuery({
@@ -180,7 +171,9 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
   const field = useField<string | null>({ onChange, disabled })
 
   // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
-  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+  // Panel is PORTALLED (escapes a clipping modal) → containment is the panel + the trigger; anchored.
+  usePopover({ open, onClose: () => setOpen(false), containRef: panelRef, triggerRef })
+  const pos = useAnchoredPosition(open, triggerRef, panelRef)
 
   const pick = (glyph: string) => {
     field.change(glyph)
@@ -199,7 +192,7 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
     `flex-1 text-xs py-1.5 rounded transition-colors focus:outline-none ${
       isActive
         ? 'bg-accent-active text-accent font-medium'
-        : 'text-text-secondary hover:text-text-primary hover:bg-surface-active'
+        : 'text-text-default hover:text-text-strong hover:bg-surface-active'
     }`
   const cellClass = (isSelected: boolean) =>
     `flex items-center justify-center size-9 rounded transition-transform hover:scale-110 hover:bg-surface-active focus:outline-none ${
@@ -209,8 +202,9 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
   const recentGlyphs = recent.data ?? []
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         aria-haspopup="dialog"
@@ -219,13 +213,13 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
         onClick={() => !disabled && setOpen((p) => !p)}
         className={`
           w-full h-control py-control px-sm rounded-md text-sm
-          bg-surface-raised border text-text-primary
+          bg-surface-raised border text-text-strong
           transition-colors duration-quick
           flex items-center gap-2
           focus:outline-none
           ${
             disabled
-              ? 'opacity-50 cursor-not-allowed'
+              ? 'disabled'
               : open
                 ? 'border-border-accent ring-2 ring-glow-accent'
                 : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
@@ -235,16 +229,19 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
         <span className="flex items-center justify-center size-5 shrink-0">
           {value ? <GlyphView glyph={value} size={18} /> : null}
         </span>
-        <span className={`flex-1 text-left ${value ? 'text-text-primary' : 'text-text-muted'}`}>
+        <span className={`flex-1 text-left ${value ? 'text-text-strong' : 'text-text-muted'}`}>
           {value ? 'Glyph' : 'Choose an icon'}
         </span>
       </button>
 
       {open && (
+        <Portal>
         <div
+          ref={panelRef}
           role="dialog"
           aria-label="Choose an icon"
-          className="absolute z-dropdown mt-1 w-max min-w-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
+          className="fixed z-popover w-max min-w-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
+          style={{ left: pos.x, top: pos.y }}
         >
           <div className="flex gap-1 mb-sm">
             <button type="button" className={tabClass(tab === 'emojis')} onClick={() => setTab('emojis')}>
@@ -261,7 +258,7 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
             spellCheck={false}
             placeholder="Search…"
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-control px-sm mb-sm rounded-md text-sm bg-surface-raised border border-border text-text-primary focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-border-accent"
+            className="w-full h-control px-sm mb-sm rounded-md text-sm bg-surface-raised border border-border text-text-strong focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-border-accent"
           />
 
           {/* Recent row — the last-8 picked glyphs, no label, separated by a bottom border
@@ -303,12 +300,13 @@ export function EmojiIconPicker({ value, onChange, id, disabled }: EmojiIconPick
                 field.change(null)
                 setOpen(false)
               }}
-              className="flex items-center gap-1 mt-sm pt-sm border-t border-border w-full text-xs text-text-secondary hover:text-text-primary focus:outline-none"
+              className="flex items-center gap-1 mt-sm pt-sm border-t border-border w-full text-xs text-text-default hover:text-text-strong focus:outline-none"
             >
-              <Icon icon={X} size={14} /> Clear glyph
+              <Icon icon={ACTION_ICON.close} size={14} /> Clear glyph
             </button>
           )}
         </div>
+        </Portal>
       )}
     </div>
   )

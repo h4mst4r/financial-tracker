@@ -122,7 +122,8 @@ describe('design bible ↔ index.css — radius / elevation / font parity', () =
     const idx = rawTokens(indexBase, 'radius-')
     const bib = rawTokens(bibleBase, 'r-')
     const mismatches: Record<string, { bible?: string; index?: string }> = {}
-    for (const key of ['sm', 'md', 'lg', 'xl', '2xl']) {
+    // §8 radius scale = sm/md/lg/xl/full; 2xl was cut (FRONTEND-AUDIT N2 — not in the scale, 0 consumers).
+    for (const key of ['sm', 'md', 'lg', 'xl']) {
       if (idx.get(key) !== bib.get(key)) mismatches[key] = { bible: bib.get(key), index: idx.get(key) }
     }
     expect(mismatches).toEqual({})

@@ -48,11 +48,14 @@ describe('Button', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
-  it('disabled keeps the variant fill, just dimmed (bible standard, not stripped to transparent)', () => {
+  it('disabled applies the §3a disabled treatment (surface-mix + faint, no opacity)', () => {
     render(wrap(<Button variant="danger" disabled>Del</Button>))
     const btn = screen.getByRole('button', { name: 'Del' })
-    expect(btn.className).toContain('bg-error-solid')
-    expect(btn.className).toContain('opacity-50')
+    // The unlayered `disabled` class governs the disabled appearance (it overrides the variant fill to the
+    // relative surface-mix + faint text); no opacity dim (5f-5, B14/L5).
+    expect(btn.className).toContain('disabled')
+    expect(btn.className).not.toContain('opacity-50')
+    expect(btn).toBeDisabled()
   })
 
   it('renders each variant (smoke)', () => {

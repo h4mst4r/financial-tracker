@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { FolderTree, Tag, ArrowUpToLine, FolderInput, Archive, Merge, RotateCcw } from 'lucide-react'
+import { ACTION_ICON } from '../config/iconRegistry'
+import { EMPTY_STATE } from '../config/emptyStateRegistry'
 import { EntityPage, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
 import { CategoryTree } from '../components/category/CategoryTree'
@@ -228,11 +229,11 @@ export function Categories() {
     : null
 
   const bulkActions: BulkAction[] = [
-    { id: 'edit-type', label: 'Edit type', icon: Tag, onClick: () => setChooser({ kind: 'type', value: '' }) },
+    { id: 'edit-type', label: 'Edit type', icon: ACTION_ICON.tag, onClick: () => setChooser({ kind: 'type', value: '' }) },
     {
       id: 'promote',
       label: 'Promote',
-      icon: ArrowUpToLine,
+      icon: ACTION_ICON.promote,
       disabled: !allSubs,
       disabledReason: 'Only subcategories can be promoted',
       onClick: bulkPromote,
@@ -240,18 +241,18 @@ export function Categories() {
     {
       id: 'move',
       label: 'Move to…',
-      icon: FolderInput,
+      icon: ACTION_ICON.moveTo,
       disabled: !allSubs,
       disabledReason: 'Only subcategories can be moved',
       onClick: () => setChooser({ kind: 'move', value: '' }),
     },
     allArchived
-      ? { id: 'restore', label: 'Restore', icon: RotateCcw, onClick: bulkRestore }
-      : { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => setConfirmArchive(true) },
+      ? { id: 'restore', label: 'Restore', icon: ACTION_ICON.restore, onClick: bulkRestore }
+      : { id: 'archive', label: 'Archive', icon: ACTION_ICON.archive, destructive: true, onClick: () => setConfirmArchive(true) },
     {
       id: 'merge',
       label: 'Merge',
-      icon: Merge,
+      icon: ACTION_ICON.merge,
       destructive: true,
       disabled: selected.length < 2,
       disabledReason: 'Select at least 2 categories to merge',
@@ -335,9 +336,9 @@ export function Categories() {
         isError={manager.isError}
         onRetry={manager.refetch}
         isEmpty={manager.items.length === 0}
-        emptyIcon={FolderTree}
-        emptyTitle="No categories yet"
-        emptyDescription="Start with our defaults or add your own."
+        emptyIcon={EMPTY_STATE.categories.icon}
+        emptyTitle={EMPTY_STATE.categories.title}
+        emptyDescription={EMPTY_STATE.categories.description}
         emptyAction={
           <CategoryDefaultsPrompt
             onCreateDefaults={onCreateDefaults}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { ACTION_ICON } from '../config/iconRegistry'
+import { Icon } from '../components/primitives/Icon'
 import { EntityModal } from '../components/entity'
 import { Label } from '../components/primitives/Label'
 import { Input } from '../components/primitives/Input'
@@ -44,7 +45,7 @@ function OwnerPicker({
         return (
           <span
             key={id}
-            className="inline-flex items-center gap-2xs rounded-full bg-surface-active py-2xs pl-2xs pr-xs text-sm text-text-primary"
+            className="inline-flex items-center gap-2xs rounded-full bg-surface-active py-2xs pl-2xs pr-xs text-sm text-text-strong"
           >
             <Avatar src={m?.pictureUrl ?? undefined} name={name} colour={m?.colour ?? undefined} size={20} />
             <span>{name}</span>
@@ -53,9 +54,9 @@ function OwnerPicker({
               aria-label={`Remove ${name}`}
               disabled={value.length === 1}
               onClick={() => onChange(value.filter((v) => v !== id))}
-              className="text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              className="text-text-default enabled:hover:text-text-strong disabled:text-text-faint disabled:cursor-not-allowed"
             >
-              <X size={14} />
+              <Icon icon={ACTION_ICON.close} size={14} />
             </button>
           </span>
         )
@@ -554,7 +555,7 @@ export function AccountModal({
           disabled={currencyLocked}
         />
         {currencyLocked && (
-          <span className="text-sm text-text-secondary">
+          <span className="text-sm text-text-default">
             Currency locks once the account has activity.
           </span>
         )}

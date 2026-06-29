@@ -34,6 +34,7 @@ export type { ContextMenuEntry, ContextMenuItem, ContextMenuDivider } from './Co
 export { Modal } from './Modal'
 export { Toast } from './Toast'
 export { EmptyState } from './EmptyState'
+export { AlertBanner } from './AlertBanner'
 export { ConfirmationDialog } from './ConfirmationDialog'
 export { Table } from './Table'
 export type { ColumnDef, CellEditContext, TableProps, SortState, SortDir } from './Table'

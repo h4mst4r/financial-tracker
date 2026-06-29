@@ -168,10 +168,10 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
                       : item.destructive
                         ? 'text-error'
                         : item.tone === 'favourite'
-                          ? 'text-favourite'
+                          ? 'text-accent-important'
                           : item.tone === 'open'
                             ? 'text-accent'
-                            : 'text-text-primary'
+                            : 'text-text-strong'
                     }
                   `}
                 >

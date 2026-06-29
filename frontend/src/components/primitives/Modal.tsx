@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
@@ -120,7 +120,7 @@ export function Modal({
           >
             <h2
               id={titleId}
-              className={`text-lg font-medium ${framePoled ? '' : 'text-text-primary'}`}
+              className={`text-lg font-medium ${framePoled ? '' : 'text-text-strong'}`}
             >
               {title}
             </h2>
@@ -130,11 +130,11 @@ export function Modal({
                 aria-label="Close"
                 className={
                   framePoled
-                    ? 'opacity-70 hover:opacity-100 transition-opacity'
-                    : 'text-text-secondary hover:text-text-primary transition-colors'
+                    ? 'text-entity-muted hover:text-entity-strong transition-colors'
+                    : 'text-text-default hover:text-text-strong transition-colors'
                 }
               >
-                <Icon icon={X} size={18} />
+                <Icon icon={ACTION_ICON.close} size={18} />
               </button>
             )}
           </div>

@@ -90,7 +90,7 @@ describe('CategoryTree', () => {
     const archived = [cat({ id: 'p1', name: 'Food', status: 'archived' })]
     render(<CategoryTree items={archived} {...noop} />)
     expect(screen.getByText('Archived')).toBeTruthy()
-    expect(rowOf('Food').className).toContain('grayscale')
+    expect(rowOf('Food').className).toContain('archived')
 
     fireEvent.click(screen.getByLabelText('Actions for Food'))
     expect(screen.getByRole('menuitem', { name: 'Restore' })).toBeTruthy()

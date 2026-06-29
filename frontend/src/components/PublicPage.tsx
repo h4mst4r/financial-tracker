@@ -29,7 +29,7 @@ const toneClasses: Record<PublicPageTone, string> = {
   warning: 'bg-warning-fill text-warning',
   error: 'bg-error-fill text-error',
   info: 'bg-info-fill text-info',
-  neutral: 'bg-surface-active text-text-primary',
+  neutral: 'bg-surface-active text-text-strong',
 }
 
 /** Shared shell for every public / error page (UX §3, bible .pubpage): a centered column with a
@@ -49,7 +49,7 @@ export function PublicPage({
   return (
     <main
       data-testid="public-page"
-      className={`flex items-center justify-center bg-bg p-lg text-text-primary ${className ?? 'min-h-screen'}`}
+      className={`flex items-center justify-center bg-bg p-lg text-text-strong ${className ?? 'min-h-screen'}`}
     >
       <div className="mx-auto max-w-public-page flex flex-col items-center gap-sm text-center">
         {header ?? (
@@ -61,8 +61,8 @@ export function PublicPage({
             </span>
           )
         )}
-        <h3 className="text-lg font-medium text-text-primary">{title}</h3>
-        {subtitle && <p className="w-full text-sm text-text-secondary">{subtitle}</p>}
+        <h3 className="text-lg font-medium text-text-strong">{title}</h3>
+        {subtitle && <p className="w-full text-sm text-text-default">{subtitle}</p>}
         {children}
         {(action || secondaryAction) && (
           <div className="mt-sm flex items-center gap-sm">

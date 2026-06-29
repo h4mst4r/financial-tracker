@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { UserPlus } from 'lucide-react'
-import { Modal } from './primitives/Modal'
-import { Button } from './primitives/Button'
+import { ACTION_ICON } from '../config/iconRegistry'
+import { ConfirmationDialog } from './primitives/ConfirmationDialog'
 import { Badge } from './primitives/Badge'
 import { Icon } from './primitives/Icon'
 import { useAuthStore } from '../stores/authStore'
@@ -43,35 +42,35 @@ export function PendingInvitationDialog() {
   const busy = accept.isPending || decline.isPending || accept.isSuccess || decline.isSuccess
 
   return (
-    <Modal
+    <ConfirmationDialog
       open
-      onClose={() => {}}
+      // A mandatory choice with no surface behind it — no X / Escape / backdrop dismissal.
       dismissible={false}
+      // Decline = cancel, Accept = confirm (non-destructive). Accept does NOT auto-close: the dialog
+      // stays mounted until the `/auth/me` refetch rehydrates `household` (gotcha #4 — not a navigate).
+      busy={busy}
+      closeOnConfirm={false}
       title="You've been invited"
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => decline.mutate()} disabled={busy}>
-            Decline
-          </Button>
-          <Button onClick={() => accept.mutate()} disabled={busy}>
-            Accept
-          </Button>
-        </>
+      cancelLabel="Decline"
+      confirmLabel="Accept"
+      destructive={false}
+      onClose={() => decline.mutate()}
+      onConfirm={() => accept.mutate()}
+      message={
+        <div className="flex items-start gap-sm">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-primary">
+            <Icon icon={ACTION_ICON.invite} size={20} />
+          </span>
+          <span>
+            <span className="font-medium text-text-strong">
+              {pendingInvitation.invitedByDisplayName}
+            </span>{' '}
+            invited you to join{' '}
+            <span className="font-medium text-text-strong">{pendingInvitation.householdName}</span>{' '}
+            as a <Badge variant="neutral">member</Badge>.
+          </span>
+        </div>
       }
-    >
-      <div className="flex items-start gap-sm">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-primary">
-          <Icon icon={UserPlus} size={20} />
-        </span>
-        <p className="text-sm text-text-secondary">
-          <span className="font-medium text-text-primary">
-            {pendingInvitation.invitedByDisplayName}
-          </span>{' '}
-          invited you to join{' '}
-          <span className="font-medium text-text-primary">{pendingInvitation.householdName}</span> as
-          a <Badge variant="neutral">member</Badge>.
-        </p>
-      </div>
-    </Modal>
+    />
   )
 }

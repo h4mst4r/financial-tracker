@@ -31,8 +31,8 @@ export function SegmentedControl({ value, options, onChange, disabled }: Segment
                 relative flex-1 h-control py-control px-sm rounded-none text-sm font-medium
                 transition-colors duration-quick
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-glow-primary
-                ${isActive ? 'bg-control-active text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'}
-                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+                ${isActive ? 'bg-control-active text-primary' : 'text-text-default hover:text-text-strong hover:bg-surface-hover'}
+                ${disabled ? 'disabled' : ''}
               `}
               onClick={() => field.change(opt.value)}
             >

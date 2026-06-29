@@ -39,7 +39,7 @@ export function CategoryDefaultsPrompt({
           <span
             key={c.name}
             className={`inline-flex items-center gap-xs rounded-full border border-border px-sm py-xs text-xs ${
-              c.type === 'income' ? 'bg-success-fill text-success' : 'text-text-secondary'
+              c.type === 'income' ? 'bg-success-fill text-success' : 'text-text-default'
             }`}
           >
             <span className="font-emoji">{c.icon}</span>

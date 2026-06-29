@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { MoreVertical, Check } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
 import { ContextMenu } from '../primitives/ContextMenu'
 import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { Badge } from '../primitives/Badge'
@@ -16,7 +16,7 @@ import { useEntityColour } from '../../theme/useEntityColour'
 export interface EntityCardProps {
   /** The instance colour (drives --entity-colour). Omitted → the :root entity-type default applies. */
   colour?: string
-  /** Full-saturation fill + contrast-aware text. Default: calm (soft 14% tint, text-text-primary). */
+  /** Full-saturation fill + contrast-aware text. Default: calm (soft 14% tint, text-text-strong). */
   vivid?: boolean
   /** Colour icon chip glyph — an emoji string or a lucide <Icon>. */
   icon?: ReactNode
@@ -77,6 +77,18 @@ export function EntityCard({
     ...(entityFill ? { '--entity-colour': entityFill } : {}),
     ...(edge ? { '--entity-edge': edge } : {}),
     ...(onColour ? { '--entity-on-colour': onColour } : {}),
+    // Entity-axis emphasis poles (§2 on the entity surface): vivid mutes the on-colour pole toward the
+    // fill; calm inherits the :root defaults (the text-entity-fg pole over surface-raised).
+    ...(onColour ? { '--entity-fg': 'var(--entity-on-colour)', '--entity-emph-surface': 'var(--entity-colour)' } : {}),
+    // VIVID: the §2 emphasis stops FLOORED against this fill (§0a per-surface floor) — so muted/faint stay
+    // ≥ their target ratio on a saturated fill instead of the neutral-surface fraction dropping under it.
+    ...(onColour && resolved
+      ? {
+          '--entity-text-default': resolved.vividText.default,
+          '--entity-text-muted': resolved.vividText.muted,
+          '--entity-text-faint': resolved.vividText.faint,
+        }
+      : {}),
     // On a vivid fill the MiniSparkline switches to the contrast pole (else it'd be drawn in the fill
     // colour and vanish — UX §9.2). Calm cards leave it unset → the atom keeps the identity colour.
     ...(onColour ? { '--spark-colour': 'var(--entity-on-colour)' } : {}),
@@ -84,12 +96,10 @@ export function EntityCard({
 
   const fillClass = vivid ? 'bg-entity-fill-vivid' : 'bg-entity-fill-calm'
   const textClass = onColour ? 'text-on-entity' : 'text-entity-fg'
-  // The ⋮ trigger must follow the same contrast pole as the rest of the card. On a vivid fill with a
-  // known on-colour, inherit it (text-on-entity from the root) and mute via opacity — NOT a fixed
-  // text-text-secondary, which renders light-on-light on a light vivid fill (e.g. cyan → white dots).
-  const controlClass = onColour
-    ? 'opacity-70 hover:opacity-100'
-    : 'text-entity opacity-80 hover:opacity-100'
+  // The ⋮ trigger follows the card's entity foreground (the §2 entity-axis emphasis, NOT opacity — which
+  // would render light-on-light on a light vivid fill, the old cyan→white-dots bug): muted at rest,
+  // strong on hover, in both modes (the panel sets the poles; calm uses the :root defaults).
+  const controlClass = 'text-entity-muted hover:text-entity-strong'
   // Default border is a tint of the instance colour (design bible .ecard: color-mix(--ec 30%, --border)),
   // so the card edge carries the entity identity — NOT a flat neutral border. Archived → dashed neutral;
   // selected → transparent (the §2.4 offset ring is the edge instead).
@@ -110,7 +120,7 @@ export function EntityCard({
         relative flex min-h-entity-card flex-col gap-xs rounded-lg border p-md
         transition-transform duration-quick
         ${fillClass} ${textClass} ${borderClass}
-        ${archived ? 'opacity-60 grayscale' : ''}
+        ${archived ? 'archived' : ''}
         ${selected ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent -translate-y-px shadow-md' : ''}
         ${onClick && !archived ? 'hover:-translate-y-px hover:shadow-md' : ''}
       `}
@@ -133,7 +143,7 @@ export function EntityCard({
           data-testid="entity-card-check"
           className="bg-primary text-on-primary z-raised absolute -left-xs -top-xs flex h-5 w-5 items-center justify-center rounded-full"
         >
-          <Icon icon={Check} size={12} />
+          <Icon icon={ACTION_ICON.select} size={12} />
         </span>
       )}
 
@@ -171,7 +181,7 @@ export function EntityCard({
           <ContextMenu
             trigger={
               <span className={`flex items-center ${controlClass}`} aria-label="Actions">
-                <Icon icon={MoreVertical} size={16} />
+                <Icon icon={ACTION_ICON.more} size={16} />
               </span>
             }
             items={menuItems}
@@ -182,14 +192,14 @@ export function EntityCard({
       {/* Hero figure — SANS face, large (§0.3: standalone card hero figures use the sans face, not the
           columnar monetary mono) + optional subtitle. */}
       {hero != null && <div className="text-2xl font-semibold">{hero}</div>}
-      {subtitle != null && <div className="text-sm opacity-80">{subtitle}</div>}
+      {subtitle != null && <div className="text-sm text-entity-default">{subtitle}</div>}
 
       {/* Value-history sparkline slot (MiniSparkline → 1.10). */}
       {sparkline != null && <div className="mt-auto">{sparkline}</div>}
 
       {/* Footer meta · owner avatars. */}
       {(meta != null || owners != null) && (
-        <div className="mt-auto flex items-center justify-between gap-sm text-sm opacity-80">
+        <div className="mt-auto flex items-center justify-between gap-sm text-sm text-entity-default">
           <span className="truncate">{meta}</span>
           {owners != null && <span className="flex shrink-0 items-center">{owners}</span>}
         </div>

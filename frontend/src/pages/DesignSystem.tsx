@@ -19,6 +19,8 @@ import {
   FolderInput,
   Merge,
 } from 'lucide-react'
+import { ACTION_ICON, CONTROL_ICON, STATUS_ICON, ALERT_ICON } from '../config/iconRegistry'
+import { statusTone, BADGE_VARIANT_FOR_TONE } from '../config/statusRegistry'
 import {
   Button,
   Input,
@@ -49,6 +51,7 @@ import {
   ContextMenu,
   Modal,
   EmptyState,
+  AlertBanner,
   ConfirmationDialog,
   Table,
   dateColumn,
@@ -121,7 +124,7 @@ function SectionNav() {
               <li key={s.id}>
                 <a
                   href={`#${s.id}`}
-                  className="block py-2xs text-sm text-text-secondary hover:text-text-primary transition-colors duration-quick"
+                  className="block py-2xs text-sm text-text-default hover:text-text-strong transition-colors duration-quick"
                 >
                   {s.label}
                 </a>
@@ -247,14 +250,14 @@ export function DesignSystem() {
   ]
 
   return (
-    <main className="min-h-screen bg-bg text-text-primary p-lg">
+    <main className="min-h-screen bg-bg text-text-strong p-lg">
       <div className="mx-auto flex max-w-5xl flex-col gap-lg lg:flex-row">
         <SectionNav />
         <div className="min-w-0 flex-1 lg:max-w-3xl">
         <div className="flex flex-wrap items-center justify-between gap-md mb-lg">
           <h1 className="text-2xl font-medium">Design System</h1>
           <div className="flex items-center gap-sm">
-            <span className="text-sm text-text-secondary">Density</span>
+            <span className="text-sm text-text-default">Density</span>
             <SegmentedControl
               value={density}
               options={densityOptions}
@@ -272,14 +275,14 @@ export function DesignSystem() {
             shell doesn't take over the page. Bible #shell. */}
         <section id="app-shell" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">AppShell</h2>
-          <p className="text-sm text-text-secondary mb-md">
+          <p className="text-sm text-text-default mb-md">
             Sidebar (grouped nav · bottom Settings) · Topbar display-currency picker (Native or any
             currency, §8.4) + avatar menu (profile + sign out). Household/Individual + member (Story 9.7),
             search &amp; alerts (Epic 10) are reserved slots.
           </p>
           <div className="h-appshell-demo overflow-hidden rounded-lg border border-border">
             <AppShell>
-              <div className="p-md text-text-secondary">Routed page content renders here.</div>
+              <div className="p-md text-text-default">Routed page content renders here.</div>
             </AppShell>
           </div>
         </section>
@@ -289,7 +292,7 @@ export function DesignSystem() {
         <section id="entity-page" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">EntityPage</h2>
           <div className="flex items-center gap-sm mb-md">
-            <span className="text-sm text-text-secondary">State</span>
+            <span className="text-sm text-text-default">State</span>
             <SegmentedControl value={epState} options={epStateOptions} onChange={setEpState} />
           </div>
           <div className="rounded-lg border border-border bg-surface p-md">
@@ -467,7 +470,7 @@ export function DesignSystem() {
           <h2 className="text-lg font-medium mb-sm">BulkActionBar</h2>
           <div className="flex items-center gap-sm mb-md">
             <Toggle checked={selectionMode} onChange={setSelectionMode} aria-label="Selection mode" />
-            <span className="text-sm text-text-secondary">
+            <span className="text-sm text-text-default">
               {selectionMode ? 'Selection mode — tap cards to select' : 'Selection mode off'}
             </span>
           </div>
@@ -499,7 +502,7 @@ export function DesignSystem() {
           {/* The CategoryTree surface action set (§8.6, Story 3.4) — shown statically so the bar's
               categories inventory (Edit type · Promote · Move · Archive · Merge, Promote/Move greyed
               for a non-sub selection) is visible alongside the ledger set above. */}
-          <p className="text-sm text-text-secondary mt-lg mb-sm">CategoryTree surface action set</p>
+          <p className="text-sm text-text-default mt-lg mb-sm">CategoryTree surface action set</p>
           <BulkActionBar count={2} onClear={() => {}} actions={categoryBulkActions} />
         </section>
 
@@ -507,7 +510,7 @@ export function DesignSystem() {
             sortable date · inline-editable name/amount · ⋮ · pinned quick-add row. (Story 5.0a.) */}
         <section id="table" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Table</h2>
-          <p className="text-sm text-text-secondary mb-md">
+          <p className="text-sm text-text-default mb-md">
             Record-ledger profile — sortable headers, double-click a Name or Amount cell to edit in place
             (Enter/blur commits, Esc cancels), pinned quick-add row.
           </p>
@@ -518,7 +521,7 @@ export function DesignSystem() {
             dateRange · Category · type-segment · Filters overflow popover · clear-all. (Story 5.0d.) */}
         <section id="filterbar" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">FilterBar</h2>
-          <p className="text-sm text-text-secondary mb-md">
+          <p className="text-sm text-text-default mb-md">
             Record-list profile — descriptor-driven controls, the secondary filters collapse into the
             "Filters" overflow popover (with an active-count badge), clear-all; the bar's state serializes
             to a <code>VisualizationFilter</code>.
@@ -539,6 +542,24 @@ export function DesignSystem() {
             <span className="text-warning">pending</span>
             <span className="text-info">reconciled</span>
             <span className="text-error-muted">cancelled</span>
+          </div>
+
+          {/* Text emphasis (§2) — the four derived stops via the real tokens (strong/default/muted/faint). */}
+          <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Text emphasis (§2)</h3>
+          <div className="flex flex-wrap items-center gap-md text-base">
+            <span className="text-text-strong">strong · headings, key figures</span>
+            <span className="text-text-default">default · body, primary UI</span>
+            <span className="text-text-muted">muted · caption, meta (4.5:1 floor)</span>
+            <span className="text-text-faint">faint · disabled, decorative (3:1)</span>
+          </div>
+
+          {/* Disabled (§3a) — the one `disabled` utility (relative surface-mix + faint text, no opacity)
+              via real disabled primitives. */}
+          <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Disabled (§3a)</h3>
+          <div className="flex flex-wrap items-center gap-md">
+            <Button disabled>Disabled</Button>
+            <Button variant="secondary" disabled>Disabled</Button>
+            <Input disabled defaultValue="Disabled input" />
           </div>
         </section>
 
@@ -580,6 +601,40 @@ export function DesignSystem() {
             <Icon icon={Settings} size={20} />
             <Icon icon={Home} size={16} aria-label="Home" />
           </div>
+
+          {/* Icon registry (§11) — every glyph is a lookup, rendered via the real registry + Icon. */}
+          <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Registry (§11)</h3>
+          <div className="flex flex-col gap-sm">
+            {([
+              ['Actions', ACTION_ICON],
+              ['Control', CONTROL_ICON],
+              ['Alerts', ALERT_ICON],
+            ] as const).map(([label, group]) => (
+              <div key={label}>
+                <span className="text-xs text-text-muted">{label}</span>
+                <div className="flex flex-wrap items-center gap-density mt-2xs">
+                  {Object.entries(group).map(([key, glyph]) => (
+                    <Icon key={key} icon={glyph} size={18} aria-label={key} />
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div>
+              <span className="text-xs text-text-muted">Semantic / status tones</span>
+              <div className="flex flex-wrap items-center gap-density mt-2xs">
+                {(['positive', 'warning', 'critical', 'info', 'neutral'] as const).map((tone) => {
+                  const glyph = STATUS_ICON[tone]
+                  return glyph ? (
+                    <Icon key={tone} icon={glyph} size={18} aria-label={tone} />
+                  ) : (
+                    <span key={tone} className="text-xs text-text-muted">
+                      {tone}: —
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* ─────────────────────── Component Library — primitives (bible §7) ─────────────────────── */}
@@ -610,6 +665,21 @@ export function DesignSystem() {
             <Badge variant="info">Info</Badge>
             <Badge variant="error">Error</Badge>
           </div>
+
+          {/* Status registry (§4) — a surface passes a {domain, status} key, never a colour. */}
+          <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Status registry (§4)</h3>
+          <div className="flex flex-wrap gap-density">
+            {(['fresh', 'stale', 'never'] as const).map((s) => (
+              <Badge key={`cf-${s}`} variant={BADGE_VARIANT_FOR_TONE[statusTone('currencyFreshness', s)]}>
+                {s}
+              </Badge>
+            ))}
+            {(['ok', 'stale', 'down', 'unknown'] as const).map((s) => (
+              <Badge key={`fx-${s}`} variant={BADGE_VARIANT_FOR_TONE[statusTone('fxProvider', s)]}>
+                {s}
+              </Badge>
+            ))}
+          </div>
         </section>
 
         {/* Avatar */}
@@ -638,7 +708,7 @@ export function DesignSystem() {
           <div className="flex flex-col gap-density items-start">
             <div className="flex items-center gap-sm">
               <Toggle checked={toggleChecked} onChange={setToggleChecked} aria-label="Toggle example" />
-              <span className="text-sm text-text-secondary">{toggleChecked ? 'On' : 'Off'}</span>
+              <span className="text-sm text-text-default">{toggleChecked ? 'On' : 'Off'}</span>
             </div>
             <Toggle checked={false} onChange={() => {}} disabled />
           </div>
@@ -660,27 +730,27 @@ export function DesignSystem() {
           <h2 className="text-lg font-medium mb-sm">MiniSparkline</h2>
           <div className="grid-cols-entity grid gap-md rounded-lg border border-border bg-surface p-md">
             <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#6366f1' } as CSSProperties}>
-              <div className="text-sm text-text-secondary mb-2xs">Line · rising · delta</div>
+              <div className="text-sm text-text-default mb-2xs">Line · rising · delta</div>
               <MiniSparkline data={[8, 10, 9, 14, 18, 22, 26, 30]} showDelta />
             </div>
             <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#ef4444' } as CSSProperties}>
-              <div className="text-sm text-text-secondary mb-2xs">Line · falling · delta</div>
+              <div className="text-sm text-text-default mb-2xs">Line · falling · delta</div>
               <MiniSparkline data={[30, 28, 30, 22, 18, 14, 9, 6]} showDelta />
             </div>
             <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#22c55e' } as CSSProperties}>
-              <div className="text-sm text-text-secondary mb-2xs">Bar · discrete (budget months)</div>
+              <div className="text-sm text-text-default mb-2xs">Bar · discrete (budget months)</div>
               <MiniSparkline variant="bar" data={[12, 18, 9, 22, 16, 28, 24]} />
             </div>
             <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#14b8a6' } as CSSProperties}>
-              <div className="text-sm text-text-secondary mb-2xs">&lt; 2 points</div>
+              <div className="text-sm text-text-default mb-2xs">&lt; 2 points</div>
               <MiniSparkline data={[42]} />
             </div>
             <div className="rounded-lg border border-border bg-surface-raised p-md">
-              <div className="text-sm text-text-secondary mb-2xs">Loading</div>
+              <div className="text-sm text-text-default mb-2xs">Loading</div>
               <MiniSparkline data={[]} loading />
             </div>
             <div className="rounded-lg border border-border bg-surface-raised p-md" style={{ '--entity-colour': '#8b5cf6' } as CSSProperties}>
-              <div className="text-sm text-text-secondary mb-2xs">Expandable (Epic-9 seam)</div>
+              <div className="text-sm text-text-default mb-2xs">Expandable (Epic-9 seam)</div>
               <MiniSparkline
                 data={[10, 12, 11, 16, 14, 20, 19, 24]}
                 showDelta
@@ -692,21 +762,21 @@ export function DesignSystem() {
 
         {/* FavouriteStar — outline gold (off) / solid gold (on); same colour, fill differs (§2.3). The
             distinction toggles on click; hover gives the scale-pop. Colour remaps under immersive themes
-            (reads --color-favourite). Bible #entitycard .star/.star.on. */}
+            (reads --color-accent-important, §6). Bible #entitycard .star/.star.on. */}
         <section id="favourite-star" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">FavouriteStar</h2>
           <div className="flex items-center gap-lg rounded-lg border border-border bg-surface p-md">
             <div className="flex flex-col items-center gap-2xs">
               <FavouriteStar favourite={favOff} onToggle={() => setFavOff((v) => !v)} />
-              <span className="text-xs text-text-secondary">off (outline)</span>
+              <span className="text-xs text-text-default">off (outline)</span>
             </div>
             <div className="flex flex-col items-center gap-2xs">
               <FavouriteStar favourite={favOn} onToggle={() => setFavOn((v) => !v)} />
-              <span className="text-xs text-text-secondary">on (solid)</span>
+              <span className="text-xs text-text-default">on (solid)</span>
             </div>
             <div className="flex flex-col items-center gap-2xs">
               <FavouriteStar favourite size={28} onToggle={() => {}} aria-label="Pin to top" />
-              <span className="text-xs text-text-secondary">size · label override</span>
+              <span className="text-xs text-text-default">size · label override</span>
             </div>
           </div>
         </section>
@@ -744,9 +814,9 @@ export function DesignSystem() {
         <section id="divider" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Divider</h2>
           <div className="flex flex-col gap-density">
-            <span className="text-sm text-text-secondary">Horizontal:</span>
+            <span className="text-sm text-text-default">Horizontal:</span>
             <Divider />
-            <span className="text-sm text-text-secondary">Vertical:</span>
+            <span className="text-sm text-text-default">Vertical:</span>
             <div className="flex items-center gap-sm">
               <span>Left</span>
               <Divider orientation="vertical" />
@@ -836,10 +906,10 @@ export function DesignSystem() {
           <h2 className="text-lg font-medium mb-sm">Card</h2>
           <div className="flex flex-col gap-density">
             <Card>
-              <p className="text-sm text-text-secondary">Static card with default padding.</p>
+              <p className="text-sm text-text-default">Static card with default padding.</p>
             </Card>
             <Card interactive onClick={() => alert('Card clicked')}>
-              <p className="text-sm text-text-secondary">Interactive card — hover to see lift effect.</p>
+              <p className="text-sm text-text-default">Interactive card — hover to see lift effect.</p>
             </Card>
           </div>
         </section>
@@ -963,7 +1033,7 @@ export function DesignSystem() {
             <Button variant="primary" onClick={() => setModalOpen(true)}>Open Modal</Button>
           </div>
           <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Example Modal">
-            <p className="text-sm text-text-secondary">
+            <p className="text-sm text-text-default">
               This is a modal dialog with focus trapping, Esc to close, and backdrop click to close.
             </p>
           </Modal>
@@ -974,9 +1044,9 @@ export function DesignSystem() {
           <h2 className="text-lg font-medium mb-sm">ContextMenu</h2>
           <div className="flex items-center gap-density">
             <ContextMenu trigger={<Button variant="ghost"><Icon icon={MoreVertical} size={16} /></Button>} items={contextMenuItems} />
-            <span className="text-sm text-text-secondary">Basic menu</span>
+            <span className="text-sm text-text-default">Basic menu</span>
             <ContextMenu trigger={<Button variant="ghost"><Icon icon={MoreVertical} size={16} /></Button>} items={contextMenuItemsWithDisabled} />
-            <span className="text-sm text-text-secondary">With disabled item</span>
+            <span className="text-sm text-text-default">With disabled item</span>
           </div>
         </section>
 
@@ -992,6 +1062,21 @@ export function DesignSystem() {
             description="Try adjusting your search or filter to find what you're looking for."
             action={<Button variant="primary">Clear Filters</Button>}
           />
+        </section>
+
+        {/* AlertBanner — the §18 `stale` data-state surface (inline semantic notice, no left bar). Tone
+            drives the §3 tint + the §11 registry glyph; body text is §2 default. Bible #alertbanner. */}
+        <section id="alert-banner" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">AlertBanner</h2>
+          <div className="flex flex-col gap-sm">
+            <AlertBanner
+              tone="warning"
+              action={<Button variant="ghost">Refresh</Button>}
+            >
+              Exchange rates may be out of date — last updated over 48 hours ago.
+            </AlertBanner>
+            <AlertBanner tone="info">Base currency change recomputes all amounts.</AlertBanner>
+          </div>
         </section>
 
         {/* ─────────────────────────── Public & error (bible §3) ─────────────────────────── */}
@@ -1100,7 +1185,7 @@ function TableDemo() {
   ]
 
   // Compact quick-add input — bible .qadd uses small 28px inline fields, not the full 40px form Input.
-  const qaInput = 'h-7 w-full rounded-md border border-border bg-surface-raised px-2 text-sm text-text-primary focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-glow-primary'
+  const qaInput = 'h-7 w-full rounded-md border border-border bg-surface-raised px-2 text-sm text-text-strong focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-glow-primary'
 
   return (
     <Table

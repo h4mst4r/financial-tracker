@@ -1,11 +1,15 @@
-import { Star } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
+
+// The favourite glyph, via the icon registry (L14). Rendered directly (not through `Icon`) because it
+// needs the lucide `fill` prop for the solid/outline distinction.
+const StarGlyph = ACTION_ICON.favourite
 
 // FavouriteStar (UX §2.3 / §7 / UX-DR8) — the reusable favourite toggle extracted from the 1.9b inline
 // EntityCard star. Controlled & presentational: `favourite` in, `onToggle` out. Outline gold when off,
-// solid gold when on — same --color-favourite colour both ways; only the fill differs (§2.3: the
-// favourited/un-favourited distinction is fill, not colour). Colour comes entirely from the
-// --color-favourite token (the text-favourite utility) + currentColor on the glyph — no literal hex — so it
-// remaps for free under immersive themes (the theming engine redefines --color-favourite per palette; the
+// solid gold when on — same accent-important colour both ways; only the fill differs (§2.3: the
+// favourited/un-favourited distinction is fill, not colour). Colour comes entirely from the §6
+// --color-accent-important token (the text-accent-important utility) + currentColor on the glyph — no
+// literal hex — so it remaps for free under immersive themes (the theming engine redefines it per palette;
 // atom only reads it). The atom IS the <button>; consumers place it in a sibling/z-raised cluster, never
 // nested in another <button> (§2.6). The onClick stops propagation so a toggle never triggers an ancestor's
 // open handler.
@@ -43,9 +47,9 @@ export function FavouriteStar({
         e.stopPropagation()
         onToggle()
       }}
-      className={`text-favourite flex items-center transition-transform duration-quick hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary ${className}`}
+      className={`text-accent-important flex items-center transition-transform duration-quick hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary ${className}`}
     >
-      <Star size={size} fill={favourite ? 'currentColor' : 'none'} aria-hidden />
+      <StarGlyph size={size} fill={favourite ? 'currentColor' : 'none'} aria-hidden />
     </button>
   )
 }

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Maximize2, TrendingUp, TrendingDown } from 'lucide-react'
+import { ACTION_ICON, CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { Skeleton } from './Skeleton'
 import { VB_W, VB_H, PAD, MAX_POINTS, round2, sparkPoints, type Pt } from './sparkline'
@@ -86,8 +86,8 @@ function DeltaCaption({ values }: { values: number[] }) {
   const tone = rounded > 0 ? 'text-success' : rounded < 0 ? 'text-error' : 'text-text-muted'
   return (
     <div data-testid="spark-delta" className={`mt-2xs flex items-center gap-2xs text-xs font-medium ${tone}`}>
-      {rounded > 0 && <Icon icon={TrendingUp} size={12} />}
-      {rounded < 0 && <Icon icon={TrendingDown} size={12} />}
+      {rounded > 0 && <Icon icon={CONTROL_ICON.trendUp} size={12} />}
+      {rounded < 0 && <Icon icon={CONTROL_ICON.trendDown} size={12} />}
       <span>
         {rounded > 0 ? '+' : ''}
         {rounded}%
@@ -158,8 +158,8 @@ export function MiniSparkline({
         className={`group/spark relative block w-full rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary ${className}`}
       >
         {content}
-        <span className="text-text-secondary pointer-events-none absolute right-0 top-0 opacity-0 transition-opacity duration-quick group-hover/spark:opacity-100 group-focus-visible/spark:opacity-100">
-          <Icon icon={Maximize2} size={14} />
+        <span className="text-text-default pointer-events-none absolute right-0 top-0 opacity-0 transition-opacity duration-quick group-hover/spark:opacity-100 group-focus-visible/spark:opacity-100">
+          <Icon icon={ACTION_ICON.expand} size={14} />
         </span>
       </button>
     )

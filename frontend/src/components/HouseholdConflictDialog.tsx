@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Modal } from './primitives/Modal'
-import { Button } from './primitives/Button'
+import { ConfirmationDialog } from './primitives/ConfirmationDialog'
 import { useAuthStore } from '../stores/authStore'
 import { api } from '../api/client'
 
@@ -51,28 +50,24 @@ export function HouseholdConflictDialog() {
     : `You're already in ${currentName}. To join ${targetHouseholdName} you must leave your current household first — go to Settings (your data is archived, restored if you return). Or decline.`
 
   return (
-    <Modal
+    <ConfirmationDialog
       open
-      onClose={() => setDismissedToken(pendingInvitation.token)}
+      // No Accept — Decline (cancel) declines terminally; Go-to-Settings (confirm) navigates. The X
+      // (onDismiss) is a SESSION-dismiss — distinct from Decline — so a still-pending invite re-surfaces
+      // next login; confirm does not auto-close (it navigates).
+      busy={decline.isPending}
+      closeOnConfirm={false}
       title={title}
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => decline.mutate()} disabled={decline.isPending}>
-            Decline
-          </Button>
-          <Button
-            onClick={() => {
-              setDismissedToken(pendingInvitation.token)
-              navigate('/settings')
-            }}
-            disabled={decline.isPending}
-          >
-            Go to Settings
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-text-secondary">{body}</p>
-    </Modal>
+      cancelLabel="Decline"
+      confirmLabel="Go to Settings"
+      destructive={false}
+      message={body}
+      onClose={() => decline.mutate()}
+      onDismiss={() => setDismissedToken(pendingInvitation.token)}
+      onConfirm={() => {
+        setDismissedToken(pendingInvitation.token)
+        navigate('/settings')
+      }}
+    />
   )
 }

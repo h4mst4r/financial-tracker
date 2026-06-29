@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { X } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
 import { Icon } from '../primitives/Icon'
 import { Divider } from '../primitives/Divider'
 
@@ -37,7 +37,7 @@ function ActionButton({ action }: { action: BulkAction }) {
       ? 'text-error border-border'
       : tone === 'accent'
         ? 'text-accent border-border-accent'
-        : 'text-text-primary border-border'
+        : 'text-text-strong border-border'
   return (
     <button
       type="button"
@@ -49,7 +49,7 @@ function ActionButton({ action }: { action: BulkAction }) {
         inline-flex h-control items-center gap-2xs whitespace-nowrap rounded-md border px-sm text-sm
         transition-colors duration-quick
         ${toneClass}
-        ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-surface-hover'}
+        ${disabled ? 'disabled' : 'hover:bg-surface-hover'}
       `}
     >
       {icon && <Icon icon={icon} size={14} aria-hidden />}
@@ -79,9 +79,9 @@ export function BulkActionBar({ count, onClear, actions }: BulkActionBarProps) {
         data-testid="bulk-clear"
         onClick={onClear}
         aria-label="Clear selection"
-        className="inline-flex items-center gap-2xs whitespace-nowrap text-sm text-text-secondary transition-colors duration-quick hover:text-text-primary"
+        className="inline-flex items-center gap-2xs whitespace-nowrap text-sm text-text-default transition-colors duration-quick hover:text-text-strong"
       >
-        <Icon icon={X} size={14} aria-hidden />
+        <Icon icon={ACTION_ICON.close} size={14} aria-hidden />
         Clear
       </button>
       {/* A divider precedes each non-empty cluster — so an empty/all-destructive `actions` array never

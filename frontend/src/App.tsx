@@ -25,7 +25,7 @@ import { branding } from './config/branding'
 // `/` redirects here so the landing page and the nav agree.
 function DashboardHome() {
   return (
-    <div className="p-lg text-text-primary">
+    <div className="p-lg text-text-strong">
       <h1 className="text-2xl font-medium">{branding.appName}</h1>
     </div>
   )
@@ -94,20 +94,20 @@ function GatedApp({
           <Route
             path="/accounts"
             element={
-              <AccountsList subtypes={['bank', 'credit_card']} title="Accounts" newLabel="account" />
+              <AccountsList subtypes={['bank', 'credit_card']} title="Accounts" newLabel="account" emptyKey="accounts" />
             }
           />
           <Route
             path="/capital"
-            element={<AccountsList subtypes={['capital']} title="Capital" newLabel="capital account" />}
+            element={<AccountsList subtypes={['capital']} title="Capital" newLabel="capital account" emptyKey="capital" />}
           />
           <Route
             path="/assets"
-            element={<AccountsList subtypes={['asset']} title="Assets" newLabel="asset" />}
+            element={<AccountsList subtypes={['asset']} title="Assets" newLabel="asset" emptyKey="assets" />}
           />
           <Route
             path="/insurance"
-            element={<AccountsList subtypes={['insurance']} title="Insurance" newLabel="policy" />}
+            element={<AccountsList subtypes={['insurance']} title="Insurance" newLabel="policy" emptyKey="insurance" />}
           />
           <Route path="/categories" element={<Categories />} />
           <Route path="/currencies" element={<Currencies />} />

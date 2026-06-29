@@ -54,7 +54,7 @@ export function Tooltip({ content, children }: TooltipProps) {
           opacity-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:opacity-100
           transition-opacity duration-quick delay-300
           max-w-tooltip w-max px-xs py-2xs rounded text-xs
-          bg-surface-overlay border border-border text-text-primary shadow-lg
+          bg-surface-overlay border border-border text-text-strong shadow-lg
           z-tooltip
         `}
         role="tooltip"

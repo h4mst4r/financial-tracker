@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Toggle } from './Toggle'
+import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
+import { useAnchoredPosition } from './behaviors/useAnchoredPosition'
 import { useField } from './behaviors/useField'
 
 // ColourPicker (UX §8.2). A picker trigger (frontend.md §2.1) opening a panel with two tabs —
@@ -26,6 +28,10 @@ interface ColourPickerProps {
   onVividChange: (vivid: boolean) => void
   id?: string
   disabled?: boolean
+  /** Whether to offer the vivid-fill toggle. OFF for text-only entities (e.g. Currency, UX §5): vivid is
+   *  a FILL mode (§3 `resolve(hue, {calm|vivid|…})`), so it's meaningless where the colour is applied as
+   *  text. Defaults to true (cards/categories that render a fill). */
+  showVivid?: boolean
 }
 
 type Tab = 'palette' | 'hex'
@@ -37,17 +43,21 @@ export function ColourPicker({
   onVividChange,
   id,
   disabled,
+  showVivid = true,
 }: ColourPickerProps) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('palette')
   const [hexDraft, setHexDraft] = useState(value)
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // Field behavior: the controlled value contract (disabled-gated change).
   const field = useField<string>({ onChange, disabled })
 
-  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
-  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+  // Popover behavior: outside-click + Escape dismissal. Panel is PORTALLED (escapes a clipping modal) →
+  // containment is the panel + the trigger in its separate subtree; anchored to the trigger rect.
+  usePopover({ open, onClose: () => setOpen(false), containRef: panelRef, triggerRef })
+  const pos = useAnchoredPosition(open, triggerRef, panelRef)
 
   // Seed the hex draft from the live value each time the panel opens.
   useEffect(() => {
@@ -63,12 +73,13 @@ export function ColourPicker({
     `flex-1 text-xs py-1.5 rounded transition-colors focus:outline-none ${
       isActive
         ? 'bg-accent-active text-accent font-medium'
-        : 'text-text-secondary hover:text-text-primary hover:bg-surface-active'
+        : 'text-text-default hover:text-text-strong hover:bg-surface-active'
     }`
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         aria-haspopup="dialog"
@@ -77,13 +88,13 @@ export function ColourPicker({
         onClick={() => !disabled && setOpen((p) => !p)}
         className={`
           w-full h-control py-control px-sm rounded-md text-sm
-          bg-surface-raised border text-text-primary
+          bg-surface-raised border text-text-strong
           transition-colors duration-quick
           flex items-center gap-2
           focus:outline-none
           ${
             disabled
-              ? 'opacity-50 cursor-not-allowed'
+              ? 'disabled'
               : open
                 ? 'border-border-accent ring-2 ring-glow-accent'
                 : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
@@ -96,15 +107,18 @@ export function ColourPicker({
         />
         <span className="flex-1 text-left">
           {value}
-          {vivid && <span className="text-text-secondary"> · vivid</span>}
+          {showVivid && vivid && <span className="text-text-default"> · vivid</span>}
         </span>
       </button>
 
       {open && (
+        <Portal>
         <div
+          ref={panelRef}
           role="dialog"
           aria-label="Choose a colour"
-          className="absolute z-dropdown mt-1 w-max min-w-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
+          className="fixed z-popover w-max min-w-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
+          style={{ left: pos.x, top: pos.y }}
         >
           <div className="flex gap-1 mb-sm">
             <button type="button" className={tabClass(tab === 'palette')} onClick={() => setTab('palette')}>
@@ -149,16 +163,19 @@ export function ColourPicker({
                 spellCheck={false}
                 placeholder="#3b82f6"
                 onChange={(e) => commitHex(e.target.value)}
-                className="w-full h-control px-sm rounded-md text-sm bg-surface-raised border border-border text-text-primary focus:outline-none focus:ring-2 focus:ring-glow-primary focus:border-border-focus"
+                className="w-full h-control px-sm rounded-md text-sm bg-surface-raised border border-border text-text-strong focus:outline-none focus:ring-2 focus:ring-glow-primary focus:border-border-focus"
               />
             </div>
           )}
 
-          <div className="flex items-center justify-between mt-sm pt-sm border-t border-border">
-            <span className="text-xs text-text-secondary">Vivid fill</span>
-            <Toggle checked={vivid} onChange={onVividChange} aria-label="Vivid fill" />
-          </div>
+          {showVivid && (
+            <div className="flex items-center justify-between mt-sm pt-sm border-t border-border">
+              <span className="text-xs text-text-default">Vivid fill</span>
+              <Toggle checked={vivid} onChange={onVividChange} aria-label="Vivid fill" />
+            </div>
+          )}
         </div>
+        </Portal>
       )}
     </div>
   )

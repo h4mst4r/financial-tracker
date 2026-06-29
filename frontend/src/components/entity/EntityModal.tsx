@@ -18,6 +18,8 @@ export interface EntityModalProps {
   onSave: () => void
   /** Save stays disabled until the form is valid (§0.9). */
   saveDisabled?: boolean
+  /** Disables Cancel while a save/skip mutation is in flight (so it can't double-fire). Defaults false. */
+  cancelDisabled?: boolean
   saveLabel?: string
   cancelLabel?: string
 }
@@ -29,6 +31,7 @@ export function EntityModal({
   children,
   onSave,
   saveDisabled = false,
+  cancelDisabled = false,
   saveLabel = 'Save',
   cancelLabel = 'Cancel',
 }: EntityModalProps) {
@@ -47,7 +50,7 @@ export function EntityModal({
       footer={
         // Modal's footer is justify-between → first child left, last child right (§4.2 locked convention).
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={cancelDisabled}>
             {cancelLabel}
           </Button>
           <Button onClick={onSave} disabled={saveDisabled}>

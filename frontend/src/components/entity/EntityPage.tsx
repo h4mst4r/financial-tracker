@@ -1,6 +1,7 @@
 import { type ReactNode, useId } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Search, ArrowUpDown, Plus, TriangleAlert } from 'lucide-react'
+import { ACTION_ICON, errorIcon } from '../../config/iconRegistry'
+import { ERROR_STATE } from '../../config/emptyStateRegistry'
 import { Button } from '../primitives/Button'
 import { Input } from '../primitives/Input'
 import { SegmentedControl } from '../primitives/SegmentedControl'
@@ -81,13 +82,13 @@ export function EntityPage(props: EntityPageProps) {
       {/* Toolbar — UX §1.2 order: left title+info · right cluster of controls + filters + New. */}
       <div className="flex flex-wrap items-center justify-between gap-sm">
         <div>
-          <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
-          {info && <div className="text-sm text-text-secondary">{info}</div>}
+          <h3 className="text-lg font-semibold text-text-strong">{title}</h3>
+          {info && <div className="text-sm text-text-default">{info}</div>}
         </div>
         <div className="flex flex-wrap items-center gap-sm">
           <div className="relative">
             <span className="absolute left-sm top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">
-              <Icon icon={Search} size={16} />
+              <Icon icon={ACTION_ICON.search} size={16} />
             </span>
             <Input
               type="search"
@@ -101,7 +102,7 @@ export function EntityPage(props: EntityPageProps) {
           {!hideSort && (
             <Button variant="ghost" onClick={onSort} aria-label="Sort">
               <span className="inline-flex items-center gap-xs">
-                <Icon icon={ArrowUpDown} size={16} /> Sort
+                <Icon icon={ACTION_ICON.sort} size={16} /> Sort
               </span>
             </Button>
           )}
@@ -115,7 +116,7 @@ export function EntityPage(props: EntityPageProps) {
           {!hideArchived && (
             <label
               htmlFor={archivedToggleId}
-              className="inline-flex items-center gap-xs text-sm text-text-secondary"
+              className="inline-flex items-center gap-xs text-sm text-text-default"
             >
               <Toggle
                 id={archivedToggleId}
@@ -166,10 +167,10 @@ function EntityPageContent({
     return (
       <div className="mx-auto max-w-empty-state flex flex-col items-center justify-center gap-sm py-xl text-center">
         <span className="bg-error-fill text-error flex items-center justify-center rounded-full p-md">
-          <Icon icon={TriangleAlert} size={28} />
+          <Icon icon={errorIcon} size={28} />
         </span>
-        <h3 className="text-lg font-medium text-text-secondary">Something went wrong</h3>
-        <p className="text-sm text-text-muted">We couldn't load this. Please try again.</p>
+        <h3 className="text-lg font-medium text-text-default">{ERROR_STATE.title}</h3>
+        <p className="text-sm text-text-muted">{ERROR_STATE.description}</p>
         <Button variant="secondary" onClick={onRetry} className="mt-sm">
           Retry
         </Button>
@@ -204,10 +205,10 @@ function EntityPageContent({
           flex min-h-entity-card flex-col items-center justify-center gap-xs rounded-lg
           border border-dashed border-border text-text-muted
           transition-colors duration-quick
-          hover:border-border-light hover:bg-surface-hover hover:text-text-secondary
+          hover:border-border-light hover:bg-surface-hover hover:text-text-default
         "
       >
-        <Icon icon={Plus} size={20} />
+        <Icon icon={ACTION_ICON.add} size={20} />
         <span className="text-sm font-medium">New {newLabel}</span>
       </button>
     </div>

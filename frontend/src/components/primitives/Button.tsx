@@ -10,12 +10,13 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 // Pressable behavior owns the shared press-scale + disabled treatment (PRESS_SCALE / DISABLED_CLASS), so
 // the §13 press-scale and the disabled token are authored once, in the behavior.
 //
-// Hover utilities use the `enabled:` variant so a disabled button (which keeps its variant fill,
-// dimmed via opacity-50) does not also respond to :hover.
+// Hover utilities use the `enabled:` variant so a disabled button does not respond to :hover. The §3a
+// `disabled` treatment (DISABLED_CLASS) is an UNLAYERED class, so it overrides the layered variant fill/
+// text (bg-primary/text-on-primary) to the relative surface-mix + faint text — no opacity (B14/L5).
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-on-primary enabled:hover:brightness-110',
-  secondary: 'bg-surface-raised text-text-primary border border-border enabled:hover:bg-surface-hover',
-  ghost: 'bg-transparent text-text-primary border border-border enabled:hover:border-border-light enabled:hover:bg-surface-hover',
+  secondary: 'bg-surface-raised text-text-strong border border-border enabled:hover:bg-surface-hover',
+  ghost: 'bg-transparent text-text-strong border border-border enabled:hover:border-border-light enabled:hover:bg-surface-hover',
   danger: 'bg-error-solid text-on-primary',
 }
 

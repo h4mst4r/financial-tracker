@@ -74,6 +74,7 @@ const SECTION_MARKER: Record<string, string> = {
   'context-menu': 'button',
   // States
   'empty-state': '.max-w-empty-state',
+  'alert-banner': '[role="status"]',
   // Public & error
   'public-page': '[data-testid="public-page"]',
 }

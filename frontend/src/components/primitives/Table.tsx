@@ -1,5 +1,5 @@
 import { useState, useRef, type ReactNode } from 'react'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { Skeleton } from './Skeleton'
 import { nextSort, sortRows, shouldCommit, type SortState, type CommitTrigger } from './tableLogic'
@@ -160,7 +160,7 @@ export function Table<T>({
               <Skeleton variant="rect" className="h-10" />
             </Skeleton>
           ) : displayRows.length === 0 ? (
-            <div className="px-sm py-md text-sm text-text-secondary">{emptyContent}</div>
+            <div className="px-sm py-md text-sm text-text-default">{emptyContent}</div>
           ) : (
             displayRows.map((row) => <div key={rowKey(row)}>{renderCard(row)}</div>)
           )}
@@ -199,13 +199,13 @@ export function Table<T>({
                     {col.sortable ? (
                       <button
                         type="button"
-                        className={`inline-flex items-center gap-2xs ${align === 'right' ? 'ml-auto' : ''} hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary rounded`}
+                        className={`inline-flex items-center gap-2xs ${align === 'right' ? 'ml-auto' : ''} hover:text-text-default focus:outline-none focus-visible:ring-2 focus-visible:ring-glow-primary rounded`}
                         onClick={() => onHeaderClick(col)}
                         aria-label={`Sort by ${typeof col.header === 'string' ? col.header : col.key}`}
                       >
                         {col.header}
                         {isActive && (
-                          <Icon icon={activeSort!.dir === 'asc' ? ChevronUp : ChevronDown} size={12} />
+                          <Icon icon={activeSort!.dir === 'asc' ? CONTROL_ICON.chevronUp : CONTROL_ICON.chevronDown} size={12} />
                         )}
                       </button>
                     ) : (
@@ -228,7 +228,7 @@ export function Table<T>({
               </tr>
             ) : displayRows.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="px-sm py-md text-sm text-text-secondary">
+                <td colSpan={colCount} className="px-sm py-md text-sm text-text-default">
                   {emptyContent}
                 </td>
               </tr>

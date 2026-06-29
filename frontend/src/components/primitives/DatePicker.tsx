@@ -14,10 +14,12 @@ import {
   isSameDay,
   isSameMonth,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { formatDateDisplay } from '../../lib/date'
+import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
+import { useAnchoredPosition } from './behaviors/useAnchoredPosition'
 import { useField } from './behaviors/useField'
 
 // DatePicker (UX §7/§8.2, bible §7 .datecal). A picker trigger (frontend.md §2.1) opening a calendar
@@ -45,7 +47,8 @@ export function DatePicker({
   placeholder = 'Select date',
 }: DatePickerProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   // The day cell under the keyboard cursor — focused on open and on every cursor move, so arrow-key
   // navigation actually drives DOM focus (roving focus, like Dropdown) instead of a detached highlight.
   const cursorRef = useRef<HTMLButtonElement>(null)
@@ -57,8 +60,10 @@ export function DatePicker({
   // Field behavior: the controlled value contract (disabled-gated change).
   const field = useField<string>({ onChange, disabled })
 
-  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+calendar wrapper.
-  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+  // Popover behavior: outside-click + Escape dismissal. Panel is PORTALLED (escapes a clipping modal) →
+  // containment is the panel + the trigger in its separate subtree; anchored to the trigger rect.
+  usePopover({ open, onClose: () => setOpen(false), containRef: panelRef, triggerRef })
+  const pos = useAnchoredPosition(open, triggerRef, panelRef)
 
   // Seed the month grid + keyboard cursor to the selected date (or today) each time it opens.
   useEffect(() => {
@@ -105,8 +110,9 @@ export function DatePicker({
   const today = new Date()
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         aria-haspopup="dialog"
@@ -115,31 +121,34 @@ export function DatePicker({
         onClick={() => !disabled && setOpen((p) => !p)}
         className={`
           w-full h-control py-control px-sm rounded-md text-sm
-          bg-surface-raised border text-text-primary
+          bg-surface-raised border text-text-strong
           transition-colors duration-quick
           flex items-center justify-between gap-2
           focus:outline-none
           ${
             disabled
-              ? 'opacity-50 cursor-not-allowed'
+              ? 'disabled'
               : open
                 ? 'border-border-accent ring-2 ring-glow-accent'
                 : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
           }
         `}
       >
-        <span className={selected ? 'text-text-primary' : 'text-text-muted'}>
+        <span className={selected ? 'text-text-strong' : 'text-text-muted'}>
           {selected ? formatDateDisplay(value) : placeholder}
         </span>
-        <Icon icon={ChevronRight} size={16} className="text-text-muted rotate-90" />
+        <Icon icon={CONTROL_ICON.chevronRight} size={16} className="text-text-muted rotate-90" />
       </button>
 
       {open && (
+        <Portal>
         <div
+          ref={panelRef}
           role="dialog"
           aria-label="Choose a date"
           onKeyDown={onGridKeyDown}
-          className="absolute z-dropdown mt-1 w-date-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
+          className="fixed z-popover w-date-picker bg-surface-raised border border-border rounded-md shadow-lg p-sm"
+          style={{ left: pos.x, top: pos.y }}
         >
           {/* Month header — ‹ Month YYYY › */}
           <div className="flex items-center justify-between mb-sm">
@@ -147,18 +156,18 @@ export function DatePicker({
               type="button"
               aria-label="Previous month"
               onClick={() => setCursor((c) => subMonths(c, 1))}
-              className="text-text-secondary hover:text-text-primary hover:bg-surface-active rounded p-1 focus:outline-none"
+              className="text-text-default hover:text-text-strong hover:bg-surface-active rounded p-1 focus:outline-none"
             >
-              <Icon icon={ChevronLeft} size={16} />
+              <Icon icon={CONTROL_ICON.chevronLeft} size={16} />
             </button>
-            <span className="text-sm font-medium text-text-primary">{format(cursor, 'MMMM yyyy')}</span>
+            <span className="text-sm font-medium text-text-strong">{format(cursor, 'MMMM yyyy')}</span>
             <button
               type="button"
               aria-label="Next month"
               onClick={() => setCursor((c) => addMonths(c, 1))}
-              className="text-text-secondary hover:text-text-primary hover:bg-surface-active rounded p-1 focus:outline-none"
+              className="text-text-default hover:text-text-strong hover:bg-surface-active rounded p-1 focus:outline-none"
             >
-              <Icon icon={ChevronRight} size={16} />
+              <Icon icon={CONTROL_ICON.chevronRight} size={16} />
             </button>
           </div>
 
@@ -192,7 +201,7 @@ export function DatePicker({
                     ${isSelected ? 'bg-primary text-on-primary font-medium' : 'hover:bg-surface-active'}
                     ${!isSelected && isToday ? 'text-accent font-semibold' : ''}
                     ${!isSelected && !isToday && outside ? 'text-text-muted' : ''}
-                    ${!isSelected && !isToday && !outside ? 'text-text-primary' : ''}
+                    ${!isSelected && !isToday && !outside ? 'text-text-strong' : ''}
                   `}
                 >
                   {format(day, 'd')}
@@ -201,6 +210,7 @@ export function DatePicker({
             })}
           </div>
         </div>
+        </Portal>
       )}
     </div>
   )

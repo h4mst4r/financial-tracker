@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { useField } from './behaviors/useField'
 
@@ -31,7 +31,7 @@ export function Checkbox({ checked, onChange, disabled, id, label, 'aria-label':
           w-5 h-5 shrink-0 rounded-md flex items-center justify-center
           transition-colors duration-quick border
           peer-focus-visible:ring-2 peer-focus-visible:ring-glow-primary
-          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          ${disabled ? 'disabled' : ''}
           ${checked
             ? 'bg-primary border-primary'
             : 'border-border bg-surface-raised'
@@ -39,12 +39,12 @@ export function Checkbox({ checked, onChange, disabled, id, label, 'aria-label':
         `}
       >
         <Icon
-          icon={Check}
+          icon={ACTION_ICON.select}
           size={14}
           className={`text-on-primary transition-[opacity,transform] duration-draw ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}
         />
       </span>
-      {label && <span className="text-sm font-medium text-text-primary">{label}</span>}
+      {label && <span className="text-sm font-medium text-text-strong">{label}</span>}
     </label>
   )
 }

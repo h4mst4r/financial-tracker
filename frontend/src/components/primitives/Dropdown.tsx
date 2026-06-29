@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { ACTION_ICON, CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
+import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
+import { useAnchoredPosition } from './behaviors/useAnchoredPosition'
 import { useMenu } from './behaviors/useMenu'
 import { useField } from './behaviors/useField'
 
@@ -29,7 +31,8 @@ interface DropdownProps {
 export function Dropdown({ value, options, onChange, placeholder, disabled, id, searchable }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   // Roving-focus targets: one ref per option so ArrowUp/Down can move DOM focus (WAI-ARIA listbox).
   // Searchable mode keeps DOM focus in the filter input instead and tracks the highlight via
   // aria-activedescendant, so these refs are only used when NOT searchable.
@@ -65,8 +68,11 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
     onClose: () => setOpen(false),
   })
 
-  // Popover behavior: outside-click + Escape dismissal, anchored to the trigger+panel wrapper.
-  usePopover({ open, onClose: () => setOpen(false), containRef: ref })
+  // Popover behavior: outside-click + Escape dismissal. The panel is PORTALLED (escapes a clipping/
+  // overflow-hidden modal), so containment is the panel itself + the trigger in its separate subtree.
+  usePopover({ open, onClose: () => setOpen(false), containRef: panelRef, triggerRef })
+  // Anchor the portalled panel to the trigger rect (fixed, reposition on scroll/resize, flip above).
+  const pos = useAnchoredPosition(open, triggerRef, panelRef)
 
   // While open, keep the active option reachable: the non-searchable list moves DOM focus (roving
   // tabIndex); the searchable list keeps focus in the filter input and just scrolls the highlight
@@ -105,8 +111,9 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         onClick={handleTriggerClick}
@@ -115,28 +122,31 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
         aria-expanded={open}
         className={`
           w-full h-control py-control px-sm rounded-md text-sm
-          bg-surface-raised border text-text-primary
+          bg-surface-raised border text-text-strong
           transition-colors duration-quick
           flex items-center justify-between gap-2
           focus:outline-none
           ${disabled
-            ? 'opacity-50 cursor-not-allowed'
+            ? 'disabled'
             : open
               ? 'border-border-accent ring-2 ring-glow-accent'
               : 'border-border hover:border-border-light focus:ring-2 focus:ring-glow-accent focus:border-border-accent'
           }
         `}
       >
-        <span className={selectedOption ? 'text-text-primary' : 'text-text-muted'}>
+        <span className={selectedOption ? 'text-text-strong' : 'text-text-muted'}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <Icon icon={ChevronDown} size={16} className={`transition-transform duration-quick ${open ? 'rotate-180' : ''}`} />
+        <Icon icon={CONTROL_ICON.chevronDown} size={16} className={`transition-transform duration-quick ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
+        <Portal>
         <div
+          ref={panelRef}
           role="listbox"
-          className="absolute z-dropdown mt-1 w-full bg-surface-raised border border-border rounded-md shadow-lg"
+          className="fixed z-popover bg-surface-raised border border-border rounded-md shadow-lg"
+          style={{ left: pos.x, top: pos.y, width: pos.width }}
           onKeyDown={onKeyDown}
         >
           {searchable && (
@@ -147,7 +157,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search…"
               aria-activedescendant={activeIndex >= 0 ? `${baseId}-opt-${activeIndex}` : undefined}
-              className="w-full h-control px-sm mb-sm rounded-md text-sm bg-surface-raised border border-border text-text-primary focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-border-accent"
+              className="w-full h-control px-sm mb-sm rounded-md text-sm bg-surface-raised border border-border text-text-strong focus:outline-none focus:ring-1 focus:ring-glow-accent focus:border-border-accent"
             />
           )}
 
@@ -167,17 +177,18 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
                   className={`
                     w-full flex items-center justify-between px-sm py-2 text-sm
                     ${i === activeIndex ? 'bg-surface-active' : 'hover:bg-surface-hover'}
-                    ${opt.value === value ? 'text-primary' : 'text-text-primary'}
+                    ${opt.value === value ? 'text-primary' : 'text-text-strong'}
                   `}
                   onClick={() => selectOption(opt.value)}
                 >
                   <span>{opt.label}</span>
-                  {opt.value === value && <Icon icon={Check} size={16} className="text-primary" />}
+                  {opt.value === value && <Icon icon={ACTION_ICON.select} size={16} className="text-primary" />}
                 </button>
               ))
             )}
           </div>
         </div>
+        </Portal>
       )}
     </div>
   )

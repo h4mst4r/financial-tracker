@@ -13,7 +13,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { GripVertical, ChevronRight, Minus, MoreVertical, Plus, ArrowUpToLine } from 'lucide-react'
+import { ACTION_ICON, CONTROL_ICON } from '../../config/iconRegistry'
 import { ContextMenu } from '../primitives/ContextMenu'
 import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { GlyphView } from '../primitives/EmojiIconPicker'
@@ -23,6 +23,14 @@ import type { Category } from '../../types/category'
 import { CATEGORY_TYPE_META } from '../../types/category'
 import { resolveMove, ROOT_DROPPABLE, PARENT_PREFIX } from './resolveMove'
 import { useEntityColour } from '../../theme/useEntityColour'
+
+// Glyphs via the icon registry (L14). Aliased so the flat-strip render sites (§2.11) read unchanged.
+const GripVertical = ACTION_ICON.drag
+const MoreVertical = ACTION_ICON.more
+const Plus = ACTION_ICON.add
+const ArrowUpToLine = ACTION_ICON.promote
+const ChevronRight = CONTROL_ICON.chevronRight
+const Minus = CONTROL_ICON.leaf
 
 // CategoryTree (UX §6 / frontend.md §2.11) — the ONE sanctioned EntityCard exception: a flat
 // flex-strip tree, not a card grid. Parent rows carry a calm colour-tint fill; sub rows a lighter
@@ -170,7 +178,7 @@ function ParentRow({
       className={`group flex items-center gap-2 h-11 pl-2 pr-3 rounded-md transition-all duration-100 bg-entity-fill-calm ${
         selected ? 'ring-2 ring-accent' : ''
       } ${
-        archived ? 'opacity-60 grayscale border border-dashed border-border-strong' : ''
+        archived ? 'archived border border-dashed border-border-strong' : ''
       } ${isDragging ? 'opacity-40' : ''}`}
       style={useRowFill(color)}
     >
@@ -200,7 +208,7 @@ function ParentRow({
           />
         </button>
       ) : (
-        <Minus size={14} className="text-entity opacity-50 shrink-0" />
+        <Minus size={14} className="text-entity-faint shrink-0" />
       )}
       <span className="flex items-center justify-center size-6 shrink-0">
         {category.icon ? <GlyphView glyph={category.icon} size={20} /> : null}
@@ -230,7 +238,7 @@ function SubRow({ category, draggable, color, menu, selected, onToggleSelect }: 
       className={`group flex items-center gap-2 h-10 pl-2 pr-3 rounded-md transition-all duration-100 bg-entity-fill-sub ${
         selected ? 'ring-2 ring-accent' : ''
       } ${
-        archived ? 'opacity-60 grayscale border border-dashed border-border-strong' : ''
+        archived ? 'archived border border-dashed border-border-strong' : ''
       } ${isDragging ? 'opacity-40' : ''}`}
       style={useRowFill(color)}
     >
@@ -319,7 +327,7 @@ function ParentBlock({
           <button
             type="button"
             onClick={() => onAddSubcategory(parent)}
-            className="flex items-center gap-1 pl-2 h-8 text-xs text-text-secondary hover:text-text-primary focus:outline-none"
+            className="flex items-center gap-1 pl-2 h-8 text-xs text-text-default hover:text-text-strong focus:outline-none"
           >
             <Plus size={14} /> Add subcategory
           </button>
@@ -337,8 +345,8 @@ function RootDropZone() {
       data-testid="category-tree-root-dropzone"
       className={`flex items-center gap-2 h-9 pl-3 pr-3 rounded-md border border-dashed text-xs transition-all duration-100 ${
         isOver
-          ? 'ring-2 ring-primary border-border-strong bg-primary-muted text-text-primary'
-          : 'border-border text-text-secondary'
+          ? 'ring-2 ring-primary border-border-strong bg-primary-muted text-text-strong'
+          : 'border-border text-text-default'
       }`}
     >
       <ArrowUpToLine size={14} className="shrink-0" /> Drop here to make top-level
@@ -348,7 +356,7 @@ function RootDropZone() {
 
 function DragChip({ category }: { category: Category }) {
   return (
-    <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-surface-overlay border border-border-strong shadow-lg text-sm text-text-primary cursor-grabbing">
+    <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-surface-overlay border border-border-strong shadow-lg text-sm text-text-strong cursor-grabbing">
       {category.icon ? <GlyphView glyph={category.icon} size={18} /> : null}
       <span className="font-medium">{category.name}</span>
     </div>

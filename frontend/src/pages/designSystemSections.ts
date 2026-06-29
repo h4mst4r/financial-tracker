@@ -66,6 +66,7 @@ export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
   { id: 'modal', label: 'Modal', group: 'Feedback & overlay' },
   { id: 'context-menu', label: 'ContextMenu', group: 'Feedback & overlay' },
   { id: 'empty-state', label: 'EmptyState', group: 'States' },
+  { id: 'alert-banner', label: 'AlertBanner', group: 'States' },
   // Public & error (bible §3) — the shared PublicPage shell. Not a primitives-barrel export, so it has
   // no PRIMITIVE_DEMO_SECTION entry; the completeness guard's real-component marker covers it.
   { id: 'public-page', label: 'PublicPage', group: 'Public & error' },
@@ -106,6 +107,7 @@ export const PRIMITIVE_DEMO_SECTION: Record<string, string> = {
   Modal: 'modal',
   Toast: 'toast',
   EmptyState: 'empty-state',
+  AlertBanner: 'alert-banner',
   ConfirmationDialog: 'confirmation-dialog',
   // Table + its column-vocabulary factories are all demoed in the one #table section (TableDemo).
   Table: 'table',

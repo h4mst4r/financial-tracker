@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { ACTION_ICON } from '../config/iconRegistry'
 import { useEntityColour } from '../theme/useEntityColour'
 import { semanticTextClass } from '../theme/semantic'
 import { Modal } from '../components/primitives/Modal'
@@ -123,7 +123,7 @@ export function AccountDetailView({
         <Icon icon={ACCOUNT_TYPE_ICON[account.account_type]} size={18} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-sm opacity-70">
+        <div className="text-sm text-entity-default">
           {ACCOUNT_TYPE_LABEL[account.account_type]} · {account.currency}
         </div>
         <div className="text-2xl font-semibold">{hero}</div>
@@ -152,6 +152,20 @@ export function AccountDetailView({
             '--entity-colour': entityVar,
             '--entity-edge': edgeVar,
             ...(onVar ? { '--entity-on-colour': onVar } : {}),
+            // Entity-axis emphasis poles (§2 on the entity surface): vivid mutes the on-colour pole toward
+            // the fill; calm (or a vivid account with no resolvable colour → no on-colour) inherits the
+            // :root defaults. Gate on `onVar` (not `vivid`) so --entity-fg never references an unset
+            // --entity-on-colour (which would invalidate the entity-axis color-mix) — matches EntityCard.
+            ...(onVar ? { '--entity-fg': 'var(--entity-on-colour)', '--entity-emph-surface': 'var(--entity-colour)' } : {}),
+            // VIVID: the §2 emphasis stops FLOORED against this fill (§0a per-surface floor) — muted/faint
+            // stay ≥ their target ratio on a saturated fill, not the neutral-surface fraction under it.
+            ...(onVar && resolved
+              ? {
+                  '--entity-text-default': resolved.vividText.default,
+                  '--entity-text-muted': resolved.vividText.muted,
+                  '--entity-text-faint': resolved.vividText.faint,
+                }
+              : {}),
           } as CSSProperties
         }
         bodyClassName="flex-1 overflow-y-auto px-md py-md scrollbar-entity"
@@ -271,7 +285,7 @@ function SubtypeDetailRows({ account, vivid, renderMoney, displayCurrency, curre
           key={r.label}
           className="flex items-center justify-between gap-sm border-b border-entity-edge py-xs last:border-0"
         >
-          <dt className="text-sm opacity-70">{r.label}</dt>
+          <dt className="text-sm text-entity-default">{r.label}</dt>
           <dd className="text-sm font-medium">{r.node}</dd>
         </div>
       ))}
@@ -317,7 +331,7 @@ function AmountEditor({
         if (!e.currentTarget.contains(e.relatedTarget as Node)) onCommit()
       }}
     >
-      <span className="shrink-0 text-2xs opacity-55">{currency}</span>
+      <span className="shrink-0 text-2xs text-entity-muted">{currency}</span>
       <Input
         autoFocus
         inputMode="decimal"
@@ -441,21 +455,25 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
       <span className={`truncate ${cls}`}>{content}</span>
     )
 
-  // The panel sets the foreground colour for BOTH modes (text-on-entity on vivid, text-entity-fg on calm);
-  // every text element just INHERITS it and mutes via opacity — no neutral theme tokens, no calm/vivid
-  // text branch. Icons take the full instance hue on calm and the pole on vivid (text-entity = the fill on
-  // vivid, so it'd vanish). Hovers wash the surface with an entity tint, never a neutral surface token.
+  // The panel sets the foreground pole for BOTH modes (text-on-entity on vivid, text-entity-fg on calm);
+  // every text element INHERITS it and mutes via the §2 entity-axis emphasis utilities (the pole mixed
+  // toward the entity surface, §0.11 floor preserved — NOT opacity, which bleeds the bg, B13). Icons take
+  // the full instance hue on calm and the pole on vivid (text-entity = the fill on vivid, so it'd vanish).
+  // Hovers wash the surface with an entity tint, never a neutral surface token.
   const primary = ''
-  const secondary = 'opacity-70'
-  const muted = 'opacity-55'
-  const iconTint = vivid ? 'opacity-80' : 'text-entity'
+  const secondary = 'text-entity-default'
+  const muted = 'text-entity-muted'
+  const iconTint = vivid ? 'text-entity-default' : 'text-entity'
   const rowHover = vivid ? 'hover:bg-entity-chip' : 'hover:bg-entity-chip-calm'
 
   const th = `border-b border-entity-edge px-sm py-2xs text-2xs font-medium uppercase tracking-wide ${muted}`
   const td = 'border-b border-entity-edge px-sm py-xs align-middle'
 
   return (
-    <div className="flex flex-col gap-xs">
+    // entity-controls: the snapshot add-row / inline-edit controls recess from the entity surface (§1
+    // inset) instead of the flat navy surface-raised — the box matches the card; the portalled picker
+    // panels stay the standard overlay surface (they live in <body>, outside this scope).
+    <div className={`entity-controls ${vivid ? 'vivid' : 'calm'} flex flex-col gap-xs`}>
       <div className={`text-sm font-medium ${primary}`}>Value history</div>
       {items.length === 0 && !isAdmin ? (
         <span className={`text-sm ${secondary}`}>No snapshots yet</span>
@@ -521,11 +539,11 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
                       <td className={`${td} text-right`}>
                         <button
                           type="button"
-                          className={vivid ? 'opacity-70 hover:opacity-100' : 'text-entity hover:text-error'}
+                          className={vivid ? 'text-entity-muted hover:text-entity-strong' : 'text-entity hover:text-error'}
                           aria-label={`Delete the ${formatDateDisplay(snap.snapshot_date)} snapshot`}
                           onClick={() => onRequestDelete(snap)}
                         >
-                          <Icon icon={Trash2} size={14} />
+                          <Icon icon={ACTION_ICON.delete} size={14} />
                         </button>
                       </td>
                     )}
@@ -553,7 +571,7 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
                 <Dropdown value={addSource} options={SOURCE_OPTIONS} onChange={setAddSource} />
                 <button
                   type="button"
-                  className={`text-xs font-medium disabled:opacity-50 ${vivid ? '' : 'text-primary'}`}
+                  className={`text-xs font-medium disabled:text-entity-faint disabled:cursor-not-allowed ${vivid ? '' : 'text-primary'}`}
                   disabled={!isAmount(addAmount)}
                   onClick={handleAdd}
                 >
@@ -563,10 +581,10 @@ function SnapshotLedger({ account, vivid, isAdmin, renderMoney, onError, onReque
             ) : (
               <button
                 type="button"
-                className="flex w-full items-center gap-xs border-t border-entity-edge px-sm py-xs text-sm opacity-70 hover:opacity-100"
+                className="flex w-full items-center gap-xs border-t border-entity-edge px-sm py-xs text-sm text-entity-muted hover:text-entity-strong"
                 onClick={() => setAdding(true)}
               >
-                <Icon icon={Plus} size={14} className={iconTint} /> Add snapshot…
+                <Icon icon={ACTION_ICON.add} size={14} className={iconTint} /> Add snapshot…
               </button>
             ))}
         </div>

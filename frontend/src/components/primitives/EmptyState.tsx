@@ -18,7 +18,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       {icon && (
         <Icon icon={icon} size={48} className="text-text-muted mb-sm" />
       )}
-      <h3 className="text-lg font-medium text-text-secondary">{title}</h3>
+      <h3 className="text-lg font-medium text-text-default">{title}</h3>
       {description && (
         <p className="text-sm text-text-muted w-full">{description}</p>
       )}

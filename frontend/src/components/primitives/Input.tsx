@@ -8,7 +8,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 // the same contract over a non-native value — they delegate to this primitive for text entry.
 export function Input({ error, disabled, className, ...rest }: InputProps) {
   const stateClass = disabled
-    ? 'opacity-50 cursor-not-allowed'
+    ? 'disabled'
     : error
       ? 'border-border-error ring-2 ring-glow-error'
       : 'border-border focus:ring-2 focus:ring-glow-primary focus:border-border-focus'
@@ -17,7 +17,7 @@ export function Input({ error, disabled, className, ...rest }: InputProps) {
     <input
       className={`
         w-full h-control py-control px-sm rounded-md
-        bg-surface-raised border text-text-primary text-sm
+        bg-surface-raised border text-text-strong text-sm
         transition-colors duration-quick
         focus:outline-none
         ${stateClass}

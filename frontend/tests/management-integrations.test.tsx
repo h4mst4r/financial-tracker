@@ -118,14 +118,17 @@ describe('ManagementTab — Integrations (FX providers)', () => {
     // No raw "API key" field exists — only a secret REFERENCE, and only after picking a key type.
     expect(within(dialog).queryByLabelText('API key secret reference')).toBeNull()
 
-    // Pick the keyless Frankfurter → still no secret-ref field.
+    // Pick the keyless Frankfurter → still no secret-ref field. (The Dropdown trigger lives in the
+    // dialog; its option list is PORTALLED to the body, so options are scoped to the `listbox` panel —
+    // not the dialog, and not `screen` which would also match the provider rows behind the modal.)
     fireEvent.click(within(dialog).getByText('Select a provider'))
-    fireEvent.click(within(dialog).getByText('Frankfurter (ECB)'))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Frankfurter (ECB)'))
     expect(within(dialog).queryByLabelText('API key secret reference')).toBeNull()
 
-    // Switch to the key-requiring type → the secret-reference field appears.
-    fireEvent.click(within(dialog).getAllByText('Frankfurter (ECB)')[0])
-    fireEvent.click(within(dialog).getByText('Open Exchange Rates'))
+    // Switch to the key-requiring type → the secret-reference field appears. Reopen via the trigger
+    // (the only "Frankfurter (ECB)" inside the dialog while the portalled panel is closed).
+    fireEvent.click(within(dialog).getByText('Frankfurter (ECB)'))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Open Exchange Rates'))
     expect(within(dialog).getByLabelText('API key secret reference')).toBeTruthy()
 
     fireEvent.click(within(dialog).getByText('Add'))

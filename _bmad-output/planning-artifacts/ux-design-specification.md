@@ -95,7 +95,7 @@ Surface/border tone = `OKLCH( lerp(L-lo, L-hi, f), lerp(chroma-lo, chroma-hi, f)
 | muted | 0.0 | 4.5:1 (floor) | secondary, caption, meta |
 | faint | sub-floor | 3:1 | disabled, decorative, large-only |
 
-`faint` = solved to its own **3:1** target (below the floor — exempt use only). **Law:** colour only via the emphasis util; `faint` is never body content.
+`faint` = solved to its own **3:1** target (below the floor — exempt use only); `--e-text-faint` is solved per theme just as `--e-text-muted` is solved to 4.5:1 (the immersive Game-Boy ramp is floor-exempt). The four stops are the tokens `--color-text-{strong,default,muted,faint}` (renamed from `primary/secondary` to this §2 vocabulary). **Law:** colour only via the emphasis util; `faint` is never body content.
 
 ## 3. Colour Resolution (one engine)
 
@@ -111,7 +111,7 @@ Surface/border tone = `OKLCH( lerp(L-lo, L-hi, f), lerp(chroma-lo, chroma-hi, f)
 
 Resolves first; beats entity/theme/vivid/immersive.
 
-- Text → `faint` (§2). Fills/controls → blended **toward their own surface** by the named `--disabled` amount (relative, not a fixed opacity); no compounding on nested disabled.
+- Text → `faint` (§2). Fills/controls → blended **toward their own surface** by the named `--disabled` amount (`--disabled: 40%` — relative, not a fixed opacity); no compounding on nested disabled. Implemented as the one unlayered `.disabled` class so it wins over a control's base fill/text utilities.
 - Cursor `not-allowed`; no hover/press/focus.
 - a11y: `aria-disabled` if it must explain why; `disabled` if truly dead.
 
@@ -223,13 +223,15 @@ Icons via the `Icon` wrapper (lucide, 16–20px), coloured **as text** (tint + c
 |---|---|
 | **Sidebar nav** | Dashboard→`LayoutDashboard` · Accounts→`Wallet` · Capital→`TrendingUp` · Assets→`House` · Insurance→`Shield` · Transactions→`ArrowLeftRight` · Recurring→`Repeat` · Transfers→`ArrowRightLeft` · Budgets→`ChartPie` · Debt→`CreditCard` · Categories→`FolderTree` · Currencies→`CircleDollarSign` · Formula→`Calculator` · Settings→`Settings` |
 | **Account-type glyph** (`ACCOUNT_TYPE_ICON`) | bank→`Landmark` · credit_card→`CreditCard` · capital→`TrendingUp` · asset→`Building2` · insurance→`ShieldCheck` |
-| **Row / menu actions** | New/Add→`Plus` · Edit→`Pencil` · Duplicate→`Copy` · Archive→`Archive` · Restore→`RotateCcw` · Delete→`Trash2` · Favourite→`Star` · More(⋮)→`MoreVertical` · Sort→`ArrowUpDown` · Search→`Search` · Expand/Visualize→`Maximize2` · Drag→`GripVertical` · Promote→`ArrowUpToLine` · Move-to→`FolderInput` · Merge→`Merge` · Close/Clear→`X` · Select✓→`Check` |
-| **Semantic / status** (the §4 tones — *never colour alone*) | `positive`→`Check` · `warning`→`AlertTriangle` · `critical`→`XCircle` · `info`→`Info` · `neutral`→ none |
-| **Alert types** (`alert_type` → glyph; tone in §4) | BUDGET_WARNING→`AlertTriangle` · BUDGET_EXCEEDED→`AlertTriangle` · RECURRING_MISSED→`CalendarX` · FX_RATE_STALE→`Clock` · UPCOMING_PAYMENTS→`CalendarClock` · FX_API_DOWN→`PlugZap` · BACKUP_CREATED→`DatabaseBackup` |
+| **Row / menu actions** (`ACTION_ICON`) | New/Add→`Plus` · Edit→`Pencil` · Duplicate→`Copy` · Archive→`Archive` · Restore→`RotateCcw` · Restore-member→`ArchiveRestore` · Delete→`Trash2` · Favourite→`Star` · More(⋮)→`MoreVertical` · Sort→`ArrowUpDown` · Search→`Search` · Expand/Visualize→`Maximize2` · Drag→`GripVertical` · Promote→`ArrowUpToLine` · Move-to→`FolderInput` · Merge→`Merge` · Close/Clear→`X` · Select✓→`Check` · Tag→`Tag` · Invite→`UserPlus` · Revoke-invite→`MailX` · Remove-member→`UserMinus` · Profile→`User` · Sign-out→`LogOut` · Locked→`Lock` · Role-up→`ArrowUp` · Role-down→`ArrowDown` |
+| **Control / furniture** (`CONTROL_ICON` — primitive UI affordances, not domain choices) | Hamburger→`Menu` · Calendar-trigger→`Calendar` · Filters→`SlidersHorizontal` · Sort-asc→`ChevronUp` · Sort-desc / collapse→`ChevronDown` · Prev→`ChevronLeft` · Next / tree-expand→`ChevronRight` · Tree-leaf→`Minus` · Trend-up→`TrendingUp` · Trend-down→`TrendingDown` |
+| **Semantic / status** (`STATUS_ICON`, keyed by the §4 `StatusTone` — *never colour alone*) | `positive`→`Check` · `warning`→`AlertTriangle` · `critical`→`XCircle` · `info`→`Info` · `neutral`→ none |
+| **Alert types** (`ALERT_ICON`; `alert_type` → glyph; tone in §4) | BUDGET_WARNING→`AlertTriangle` · BUDGET_EXCEEDED→`AlertTriangle` · RECURRING_MISSED→`CalendarX` · FX_RATE_STALE→`Clock` · UPCOMING_PAYMENTS→`CalendarClock` · FX_API_DOWN→`PlugZap` · BACKUP_CREATED→`DatabaseBackup` |
 | **EmptyState icon** | = the surface's **own module nav glyph** (above) — empty Accounts shows `Wallet`, empty Categories `FolderTree`; **error** surfaces use `TriangleAlert` |
+| **Category glyph palette** (`config/categoryIcons.ts`) | the one tinted category-icon library the `EmojiIconPicker` offers (House · Car · ShoppingCart · Utensils · Plane · Heart · Gift · Briefcase · … one library, never a call-site pick) |
 | **Public/Error pages** (state → glyph · tone) | `loading`→Spinner (no icon) · `not_invited`→`Mail` warning · `access_denied`→`Lock` error · `not_found`→`SearchX` neutral · `refused_connection`→`Unplug` error · `lost_connection`→`WifiOff` warning · `generic_error`→`TriangleAlert` error · `logout`→`LogOut` neutral · `maintenance`→`Wrench` info · `household_deleted`→`House` error · `removed`→`UserMinus` warning · `account_archived`→`Ban` warning · `invalid_invitation`→`Ban` error |
 
-**Law:** every glyph is a registry lookup through `Icon`; no glyph chosen at a call site. *(Known build inconsistency for Pass 3: sidebar uses `Shield`/`House` for Insurance/Assets while the account-type glyph uses `ShieldCheck`/`Building2` — reconcile to one per context.)*
+**Law:** every glyph is a registry lookup through `Icon`; no glyph chosen at a call site. *(The sidebar uses `Shield`/`House` for Insurance/Assets while the account-type glyph uses `ShieldCheck`/`Building2` — this split is **intentional and kept**: a nav entry and an account-type badge are distinct contexts. Each context's home (`shell/navigation.ts` vs `config/accountIcons.ts`) owns its glyph; do not collapse them.)*
 
 ## 12. Scrollbars & Cursors
 
@@ -314,6 +316,12 @@ Canonical set: **loading** (Skeleton) · **empty** (EmptyState) · **error** (in
 # Part II — Enforcement
 
 Each system → a guard, so **`/design-system` (the live primitive gallery) is a *demo/output*, no longer an arbiter** — **this spec's** concrete, named values are the truth and are tested **directly** (token parity against `index.css`), not by eyeballing a rendered bible. Mechanism by *kind*; exact guard files settled when tests are written.
+
+**Guard-authoring law — allowlist-detection, never example-matching (binds Story 5F.7; applies to every guard below).** Every guard that *can* be expressed as a positive invariant **MUST** be: declare the **allowlist of legal homes** for a value/construct, then flag **every other origin** — never match the one syntactic *shape* an audit happened to record. A shape-matcher (e.g. `grep 'variant="(success|warning|error)"'`) catches only the form it was written against and is blind to the **same violation re-expressed** — a `Record<…, BadgeVariant>` map, a ternary, a computed prop, a helper, a value buried in a `types/*.ts` file. That is exactly how hand-rolled/DIY surfaces evade the gate: a value-level sweep found **six** status→tone surfaces bypassing the §4 registry (`ROLE_BADGE`, `INVITATION_BADGE`, three inline `<Badge variant={cond ? … : …}>` ternaries, and `CATEGORY_TYPE_META.badge`) that the original shape-sampled audit and a `variant="…"` grep both missed. **A test that asserts one example is not a guard — it is theatre.** Therefore:
+
+- **Express the invariant, not the example.** Ban the status tones `'success' | 'warning' | 'error'` as a `Badge` variant / `Record<…, BadgeVariant>` origin **outside** the allowlisted homes (`statusRegistry`/`Badge`; allowlist the toast API and the `semanticTextClass` sign-colour path). Same pattern for L6 (green/red/amber hex outside the token layer), L14 (lucide value-imports outside the §11 registry homes; `allowTypeImports`), L11 (`.toLocaleString`/`.toFixed`/hand-built dates outside `lib/` + the value atoms), L1 (derived tones outside §0 inputs in a `[data-theme]` block).
+- **Prove non-vacuous in a *non-obvious shape*.** Inject the violation as a `Record`/ternary/helper — not just an inline literal — and confirm the guard goes red. A guard that only reddens on the inline example is vacuous in practice.
+- **Manual audit covers only what a guard *cannot*** — the **semantic** call (is this badge a *status* or a *category* badge?), never the mechanical re-expression. The detector's job is to make "is there a hidden system I don't know about?" answerable by CI, not by re-reading every file.
 
 | # | System | Law | test |
 |---|---|---|---|

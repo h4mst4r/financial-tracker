@@ -406,6 +406,57 @@ describe('ConfirmationDialog', () => {
     const btn = screen.getByRole('button', { name: 'Confirm' })
     expect(btn).toHaveClass('bg-error-solid')
   })
+
+  it('busy disables both the cancel and confirm buttons', () => {
+    render(wrap(
+      <ConfirmationDialog open onClose={vi.fn()} onConfirm={vi.fn()} title="X" message="Y" busy />
+    ))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  })
+
+  it('closeOnConfirm=false runs onConfirm WITHOUT auto-calling onClose', () => {
+    const confirmFn = vi.fn()
+    const closeFn = vi.fn()
+    render(wrap(
+      <ConfirmationDialog
+        open
+        onClose={closeFn}
+        onConfirm={confirmFn}
+        title="X"
+        message="Y"
+        closeOnConfirm={false}
+      />
+    ))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(confirmFn).toHaveBeenCalledTimes(1)
+    expect(closeFn).not.toHaveBeenCalled()
+  })
+
+  it('the X dismissal routes to onDismiss (distinct from the cancel onClose)', () => {
+    const closeFn = vi.fn()
+    const dismissFn = vi.fn()
+    render(wrap(
+      <ConfirmationDialog
+        open
+        onClose={closeFn}
+        onConfirm={vi.fn()}
+        onDismiss={dismissFn}
+        title="X"
+        message="Y"
+      />
+    ))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(dismissFn).toHaveBeenCalledTimes(1)
+    expect(closeFn).not.toHaveBeenCalled()
+  })
+
+  it('dismissible=false suppresses the X close affordance', () => {
+    render(wrap(
+      <ConfirmationDialog open onClose={vi.fn()} onConfirm={vi.fn()} title="X" message="Y" dismissible={false} />
+    ))
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
+  })
 })
 
 /* ── Toast ── */

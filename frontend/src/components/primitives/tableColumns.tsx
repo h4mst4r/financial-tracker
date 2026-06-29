@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { MoreVertical } from 'lucide-react'
+import { ACTION_ICON } from '../../config/iconRegistry'
 import { Checkbox } from './Checkbox'
 import { DatePicker } from './DatePicker'
 import { Input } from './Input'
@@ -153,7 +153,7 @@ export function actionsColumn<T>(opts: {
     width: opts.width ?? '2.5rem',
     render: (row) => (
       <ContextMenu
-        trigger={<Icon icon={MoreVertical} size={14} className="text-text-muted opacity-60 hover:opacity-100" />}
+        trigger={<Icon icon={ACTION_ICON.more} size={14} className="text-text-muted opacity-60 hover:opacity-100" />}
         items={opts.items(row)}
       />
     ),

@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react'
-import { Search, Calendar, SlidersHorizontal, X } from 'lucide-react'
+import { useState, useRef, type ReactNode } from 'react'
+import { ACTION_ICON, CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon } from './Icon'
 import { Portal } from './behaviors/Portal'
 import { usePopover } from './behaviors/usePopover'
+import { useAnchoredPosition } from './behaviors/useAnchoredPosition'
 import { Input } from './Input'
 import { Dropdown } from './Dropdown'
 import { SegmentedControl } from './SegmentedControl'
@@ -50,7 +51,7 @@ export interface FilterBarProps {
 
 // Picker trigger button — the §2.1 pattern (mirrors Dropdown/DatePicker triggers); no bespoke style.
 const TRIGGER_CLS =
-  'h-control px-sm rounded-md text-sm bg-surface-raised border border-border text-text-primary ' +
+  'h-control px-sm rounded-md text-sm bg-surface-raised border border-border text-text-strong ' +
   'flex items-center gap-2xs whitespace-nowrap hover:border-border-light focus:outline-none ' +
   'focus-visible:ring-2 focus-visible:ring-glow-primary'
 
@@ -109,34 +110,11 @@ function AnchoredPanel({
   children: (close: () => void) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ x: -9999, y: -9999 }) // offscreen until measured (no flash)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const close = () => {
-    setOpen(false)
-    setPos({ x: -9999, y: -9999 })
-  }
-
-  useEffect(() => {
-    if (!open) return
-    const reposition = () => {
-      const t = triggerRef.current?.getBoundingClientRect()
-      const p = panelRef.current?.getBoundingClientRect()
-      if (!t || !p) return
-      const margin = 8
-      const x = Math.max(margin, Math.min(t.left, window.innerWidth - p.width - margin))
-      let y = t.bottom + 4
-      if (y + p.height > window.innerHeight - margin) y = Math.max(margin, t.top - p.height - 4) // flip above
-      setPos({ x, y })
-    }
-    reposition()
-    window.addEventListener('scroll', reposition, true)
-    window.addEventListener('resize', reposition)
-    return () => {
-      window.removeEventListener('scroll', reposition, true)
-      window.removeEventListener('resize', reposition)
-    }
-  }, [open])
+  const close = () => setOpen(false)
+  // Anchoring (portal + reposition + flip) is the shared Popover behavior — one implementation (L0).
+  const pos = useAnchoredPosition(open, triggerRef, panelRef)
 
   // Popover behavior: outside-click + Escape dismissal. The panel is portalled, so the trigger (a
   // separate DOM subtree) is passed as a second "inside" element — a press on it must not dismiss. A
@@ -172,7 +150,7 @@ function AnchoredPanel({
             ref={panelRef}
             role="dialog"
             aria-label={ariaLabel}
-            className={`fixed z-dropdown bg-surface-raised border border-border rounded-md shadow-md p-sm ${panelClassName ?? ''}`}
+            className={`fixed z-popover bg-surface-raised border border-border rounded-md shadow-md p-sm ${panelClassName ?? ''}`}
             style={{ left: pos.x, top: pos.y }}
           >
             {children(close)}
@@ -191,7 +169,7 @@ function DateRangeControl({ value, onChange }: { value: DateRangeValue; onChange
       panelClassName="min-w-menu"
       triggerContent={
         <>
-          <Icon icon={Calendar} size={14} />
+          <Icon icon={CONTROL_ICON.calendar} size={14} />
           {rangeLabel(value)}
           <span className="text-text-muted">▾</span>
         </>
@@ -205,7 +183,7 @@ function DateRangeControl({ value, onChange }: { value: DateRangeValue; onChange
               <button
                 key={p}
                 type="button"
-                className={`text-left px-sm py-xs rounded-md text-sm hover:bg-surface-active ${active ? 'bg-control-active text-primary' : 'text-text-secondary'}`}
+                className={`text-left px-sm py-xs rounded-md text-sm hover:bg-surface-active ${active ? 'bg-control-active text-primary' : 'text-text-default'}`}
                 onClick={() => {
                   if (p === 'custom') {
                     onChange({ preset: 'custom', start: value.start, end: value.end })
@@ -250,8 +228,8 @@ function MultiChipsControl({
       {value.map((v) => (
         <Badge key={v} variant="info" className="gap-2xs">
           {labelFor(v)}
-          <button type="button" aria-label={`Remove ${labelFor(v)}`} className="hover:text-text-primary" onClick={() => onChange(value.filter((x) => x !== v))}>
-            <Icon icon={X} size={12} />
+          <button type="button" aria-label={`Remove ${labelFor(v)}`} className="hover:text-text-strong" onClick={() => onChange(value.filter((x) => x !== v))}>
+            <Icon icon={ACTION_ICON.close} size={12} />
           </button>
         </Badge>
       ))}
@@ -273,7 +251,7 @@ function FilterControl({
     case 'search':
       return (
         <span className="relative flex items-center">
-          <Icon icon={Search} size={14} className="absolute left-sm text-text-muted pointer-events-none" />
+          <Icon icon={ACTION_ICON.search} size={14} className="absolute left-sm text-text-muted pointer-events-none" />
           <Input
             className="w-filter-search pl-xl"
             placeholder={descriptor.placeholder ?? 'Search…'}
@@ -358,7 +336,7 @@ export function FilterBar({ descriptors, value, onChange, onClear, className = '
           panelClassName="w-filter-popover"
           triggerContent={
             <>
-              <Icon icon={SlidersHorizontal} size={14} />
+              <Icon icon={CONTROL_ICON.filters} size={14} />
               Filters
               {overflowCount > 0 && <Badge variant="info">{overflowCount}</Badge>}
             </>
@@ -387,7 +365,7 @@ export function FilterBar({ descriptors, value, onChange, onClear, className = '
       )}
 
       {showClear && (
-        <button type="button" className="ml-auto text-sm text-text-secondary hover:text-text-primary" onClick={clear}>
+        <button type="button" className="ml-auto text-sm text-text-default hover:text-text-strong" onClick={clear}>
           Clear all
         </button>
       )}

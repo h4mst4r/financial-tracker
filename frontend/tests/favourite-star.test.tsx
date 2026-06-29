@@ -9,7 +9,7 @@ describe('FavouriteStar', () => {
     expect(button).toHaveAttribute('aria-pressed', 'false')
     expect(button).toHaveAccessibleName('Favourite')
     // gold in both states (§2.3: distinction is fill, not colour); off is the outline (fill="none")
-    expect(button.className).toContain('text-favourite')
+    expect(button.className).toContain('text-accent-important')
     expect(button.className).not.toContain('text-text-muted')
     expect(container.querySelector('svg')).toHaveAttribute('fill', 'none')
   })
@@ -19,7 +19,7 @@ describe('FavouriteStar', () => {
     const button = screen.getByRole('button')
     expect(button).toHaveAttribute('aria-pressed', 'true')
     expect(button).toHaveAccessibleName('Unfavourite')
-    expect(button.className).toContain('text-favourite')
+    expect(button.className).toContain('text-accent-important')
     expect(container.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
   })
 

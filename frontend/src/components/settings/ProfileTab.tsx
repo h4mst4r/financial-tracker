@@ -143,7 +143,7 @@ export function ProfileTab() {
     <div className="flex flex-col gap-xl">
       {/* Identity */}
       <section className="flex flex-col gap-md">
-        <h2 className="text-lg font-medium text-text-primary">Identity</h2>
+        <h2 className="text-lg font-medium text-text-strong">Identity</h2>
         <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
           <div className="flex flex-col gap-2xs">
             <Label htmlFor="profile-name">Display name</Label>
@@ -174,7 +174,7 @@ export function ProfileTab() {
 
       {/* Appearance */}
       <section className="flex flex-col gap-md">
-        <h2 className="text-lg font-medium text-text-primary">Appearance</h2>
+        <h2 className="text-lg font-medium text-text-strong">Appearance</h2>
         <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
           <div className="flex flex-col gap-2xs">
             <Label htmlFor="profile-theme">Theme</Label>
@@ -189,7 +189,7 @@ export function ProfileTab() {
 
       {/* Notifications */}
       <section className="flex flex-col gap-md">
-        <h2 className="text-lg font-medium text-text-primary">Notifications</h2>
+        <h2 className="text-lg font-medium text-text-strong">Notifications</h2>
         <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
           {NOTIFICATION_FIELDS.map(({ key, label }) => (
             <Checkbox
@@ -205,7 +205,7 @@ export function ProfileTab() {
 
       {/* App */}
       <section className="flex flex-col gap-md">
-        <h2 className="text-lg font-medium text-text-primary">App</h2>
+        <h2 className="text-lg font-medium text-text-strong">App</h2>
         <div className="flex flex-wrap items-center gap-xl">
           <div className="flex items-center gap-sm">
             <Label htmlFor="profile-density">Density (compact)</Label>

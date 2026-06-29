@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink } from 'react-router-dom'
-import { Menu } from 'lucide-react'
+import { CONTROL_ICON } from '../../config/iconRegistry'
 import { Icon, Tooltip, Divider } from '../primitives'
 import { BrandMark } from '../BrandMark'
 import { branding } from '../../config/branding'
@@ -9,12 +9,12 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { NAV_GROUPS, SETTINGS_ITEM, type NavItem } from './navigation'
 
 // Active item: accent-subtle fill + accent-primary text (UX §1.1). `text-primary` is the @utility
-// alias for --color-accent-primary (indigo) — NOT the body text colour (which is text-text-primary).
+// alias for --color-accent-primary (indigo) — NOT the body text colour (which is text-text-strong).
 function itemClass(isActive: boolean, rail: boolean): string {
   const base = 'flex items-center gap-sm rounded-md px-sm py-xs text-sm transition-colors'
   const state = isActive
     ? 'bg-accent-subtle text-primary'
-    : 'text-text-secondary hover:bg-surface-active hover:text-text-primary'
+    : 'text-text-default hover:bg-surface-active hover:text-text-strong'
   return `${base} ${state} ${rail ? 'justify-center' : ''}`
 }
 
@@ -39,7 +39,7 @@ function DesktopSidebar({ rail }: { rail: boolean }) {
     >
       <div className={`flex items-center gap-sm px-sm py-md ${rail ? 'justify-center' : ''}`}>
         <BrandMark size={rail ? 28 : 32} />
-        {!rail && <span className="font-semibold text-text-primary">{branding.wordmark}</span>}
+        {!rail && <span className="font-semibold text-text-strong">{branding.wordmark}</span>}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2xs">
@@ -92,9 +92,9 @@ function MobileNav() {
       <button
         data-testid="mobile-menu-bar"
         onClick={() => setOpen(true)}
-        className="z-sidebar fixed inset-x-0 bottom-0 flex items-center justify-center gap-sm border-t border-border bg-surface px-md py-sm text-sm text-text-primary"
+        className="z-sidebar fixed inset-x-0 bottom-0 flex items-center justify-center gap-sm border-t border-border bg-surface px-md py-sm text-sm text-text-strong"
       >
-        <Icon icon={Menu} /> Menu
+        <Icon icon={CONTROL_ICON.menu} /> Menu
       </button>
 
       {open &&
