@@ -3,14 +3,31 @@ import { contrastText } from '../../theme/colour'
 
 interface AvatarProps {
   src?: string
-  name: string
+  /** Required for a person avatar (initials + aria); omit only for the `overflow` count variant. */
+  name?: string
   colour?: string
   size?: number
   className?: string
+  /** Avatar-stack overflow: render a neutral "+N" circle instead of a person (e.g. owner stacks). */
+  overflow?: number
 }
 
-export function Avatar({ src, name, colour, size = 32, className = '' }: AvatarProps) {
+export function Avatar({ src, name = '', colour, size = 32, className = '', overflow }: AvatarProps) {
   const [imgError, setImgError] = useState(false)
+
+  // Stack overflow ("+N") — a neutral count circle matching the avatar shape/size, not a person.
+  if (overflow != null) {
+    return (
+      <span
+        role="img"
+        aria-label={`${overflow} more`}
+        className={`inline-flex items-center justify-center rounded-full bg-surface-active font-medium text-text-default ${className}`}
+        style={{ width: size, height: size, fontSize: size * 0.4 }}
+      >
+        +{overflow}
+      </span>
+    )
+  }
 
   const initials = name
     .split(/\s+/)

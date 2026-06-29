@@ -168,15 +168,17 @@ describe('Categories page', () => {
     expect((screen.getByTestId('bulk-action-merge') as HTMLButtonElement).disabled).toBe(true)
 
     selectRow('Salary')
-    expect((screen.getByTestId('bulk-action-merge') as HTMLButtonElement).disabled).toBe(false)
-    fireEvent.click(screen.getByTestId('bulk-action-merge'))
+    const mergePicker = screen.getByTestId('bulk-action-merge') as HTMLButtonElement
+    expect(mergePicker.disabled).toBe(false)
 
-    // Chooser modal: pick the surviving target (Salary), then confirm. The Dropdown trigger's
-    // accessible name comes from its associated <Label> ("Merge into").
-    expect(screen.getByRole('heading', { name: 'Merge categories' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Merge into' }))
+    // Inline picker (no chooser modal, UX §8.6): open it and choose the surviving target (Salary).
+    fireEvent.click(mergePicker)
     fireEvent.click(screen.getByRole('option', { name: /Salary/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Merge 2 categories/ }))
+
+    // Destructive → a ConfirmationDialog gates the merge.
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/Merge 1 category into "Salary"/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }))
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith('/api/categories/merge', {
@@ -200,16 +202,45 @@ describe('Categories page', () => {
     expect(archive).toHaveBeenCalledWith('p2')
   })
 
-  test('bulk Edit type updates each selected category', async () => {
+  test('bulk Edit type updates each selected category (inline picker — no modal)', async () => {
     renderPage()
     selectRow('Food')
+    // The inline picker applies the pick directly (no chooser modal, no Apply button, UX §8.6).
     fireEvent.click(screen.getByTestId('bulk-action-edit-type'))
-
-    expect(screen.getByRole('heading', { name: 'Edit type' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New type' }))
     fireEvent.click(screen.getByRole('option', { name: 'Income' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledWith('p1', { category_type: 'income' }))
+  })
+
+  // ── SCP 2026-06-29: bulk Delete for archived-empty categories (item 8, FR-C-006) ──
+
+  test('an archived, empty selection offers Delete; confirming hard-deletes each', async () => {
+    mockItems = [cat({ id: 'a1', name: 'Old Bills', status: 'archived', can_delete: true })]
+    renderPage()
+    selectRow('Old Bills')
+    const del = screen.getByTestId('bulk-action-delete') as HTMLButtonElement
+    expect(del.disabled).toBe(false)
+    fireEvent.click(del)
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/Permanently delete 1 category/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(deletePermanently).toHaveBeenCalledWith('a1'))
+  })
+
+  test('bulk Delete is disabled when an archived row still has dependencies', () => {
+    mockItems = [
+      cat({ id: 'a2', name: 'Busy', status: 'archived', can_delete: false, delete_blocked_reason: 'has transactions' }),
+    ]
+    renderPage()
+    selectRow('Busy')
+    expect((screen.getByTestId('bulk-action-delete') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('Delete is not offered for an active (non-archived) selection', () => {
+    renderPage()
+    selectRow('Food')
+    expect(screen.queryByTestId('bulk-action-delete')).toBeNull()
+    expect(screen.getByTestId('bulk-action-archive')).toBeTruthy()
   })
 })

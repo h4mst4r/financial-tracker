@@ -14,10 +14,7 @@ import {
   Mail,
   Lock,
   Wrench,
-  Tag,
   ArrowUpToLine,
-  FolderInput,
-  Merge,
 } from 'lucide-react'
 import { ACTION_ICON, CONTROL_ICON, STATUS_ICON, ALERT_ICON } from '../config/iconRegistry'
 import { statusTone, BADGE_VARIANT_FOR_TONE } from '../config/statusRegistry'
@@ -60,6 +57,8 @@ import {
   selectColumn,
   actionsColumn,
   FilterBar,
+  Zone,
+  Dot,
 } from '../components/primitives'
 import type { ColumnDef, FilterDescriptor, FilterState } from '../components/primitives'
 import { PublicPage } from '../components/PublicPage'
@@ -202,14 +201,15 @@ export function DesignSystem() {
     { id: 'delete', label: 'Delete', icon: Trash2, destructive: true, disabled: true, disabledReason: 'Only the owner can delete', onClick: () => {} },
     { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => bulkSelect.clear() },
   ]
-  // The CategoryTree surface action set (§8.6, Story 3.4). Promote/Move grey when the selection
-  // isn't all-subcategories; Merge greys below 2 selected. Shown here as the surface's inventory.
+  // The CategoryTree surface action set (§8.6, Story 3.4). Edit-type / Move / Merge are the bar's
+  // INLINE pickers (no chooser modal); Promote is a button. Promote/Move grey when the selection isn't
+  // all-subcategories; Merge greys below 2 selected. Shown here as the surface's inventory.
   const categoryBulkActions: BulkAction[] = [
-    { id: 'edit-type', label: 'Edit type', icon: Tag, onClick: () => {} },
+    { kind: 'picker', id: 'edit-type', label: 'Edit type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }, { value: 'both', label: 'Both' }], onPick: () => {} },
     { id: 'promote', label: 'Promote', icon: ArrowUpToLine, disabled: true, disabledReason: 'Only subcategories can be promoted', onClick: () => {} },
-    { id: 'move', label: 'Move to…', icon: FolderInput, disabled: true, disabledReason: 'Only subcategories can be moved', onClick: () => {} },
+    { kind: 'picker', id: 'move', label: 'Move to…', options: [{ value: 'food', label: 'Food' }], searchable: true, disabled: true, disabledReason: 'Only subcategories can be moved', onPick: () => {} },
     { id: 'archive', label: 'Archive', icon: Archive, destructive: true, onClick: () => {} },
-    { id: 'merge', label: 'Merge', icon: Merge, destructive: true, onClick: () => {} },
+    { kind: 'picker', id: 'merge', label: 'Merge', options: [{ value: 'a', label: 'Food' }, { value: 'b', label: 'Dining' }], destructive: true, disabled: true, disabledReason: 'Select at least 2 categories to merge', onPick: () => {} },
   ]
 
   const pushToast = useAlertStore((s) => s.pushToast)
@@ -680,6 +680,51 @@ export function DesignSystem() {
               </Badge>
             ))}
           </div>
+
+          {/* Slots (UX line 393): a leading Icon and/or a status Dot (absorbs StatusBadge + FilledChip). */}
+          <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Icon + Dot slots</h3>
+          <div className="flex flex-wrap gap-density">
+            <Badge variant="success" dot>
+              Paid
+            </Badge>
+            <Badge variant="warning" dot>
+              Pending
+            </Badge>
+            <Badge variant="info" icon={CONTROL_ICON.calendar}>
+              Scheduled
+            </Badge>
+            <Badge variant="neutral" icon={ACTION_ICON.tag}>
+              Tag
+            </Badge>
+          </div>
+        </section>
+
+        {/* Dot — the tiny status/legend/unread circle atom (UX line 394). Real exported primitive (P1). */}
+        <section id="dot" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Dot</h2>
+          <div className="flex flex-wrap items-center gap-md">
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot data-testid="dot" tone="positive" /> positive
+            </span>
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot tone="warning" /> warning
+            </span>
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot tone="critical" /> critical
+            </span>
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot tone="info" /> info
+            </span>
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot tone="neutral" /> neutral
+            </span>
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot tone="accent" /> accent (unread)
+            </span>
+            <span className="flex items-center gap-2xs text-sm text-text-default">
+              <Dot color="#a855f7" /> legend series (data colour)
+            </span>
+          </div>
         </section>
 
         {/* Avatar */}
@@ -822,6 +867,27 @@ export function DesignSystem() {
               <Divider orientation="vertical" />
               <span>Right</span>
             </div>
+          </div>
+        </section>
+
+        {/* Zone — bordered/tinted callout box (§10 dashed/solid · §3/§4 tint): Danger zone, coming-soon
+            placeholder, drag drop-target. Real exported primitive (P1). */}
+        <section id="zone" className="mb-xl">
+          <h2 className="text-lg font-medium mb-sm">Zone</h2>
+          <div className="flex max-w-modal flex-col gap-sm">
+            <Zone data-testid="zone" border="dashed" className="p-md text-sm">
+              Neutral · dashed — an info / placeholder box.
+            </Zone>
+            <Zone className="p-md text-sm">Neutral · solid — a plain bordered callout.</Zone>
+            <Zone tone="error" border="dashed" className="p-md">
+              <span className="text-sm font-medium">Danger zone</span> — destructive area (§4 hue).
+            </Zone>
+            <Zone dimmed border="dashed" className="p-md text-sm">
+              Dimmed — a “coming soon” placeholder.
+            </Zone>
+            <Zone active border="dashed" className="flex h-9 items-center gap-2 px-3 text-xs">
+              Active — drag-over drop target.
+            </Zone>
           </div>
         </section>
 

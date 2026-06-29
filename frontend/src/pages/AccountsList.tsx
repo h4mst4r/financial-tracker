@@ -203,9 +203,7 @@ export function AccountsList({ subtypes, title, newLabel, emptyKey }: AccountsLi
           )
         })}
         {overflow > 0 && (
-          <span className="-ml-2xs flex size-5 items-center justify-center rounded-full bg-surface-active text-2xs text-text-default ring-2 ring-surface">
-            +{overflow}
-          </span>
+          <Avatar overflow={overflow} size={20} className="-ml-2xs text-2xs ring-2 ring-surface" />
         )}
       </span>
     )

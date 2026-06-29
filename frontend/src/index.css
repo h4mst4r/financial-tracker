@@ -397,6 +397,14 @@
 :root { --color-on-primary: #ffffff; }
 @utility bg-primary     { background-color: var(--color-accent-primary); }
 @utility bg-error-solid { background-color: var(--color-error); }
+/* Solid semantic fills for the Dot atom (§4 tones as a filled circle). Tailwind v4 silently drops the
+   bare `bg-success`/`bg-warning`/`bg-info`/`bg-accent-secondary` utilities here (the §1.4a token-name
+   collision), so each solid fill is pinned explicitly — siblings of bg-error-solid. P3 (re-skins per
+   palette via the token) / P4 (no raw hex). */
+@utility bg-success-solid { background-color: var(--color-success); }
+@utility bg-warning-solid { background-color: var(--color-warning); }
+@utility bg-info-solid    { background-color: var(--color-info); }
+@utility bg-accent-solid  { background-color: var(--color-accent-secondary); }
 @utility text-on-primary { color: var(--color-on-primary); }
 @utility bg-on-primary  { background-color: var(--color-on-primary); }  /* toggle knob — contrasts both track states */
 @utility text-primary    { color: var(--color-accent-primary); }
@@ -459,6 +467,10 @@
    across tabs and independent of the (possibly narrow) trigger column (bible §7 fixed-width
    panels; P4: no inline px). ── */
 @utility min-w-picker { min-width: 15rem; }
+/* The BulkActionBar inline single-target picker (UX §8.6 Edit-type / Move / Merge) — sized to fit its
+   short placeholder ("Edit type" / "Move to…" / "Merge") + chevron, NOT its option labels (the trigger
+   never shows a selected value), so the bar stays compact. P4. */
+@utility w-bulk-picker { width: 8rem; }
 /* EmojiIconPicker glyph grid: caps the scroll area at ~6 rows of size-9 cells so a large curated
    set scrolls inside the panel instead of growing it past the modal (UX §8.3). P4. */
 @utility max-h-glyph-grid { max-height: 15rem; }

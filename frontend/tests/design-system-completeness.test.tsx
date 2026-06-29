@@ -42,6 +42,7 @@ const SECTION_MARKER: Record<string, string> = {
   // Primitives
   button: 'button',
   badge: 'span',
+  dot: '[data-testid="dot"]',
   avatar: '[role="img"]',
   'segmented-control': 'button',
   toggle: 'button[role="switch"]',
@@ -51,6 +52,7 @@ const SECTION_MARKER: Record<string, string> = {
   skeleton: '.animate-shimmer',
   spinner: '[role="status"]',
   divider: '[role="separator"]',
+  zone: '[data-testid="zone"]',
   // Form controls
   checkbox: 'input[type="checkbox"]',
   label: 'label',

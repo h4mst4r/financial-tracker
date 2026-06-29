@@ -332,7 +332,7 @@ export function FilterBar({ descriptors, value, onChange, onClear, className = '
       {hasFilters && (
         <AnchoredPanel
           ariaLabel="Filters"
-          triggerClassName={`${TRIGGER_CLS} border-dashed`}
+          triggerClassName={TRIGGER_CLS}
           panelClassName="w-filter-popover"
           triggerContent={
             <>

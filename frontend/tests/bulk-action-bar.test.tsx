@@ -83,6 +83,49 @@ describe('BulkActionBar', () => {
     expect(spies.delete).not.toHaveBeenCalled()
   })
 
+  test('an inline picker fires onPick with the chosen value (no modal, UX §8.6)', () => {
+    const onPick = vi.fn()
+    const actions: BulkAction[] = [
+      {
+        kind: 'picker',
+        id: 'edit-type',
+        label: 'Edit type',
+        options: [
+          { value: 'income', label: 'Income' },
+          { value: 'expense', label: 'Expense' },
+        ],
+        onPick,
+      },
+    ]
+    const { getByTestId, getByRole } = render(
+      <BulkActionBar count={2} onClear={vi.fn()} actions={actions} />,
+    )
+    fireEvent.click(getByTestId('bulk-action-edit-type'))
+    fireEvent.click(getByRole('option', { name: 'Income' }))
+    expect(onPick).toHaveBeenCalledWith('income')
+  })
+
+  test('a disabled inline picker is not openable and exposes its reason', () => {
+    const onPick = vi.fn()
+    const actions: BulkAction[] = [
+      {
+        kind: 'picker',
+        id: 'move',
+        label: 'Move to…',
+        options: [{ value: 'x', label: 'X' }],
+        onPick,
+        disabled: true,
+        disabledReason: 'Only subcategories can be moved',
+      },
+    ]
+    const { getByTestId } = render(<BulkActionBar count={1} onClear={vi.fn()} actions={actions} />)
+    const trigger = getByTestId('bulk-action-move') as HTMLButtonElement
+    expect(trigger.disabled).toBe(true)
+    expect(trigger.closest('[title]')?.getAttribute('title')).toBe('Only subcategories can be moved')
+    fireEvent.click(trigger)
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
   test('destructive actions render after the non-destructive ones regardless of array order', () => {
     // Put a destructive action FIRST in the array; it must still render after the normal ones.
     const archiveFirst: BulkAction[] = [

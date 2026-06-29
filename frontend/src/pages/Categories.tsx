@@ -82,11 +82,11 @@ export function Categories() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<Category | null>(null)
   const [isSeeding, setIsSeeding] = useState(false)
-  // The bulk type/move/merge chooser (one EntityModal + Dropdown; `value` is the picked option).
-  const [chooser, setChooser] = useState<{ kind: 'type' | 'move' | 'merge'; value: string } | null>(
-    null,
-  )
   const [confirmArchive, setConfirmArchive] = useState(false)
+  // Merge is destructive → the inline BulkActionBar picker selects the target, then a ConfirmationDialog
+  // confirms (UX §8.6 — the bar owns the pick inline; there is no bulk-chooser modal).
+  const [confirmMerge, setConfirmMerge] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const pushToast = useAlertStore((s) => s.pushToast)
 
   // RFC 7807 `detail` is a string for our typed errors (an array only for 422 field errors);
@@ -145,6 +145,9 @@ export function Categories() {
   const selected = manager.items.filter((c) => select.isSelected(c.id))
   const allSubs = selected.length > 0 && selected.every((c) => c.depth === 1)
   const allArchived = selected.length > 0 && selected.every((c) => c.status === 'archived')
+  // Bulk hard-delete is offered only for an archived selection where every row is empty (no subs / not
+  // in use) — `can_delete` is the backend's authoritative emptiness signal (Story 3.2). FR-C-006 / §8.1.
+  const allCanDelete = selected.length > 0 && selected.every((c) => c.can_delete)
 
   // Run a batch of single-row mutations, then clear the selection + refetch the tree. Each per-row
   // endpoint audits its own item and the archive cascade/idempotency hold, so no bulk endpoint is
@@ -179,57 +182,49 @@ export function Categories() {
       'Categories restored',
     )
 
-  // The chooser confirm (Edit type / Move to / Merge) — dispatched by `chooser.kind`.
-  const onChooserConfirm = () => {
-    if (!chooser) return
-    const { kind, value } = chooser
-    if (kind === 'type') {
-      runBulk(
-        () => selected.map((c) => manager.update(c.id, { category_type: value })),
-        'Could not change the category type.',
-        'Category type updated',
-      )
-    } else if (kind === 'move') {
-      runBulk(
-        () => selected.map((c) => api.post(`/api/categories/${c.id}/move`, { parent_id: value })),
-        'Could not move the categories.',
-        'Categories moved',
-      )
-    } else {
-      const sourceIds = selected.filter((c) => c.id !== value).map((c) => c.id)
-      runAction(
-        async () => {
-          await api.post('/api/categories/merge', { source_ids: sourceIds, target_id: value })
-          select.clear()
-          manager.refetch()
-        },
-        'Could not merge the categories.',
-        'Categories merged',
-      )
-    }
-    setChooser(null)
+  // ── Inline bulk-picker handlers (UX §8.6 — the pick applies directly; Merge confirms first) ──
+  const bulkEditType = (value: string) =>
+    runBulk(
+      () => selected.map((c) => manager.update(c.id, { category_type: value })),
+      'Could not change the category type.',
+      'Category type updated',
+    )
+  const bulkMove = (parentId: string) =>
+    runBulk(
+      () => selected.map((c) => api.post(`/api/categories/${c.id}/move`, { parent_id: parentId })),
+      'Could not move the categories.',
+      'Categories moved',
+    )
+  const bulkDelete = () =>
+    runBulk(
+      () => selected.map((c) => manager.deletePermanently(c.id)),
+      'Could not delete the categories.',
+      'Categories deleted',
+    )
+  // Merge the (non-target) sources into the chosen target, after the ConfirmationDialog (destructive).
+  const doMerge = (targetId: string) => {
+    const sourceIds = selected.filter((c) => c.id !== targetId).map((c) => c.id)
+    runAction(
+      async () => {
+        await api.post('/api/categories/merge', { source_ids: sourceIds, target_id: targetId })
+        select.clear()
+        manager.refetch()
+      },
+      'Could not merge the categories.',
+      'Categories merged',
+    )
   }
 
-  // Options for the active chooser (top-level parents for Move; the selection itself for Merge).
+  // Inline-picker option lists (top-level parents for Move; the selection itself for Merge). `searchText`
+  // lets the searchable Move picker match on the category name (not just the glyph node).
   const moveParentOptions = manager.items
     .filter((c) => c.depth === 0 && c.status !== 'archived' && !select.isSelected(c.id))
-    .map((c) => ({ value: c.id, label: glyphLabel(c) }))
-  const mergeTargetOptions = selected.map((c) => ({ value: c.id, label: glyphLabel(c) }))
-  const chooserConfig = chooser
-    ? {
-        type: { title: 'Edit type', label: 'New type', options: TYPE_OPTIONS, save: 'Apply' },
-        move: { title: 'Move to…', label: 'Move under', options: moveParentOptions, save: 'Move' },
-        merge: {
-          title: 'Merge categories',
-          label: 'Merge into',
-          options: mergeTargetOptions,
-          save: `Merge ${selected.length} categories`,
-        },
-      }[chooser.kind]
-    : null
+    .map((c) => ({ value: c.id, label: glyphLabel(c), searchText: c.name }))
+  const mergeTargetOptions = selected.map((c) => ({ value: c.id, label: glyphLabel(c), searchText: c.name }))
+  const mergeTarget = confirmMerge ? selected.find((c) => c.id === confirmMerge) ?? null : null
 
   const bulkActions: BulkAction[] = [
-    { id: 'edit-type', label: 'Edit type', icon: ACTION_ICON.tag, onClick: () => setChooser({ kind: 'type', value: '' }) },
+    { kind: 'picker', id: 'edit-type', label: 'Edit type', options: TYPE_OPTIONS, onPick: bulkEditType },
     {
       id: 'promote',
       label: 'Promote',
@@ -239,24 +234,42 @@ export function Categories() {
       onClick: bulkPromote,
     },
     {
+      kind: 'picker',
       id: 'move',
       label: 'Move to…',
-      icon: ACTION_ICON.moveTo,
+      options: moveParentOptions,
+      searchable: true,
       disabled: !allSubs,
       disabledReason: 'Only subcategories can be moved',
-      onClick: () => setChooser({ kind: 'move', value: '' }),
+      onPick: bulkMove,
     },
     allArchived
       ? { id: 'restore', label: 'Restore', icon: ACTION_ICON.restore, onClick: bulkRestore }
       : { id: 'archive', label: 'Archive', icon: ACTION_ICON.archive, destructive: true, onClick: () => setConfirmArchive(true) },
+    // Delete (archived-only): hard-delete the empty selection — distinct from Archive, and it actually
+    // removes the rows (FR-C-006 / §8.1). Disabled with a reason when any selected row still has deps.
+    ...(allArchived
+      ? [
+          {
+            id: 'delete',
+            label: 'Delete',
+            icon: ACTION_ICON.delete,
+            destructive: true,
+            disabled: !allCanDelete,
+            disabledReason: 'Only empty categories (no subcategories, transactions, or budgets) can be deleted',
+            onClick: () => setConfirmBulkDelete(true),
+          } satisfies BulkAction,
+        ]
+      : []),
     {
+      kind: 'picker',
       id: 'merge',
       label: 'Merge',
-      icon: ACTION_ICON.merge,
+      options: mergeTargetOptions,
       destructive: true,
       disabled: selected.length < 2,
       disabledReason: 'Select at least 2 categories to merge',
-      onClick: () => setChooser({ kind: 'merge', value: '' }),
+      onPick: setConfirmMerge,
     },
   ]
 
@@ -431,28 +444,6 @@ export function Categories() {
         confirmLabel="Delete"
       />
 
-      {/* Bulk type/move/merge chooser — one EntityModal + Dropdown; the modal is the single
-          confirmation for the (destructive) Merge (§8.6). */}
-      <EntityModal
-        open={chooser !== null}
-        onClose={() => setChooser(null)}
-        title={chooserConfig?.title ?? ''}
-        onSave={onChooserConfirm}
-        saveLabel={chooserConfig?.save}
-        saveDisabled={!chooser?.value}
-      >
-        <div className="flex flex-col gap-xs md:col-span-2">
-          <Label htmlFor="bulk-chooser">{chooserConfig?.label}</Label>
-          <Dropdown
-            id="bulk-chooser"
-            value={chooser?.value ?? ''}
-            options={chooserConfig?.options ?? []}
-            placeholder="Select…"
-            onChange={(v) => setChooser((c) => (c ? { ...c, value: v } : c))}
-          />
-        </div>
-      </EntityModal>
-
       <ConfirmationDialog
         open={confirmArchive}
         onClose={() => setConfirmArchive(false)}
@@ -460,6 +451,31 @@ export function Categories() {
         title="Archive categories"
         message={`Archive ${selected.length} ${selected.length === 1 ? 'category' : 'categories'}? Archiving a parent archives its subcategories too.`}
         confirmLabel="Archive"
+      />
+
+      {/* Merge confirm — the inline picker chose the surviving target; this is the destructive gate (§8.6). */}
+      <ConfirmationDialog
+        open={confirmMerge !== null}
+        onClose={() => setConfirmMerge(null)}
+        onConfirm={() => {
+          if (confirmMerge) doMerge(confirmMerge)
+        }}
+        title="Merge categories"
+        message={
+          mergeTarget
+            ? `Merge ${selected.length - 1} ${selected.length - 1 === 1 ? 'category' : 'categories'} into "${mergeTarget.name}"? Their transactions move to "${mergeTarget.name}" and the merged categories are archived.`
+            : ''
+        }
+        confirmLabel="Merge"
+      />
+
+      <ConfirmationDialog
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={bulkDelete}
+        title="Delete categories"
+        message={`Permanently delete ${selected.length} ${selected.length === 1 ? 'category' : 'categories'}? This cannot be undone.`}
+        confirmLabel="Delete"
       />
     </div>
   )

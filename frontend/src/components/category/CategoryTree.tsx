@@ -19,6 +19,7 @@ import type { ContextMenuEntry } from '../primitives/ContextMenu'
 import { GlyphView } from '../primitives/EmojiIconPicker'
 import { Badge } from '../primitives/Badge'
 import { Checkbox } from '../primitives/Checkbox'
+import { Zone } from '../primitives/Zone'
 import type { Category } from '../../types/category'
 import { CATEGORY_TYPE_META } from '../../types/category'
 import { badgeVariantForStatus } from '../../config/statusRegistry'
@@ -371,18 +372,18 @@ function ParentBlock({
 
 function RootDropZone() {
   const { setNodeRef, isOver } = useDroppable({ id: ROOT_DROPPABLE })
+  // The promote drop-target is a Zone (UX §10 dashed) — its drag-over highlight is the Zone `active`
+  // state (§6 solid accent-primary ring). No hand-rolled dashed div.
   return (
-    <div
+    <Zone
       ref={setNodeRef}
       data-testid="category-tree-root-dropzone"
-      className={`flex items-center gap-2 h-9 pl-3 pr-3 rounded-md border border-dashed text-xs transition-all duration-100 ${
-        isOver
-          ? 'ring-2 ring-primary border-border-strong bg-primary-muted text-text-strong'
-          : 'border-border text-text-default'
-      }`}
+      border="dashed"
+      active={isOver}
+      className="flex h-9 items-center gap-2 px-3 text-xs"
     >
       <ArrowUpToLine size={14} className="shrink-0" /> Drop here to make top-level
-    </div>
+    </Zone>
   )
 }
 

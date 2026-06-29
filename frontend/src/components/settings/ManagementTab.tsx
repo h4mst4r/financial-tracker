@@ -11,6 +11,7 @@ import { Button } from '../primitives/Button'
 import { Badge, type BadgeVariant } from '../primitives/Badge'
 import { Avatar } from '../primitives/Avatar'
 import { Icon } from '../primitives/Icon'
+import { Zone } from '../primitives/Zone'
 import { Skeleton } from '../primitives/Skeleton'
 import { EmptyState } from '../primitives/EmptyState'
 import { ContextMenu, type ContextMenuEntry } from '../primitives/ContextMenu'
@@ -808,8 +809,8 @@ function IntegrationsSection() {
         </ul>
       )}
 
-      {/* Bank connections — post-MVP placeholder (UX §5.2): dashed, dimmed, no functional control. */}
-      <div className="flex items-center justify-between gap-md rounded-md border border-dashed border-border bg-surface p-md opacity-60">
+      {/* Bank connections — post-MVP placeholder (UX §5.2): a dimmed dashed Zone, no functional control. */}
+      <Zone tone="neutral" border="dashed" dimmed className="flex items-center justify-between gap-md p-md">
         <div className="flex min-w-0 flex-col">
           <span className="flex items-center gap-2 text-sm font-medium text-text-default">
             Bank connections <Badge variant="neutral">Coming soon</Badge>
@@ -821,7 +822,7 @@ function IntegrationsSection() {
         <Button variant="secondary" disabled>
           Connect
         </Button>
-      </div>
+      </Zone>
 
       <Modal
         open={modalOpen}
@@ -927,12 +928,11 @@ function DangerZone() {
 
   return (
     <section className="flex flex-col gap-md">
-      {/* Bible §5.2: an error-tinted callout box (error-fill bg + error border) with the heading
-          inside it, not a plain bordered panel. */}
-      <div className="flex flex-col gap-sm rounded-md border border-dashed border-border-error bg-error-fill p-md">
+      {/* UX §5.2: the Danger zone is an error-hue Zone (error-fill + error border), heading inside. */}
+      <Zone tone="error" border="dashed" className="flex flex-col gap-sm p-md">
         <h2 className="text-lg font-medium text-error">Danger zone</h2>
         {isOwner ? <DeleteHousehold /> : <LeaveHousehold />}
-      </div>
+      </Zone>
     </section>
   )
 }

@@ -26,9 +26,11 @@ interface DropdownProps {
   /** Opt-in: renders a filter input at the top of the panel and filters the list as you type. Off by
    *  default — every existing consumer keeps the plain (non-searchable) behaviour unchanged. */
   searchable?: boolean
+  /** Test hook applied to the trigger button (e.g. the BulkActionBar inline picker). */
+  'data-testid'?: string
 }
 
-export function Dropdown({ value, options, onChange, placeholder, disabled, id, searchable }: DropdownProps) {
+export function Dropdown({ value, options, onChange, placeholder, disabled, id, searchable, 'data-testid': testId }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -115,6 +117,7 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
       <button
         ref={triggerRef}
         id={id}
+        data-testid={testId}
         type="button"
         onClick={handleTriggerClick}
         disabled={disabled}
