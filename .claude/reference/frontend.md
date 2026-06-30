@@ -563,6 +563,22 @@ no false-positive escape. The guards must catch every *mechanical* re-expression
 backstops only genuine *semantic* judgments (is this a semantic badge — so a §4 domain — or a plain
 neutral identity badge like a role?).
 
+**One registry, self-enforcing coverage (5f-8).** Every source-scan value-guard is a single entry in
+`GUARDS` (`tests/helpers/enforcement.ts`): its detector + extensions + allowlist. Three suites maintain
+themselves off that registry so the design system can't be quietly under-covered —
+`tests/enforcement-coverage.test.ts`: the **discovery canary** fails if the source sweep stops reaching
+any `src/**/*.{ts,tsx}` file (an independent glob must agree — proving *every* component is scanned, not
+just the ones an audit remembered); the **allowlist audit** fails on a stale exemption or any drift from
+the reviewed exemption snapshot (a new/broader exemption is a deliberate, reviewed edit); the **rogue
+battery** runs every `GUARDS` detector over `tests/fixtures/violations/RogueComponent.tsx` and fails if any
+guard doesn't bite a real file; and a **registration check** fails if any exported `detect*` is missing
+from `GUARDS`. So **to add or strengthen a value-guard, register it in `GUARDS`** — the battery then forces
+its violation into the rogue fixture and the audit forces its allowlist into the snapshot, and the red
+tests (not memory or a checklist) keep all three layers current. Never hand-roll a parallel one-off guard
+that bypasses the registry — it escapes the battery + audit. These layers are **mechanically** complete;
+they cannot catch a violation *shape* no detector models (extend the rogue fixture + a self-test when you
+meet one) nor a value inside an allowlisted home, which manual P0/P1 review still owns.
+
 ### 4.2 Stock Python `.gitignore` Silently Swallows `frontend/src` Dirs Named `lib`/`build`/`dist`/`var`
 
 The root `.gitignore` is the Python template with **unanchored** `lib/`, `build/`, `dist/`, `var/`,
