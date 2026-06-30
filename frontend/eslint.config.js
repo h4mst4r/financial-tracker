@@ -105,13 +105,14 @@ export default tseslint.config(
           message: 'Do not hand-roll a <dialog>. Import the Modal primitive from components/primitives.',
         },
         // ── AUDIT BACKLOG (still deferred — each blocked on a prerequisite, not yet promotable) ──
-        // <button>  → Button   DEFERRED to the Button-variant story. Triage finding (5f-7): the ~15 raw
-        //                        uses (CategoryTree drag handle, EntityCard stretched click-overlay,
-        //                        BulkActionBar/AccountModal/AccountDetailView icon buttons, Sidebar nav)
-        //                        are all icon/bare/click-area buttons. The built Button only has the
-        //                        FILLED variants (primary/secondary/ghost/danger); the spec's icon/text/
-        //                        link variants are NOT built (audit B10). Forcing these into a filled
-        //                        Button breaks parity (P0) — promote once the icon/text/link variants land.
+        // <button>  → Button   DEFERRED to Story 5.12 (Primitive Retrofit). The Button variant set is now
+        //                        complete (5f-9: filled/outline/ghost/danger/text/link/icon — the bare
+        //                        size-to-child `icon` variant is the target the ~15 raw uses need:
+        //                        CategoryTree drag handle, EntityCard stretched click-overlay, BulkActionBar/
+        //                        AccountModal/AccountDetailView icon buttons, Sidebar nav, EntityPage). The
+        //                        remaining blocker is the consumer migration itself (recompose each raw
+        //                        <button> onto the right variant, parity-preserving P0) — that + flipping
+        //                        this row to `error` is Story 5.12's job. Stays commented until then.
         // <input>   → Input    (raw only in DesignSystem demo)
         // <table>/<thead>/<tbody>/<tr>/<td>/<th> → Table  → promote in Story 5.12 (Primitive Retrofit —
         //                        its ACs migrate F1/F2: the AccountDetailView SnapshotLedger + the

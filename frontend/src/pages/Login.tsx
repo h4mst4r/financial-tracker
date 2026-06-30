@@ -42,7 +42,7 @@ export function Login({ oauthError = false }: { oauthError?: boolean }) {
           Sign-in failed — please try again.
         </p>
       )}
-      <Button variant="primary" className="w-full justify-center" onClick={continueWithGoogle}>
+      <Button variant="filled" className="w-full justify-center" onClick={continueWithGoogle}>
         Continue with Google
       </Button>
       {showDevLogin && (

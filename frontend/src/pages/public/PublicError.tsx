@@ -15,7 +15,7 @@ export function PublicError({ state }: { state: PublicPageState }) {
   const action =
     cfg.actionLabel && cfg.actionKind ? (
       <Button
-        variant={cfg.actionPrimary ? 'primary' : 'secondary'}
+        variant={cfg.actionPrimary ? 'filled' : 'outline'}
         onClick={() => {
           if (cfg.actionKind === 'login') navigate('/login')
           else if (cfg.actionKind === 'home') navigate('/')

@@ -45,7 +45,7 @@ describe('§3a disabled — one utility, no opacity (B14/L5)', () => {
   })
 
   it('Button disabled overrides the variant fill via the `disabled` utility (not opacity)', () => {
-    render(<Button variant="primary" disabled>Go</Button>)
+    render(<Button variant="filled" disabled>Go</Button>)
     const btn = screen.getByRole('button', { name: 'Go' })
     expect(btn.className).toContain('disabled')
     expect(btn.className).not.toMatch(/opacity-\d/)

@@ -61,8 +61,8 @@ describe('Button', () => {
   it('renders each variant (smoke)', () => {
     render(wrap(
       <>
-        <Button variant="primary">P</Button>
-        <Button variant="secondary">S</Button>
+        <Button variant="filled">P</Button>
+        <Button variant="outline">S</Button>
         <Button variant="ghost">G</Button>
         <Button variant="danger">D</Button>
       </>

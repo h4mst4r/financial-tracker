@@ -46,7 +46,7 @@ export function JoinHousehold() {
       >
         <Badge variant="neutral">member</Badge>
         <Button
-          variant="primary"
+          variant="filled"
           className="w-full justify-center"
           onClick={continueWithGoogle}
         >

@@ -51,7 +51,7 @@ export function CategoryDefaultsPrompt({
         <Button onClick={onCreateDefaults} disabled={isCreating}>
           Create defaults
         </Button>
-        <Button variant="secondary" onClick={onNewCategory}>
+        <Button variant="outline" onClick={onNewCategory}>
           New category
         </Button>
       </div>

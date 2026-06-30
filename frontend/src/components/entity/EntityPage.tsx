@@ -171,7 +171,7 @@ function EntityPageContent({
         </span>
         <h3 className="text-lg font-medium text-text-default">{ERROR_STATE.title}</h3>
         <p className="text-sm text-text-muted">{ERROR_STATE.description}</p>
-        <Button variant="secondary" onClick={onRetry} className="mt-sm">
+        <Button variant="outline" onClick={onRetry} className="mt-sm">
           Retry
         </Button>
       </div>

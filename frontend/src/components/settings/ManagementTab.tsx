@@ -512,7 +512,7 @@ function AdminInvitationsSection() {
     <section className="flex flex-col gap-md">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium text-text-strong">Invitations</h2>
-        <Button variant="secondary" onClick={() => setInviteOpen(true)}>
+        <Button variant="outline" onClick={() => setInviteOpen(true)}>
           <span className="flex items-center gap-2xs">
             <Icon icon={ACTION_ICON.add} size={16} /> Invite
           </span>
@@ -753,7 +753,7 @@ function IntegrationsSection() {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-text-default">FX rate providers</h3>
         {isOwner && (
-          <Button variant="secondary" onClick={openCreate}>
+          <Button variant="outline" onClick={openCreate}>
             <span className="flex items-center gap-2xs">
               <Icon icon={ACTION_ICON.add} size={16} /> Add provider
             </span>
@@ -819,7 +819,7 @@ function IntegrationsSection() {
             Automatic account syncing will arrive in a future release.
           </span>
         </div>
-        <Button variant="secondary" disabled>
+        <Button variant="outline" disabled>
           Connect
         </Button>
       </Zone>

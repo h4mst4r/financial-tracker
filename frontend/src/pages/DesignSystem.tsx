@@ -575,7 +575,7 @@ export function DesignSystem() {
           <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Disabled (§3a)</h3>
           <div className="flex flex-wrap items-center gap-md">
             <Button disabled>Disabled</Button>
-            <Button variant="secondary" disabled>Disabled</Button>
+            <Button variant="outline" disabled>Disabled</Button>
             <Input disabled defaultValue="Disabled input" />
           </div>
         </section>
@@ -660,11 +660,16 @@ export function DesignSystem() {
         {/* Button */}
         <section id="button" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Button</h2>
-          <div className="flex flex-wrap gap-density">
-            <Button variant="primary">Primary</Button>
-            <Button variant="secondary">Secondary</Button>
+          <div className="flex flex-wrap items-center gap-density">
+            <Button variant="filled">Filled</Button>
+            <Button variant="outline">Outline</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="danger">Danger</Button>
+            <Button variant="text">Text</Button>
+            <Button variant="link">Link</Button>
+            <Button variant="icon" aria-label="More">
+              <Icon icon={MoreVertical} size={16} />
+            </Button>
             <Button disabled>Disabled</Button>
             <Button onClick={() => setButtonClicks((p) => p + 1)}>
               Clicks: {buttonClicks}
@@ -1085,10 +1090,10 @@ export function DesignSystem() {
         <section id="toast" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Toast</h2>
           <div className="flex flex-wrap gap-density">
-            <Button variant="secondary" onClick={() => pushToast({ variant: 'info', message: 'Information message' })}>Info</Button>
-            <Button variant="secondary" onClick={() => pushToast({ variant: 'success', message: 'Operation successful' })}>Success</Button>
-            <Button variant="secondary" onClick={() => pushToast({ variant: 'warning', message: 'Something needs attention' })}>Warning</Button>
-            <Button variant="secondary" onClick={() => pushToast({ variant: 'error', message: 'An error occurred' })}>Error</Button>
+            <Button variant="outline" onClick={() => pushToast({ variant: 'info', message: 'Information message' })}>Info</Button>
+            <Button variant="outline" onClick={() => pushToast({ variant: 'success', message: 'Operation successful' })}>Success</Button>
+            <Button variant="outline" onClick={() => pushToast({ variant: 'warning', message: 'Something needs attention' })}>Warning</Button>
+            <Button variant="outline" onClick={() => pushToast({ variant: 'error', message: 'An error occurred' })}>Error</Button>
           </div>
           <p className="text-xs text-text-muted mt-sm">Auto-dismisses after 4s; ✕ dismisses early.</p>
         </section>
@@ -1113,7 +1118,7 @@ export function DesignSystem() {
         <section id="modal" className="mb-xl">
           <h2 className="text-lg font-medium mb-sm">Modal</h2>
           <div className="flex flex-wrap gap-density">
-            <Button variant="primary" onClick={() => setModalOpen(true)}>Open Modal</Button>
+            <Button variant="filled" onClick={() => setModalOpen(true)}>Open Modal</Button>
           </div>
           <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Example Modal">
             <p className="text-sm text-text-default">
@@ -1143,7 +1148,7 @@ export function DesignSystem() {
             icon={SearchX}
             title="No results found"
             description="Try adjusting your search or filter to find what you're looking for."
-            action={<Button variant="primary">Clear Filters</Button>}
+            action={<Button variant="filled">Clear Filters</Button>}
           />
         </section>
 
@@ -1186,7 +1191,7 @@ export function DesignSystem() {
                 tone="warning"
                 title="Not invited"
                 subtitle="This account isn't part of a household yet."
-                action={<Button variant="primary">Sign in with another account</Button>}
+                action={<Button variant="filled">Sign in with another account</Button>}
               />
             </div>
             <div className="overflow-hidden rounded-lg border border-border">
@@ -1196,7 +1201,7 @@ export function DesignSystem() {
                 tone="error"
                 title="Access denied"
                 subtitle="You don't have permission to view this."
-                action={<Button variant="secondary">Back to dashboard</Button>}
+                action={<Button variant="outline">Back to dashboard</Button>}
               />
             </div>
             <div className="overflow-hidden rounded-lg border border-border">
@@ -1206,7 +1211,7 @@ export function DesignSystem() {
                 tone="neutral"
                 title="Not found"
                 subtitle="That page doesn't exist."
-                action={<Button variant="secondary">Back to dashboard</Button>}
+                action={<Button variant="outline">Back to dashboard</Button>}
               />
             </div>
             <div className="overflow-hidden rounded-lg border border-border">

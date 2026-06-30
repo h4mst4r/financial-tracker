@@ -156,6 +156,31 @@ or token before marking a story done — green tests + green stylelint are neces
 
 ## 2. Component Patterns (full library: UX §1–§8, index UX §7)
 
+### 2.0 `Button` primitive — the seven variants (5f-9)
+
+`Button` (`primitives/Button.tsx`) composes `usePressable` (press-scale + the §3a `disabled` class — never
+re-author per variant) and exposes **seven** `variant`s. The frame utilities (`h-control px-md`) live in the
+variant map, not the shared base, so `link` (frameless) and `icon` (size-to-child) can opt out.
+
+| variant | use for | look |
+|---|---|---|
+| **`filled`** (default) | the primary affordance (one per surface) | `accent-primary` fill + `on-primary` text (§6) |
+| **`outline`** | secondary actions | raised surface + `border` |
+| **`ghost`** | tertiary / low-emphasis bordered | transparent + `border`, hover fills |
+| **`danger`** | destructive confirm | `error` fill + `on-primary` text |
+| **`text`** | a neutral, borderless text button | transparent, `text-strong`, hover `surface-hover`, **no border** |
+| **`link`** | an inline accent hyperlink | **no frame**, `text-accent`, underline on hover |
+| **`icon`** | a bare icon-only affordance | centered + `rounded-md` + `p-2xs` hit-area; **size from the `<Icon>` child**, **colour inherited `currentColor`** (caller styles it) |
+
+- **Renamed in 5f-9** (value-preserving): `primary`→`filled`, `secondary`→`outline`. No `primary`/`secondary`
+  values remain — `filled`/`outline` compute the identical class set.
+- **`icon` is bare/size-to-child, NOT a fixed control-height square** — the app's icon buttons are 14–16px bare
+  icons with colour-change hovers; a forced square fit almost none. Pass the size on the `<Icon>` child and the
+  colour via `className` (the variant pins no `text-*`, so a caller's `text-error`/entity colour can't be beaten
+  by stylesheet source order). Provide an `aria-label` for icon-only buttons.
+- The raw-`<button>` consumer migration onto these variants (+ the L8 `<button>`→`Button` eslint promotion) is
+  **Story 5.12**, not 5f-9 — 5f-9 only builds the variants + renames existing `Button` usages.
+
 ### 2.1 Picker / Dropdown Trigger Button (EXACT pattern — no deviation)
 
 All picker triggers (Dropdown, DatePicker, ColourPicker, EmojiIconPicker) use this **single ternary** for border/ring state:
