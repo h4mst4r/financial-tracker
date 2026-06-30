@@ -1,19 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
-import type { ReactNode } from 'react'
-import { ManagementTab } from '../src/components/settings/ManagementTab'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { useAuthStore } from '../src/stores/authStore'
 import type { Household, Person } from '../src/types/auth'
 import type { Invitation, ListResponse, Member } from '../src/types/household'
+import { HH, PREFS, makeResponse, renderManagementTab as renderTab } from './fixtures/household'
 
-const HH: Household = { householdId: 'h1', name: "Ben's Household", baseCurrency: 'SGD', timezone: 'Asia/Singapore' }
 const OWNER: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: true,
   theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false,
-  notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
+  notificationPrefs: PREFS,
 }
 const MEMBER: Person = { ...OWNER, personId: 'p2', displayName: 'Mem', email: 'mem@example.com', role: 'member', canCreateHousehold: false }
 
@@ -23,10 +19,6 @@ const MEMBERS: ListResponse<Member> = {
     { personId: 'p2', displayName: 'Alex Lim', email: 'alex@example.com', role: 'admin', pictureUrl: null, colour: null, status: 'active', canDelete: false },
   ],
   total: 2,
-}
-
-function makeResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
 /** Route fetch by URL so the list queries + the PATCH each get the right body. The owner/admin path
@@ -58,16 +50,6 @@ function routeFetch(overrides: { members?: ListResponse<Member>; invitations?: L
     if (u === '/api/fx-providers') return makeResponse({ items: [], total: 0 })
     throw new Error(`unexpected fetch ${u}`)
   })
-}
-
-function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  )
-  return render(<ManagementTab />, { wrapper })
 }
 
 let fetchMock: ReturnType<typeof vi.fn>

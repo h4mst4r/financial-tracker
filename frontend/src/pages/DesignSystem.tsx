@@ -1,4 +1,5 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, useMemo, type CSSProperties } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import {
   Home,
   Settings,
@@ -515,6 +516,22 @@ export function DesignSystem() {
             (Enter/blur commits, Esc cancels), pinned quick-add row.
           </p>
           <TableDemo />
+
+          {/* Scale modes (5f-8) — windowing + server keyset paging on the SAME primitive (§"Data —
+              Table" line 481). Build-ahead: no live ledger consumer yet (Story 5-2), proven here on
+              synthetic + mock-keyset data. */}
+          <p className="text-sm text-text-default mt-xl mb-sm">
+            <span className="font-medium text-text-strong">Virtualized</span> — 10,000 synthetic rows,
+            DOM-windowed (only the visible rows + a buffer mount; scroll the frame).
+          </p>
+          <VirtualizedTableDemo />
+
+          <p className="text-sm text-text-default mt-xl mb-sm">
+            <span className="font-medium text-text-strong">Infinite</span> — server keyset paging against
+            an in-memory mock source (cursor = last row, not offset; ~100 rows fetched near the bottom,
+            loading sentinel, terminates at the end — never a numbered pager).
+          </p>
+          <InfiniteTableDemo />
         </section>
 
         {/* FilterBar — the one filter row (§1.2a, bible #filterbar). Record-list profile: search ·
@@ -1280,6 +1297,85 @@ function TableDemo() {
           </td>
         </tr>
       }
+    />
+  )
+}
+
+// ── Scale-mode demo fixtures (5f-8) ──────────────────────────────────────────────────────────────
+// A deterministic synthetic dataset. Ids are zero-padded + sequential so the id doubles as the keyset
+// sort_key (the mock pages by "the row after this id", modelling (sort_key, id) — NOT a numeric offset).
+const SCALE_MERCHANTS = ['Netflix', 'NTUC FairPrice', 'Grab', 'Shopee', 'Spotify', 'Starbucks', 'Shell', 'Salary']
+function makeDemoRows(n: number): DemoRow[] {
+  return Array.from({ length: n }, (_, i): DemoRow => {
+    const day = (i % 28) + 1
+    return {
+      id: `row-${String(i).padStart(6, '0')}`,
+      status: 'active',
+      date: `2026-${String((i % 12) + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      name: `${SCALE_MERCHANTS[i % SCALE_MERCHANTS.length]} #${i}`,
+      amount: (i % 7 === 0 ? 1 : -1) * (10 + (i % 90)) + '.00',
+      currency: 'SGD',
+    }
+  })
+}
+
+const scaleColumns: ColumnDef<DemoRow>[] = [
+  dateColumn<DemoRow>({ key: 'date', get: (r) => r.date }),
+  textColumn<DemoRow>({ key: 'name', header: 'Name', get: (r) => r.name }),
+  moneyColumn<DemoRow>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: (r) => r.currency, signColour: true }),
+]
+
+// 10k-row windowing demo — proves the DOM stays bounded while every row is scrollable (AC#1/#2).
+function VirtualizedTableDemo() {
+  const rows = useMemo(() => makeDemoRows(10_000), [])
+  return <Table rows={rows} columns={scaleColumns} rowKey={(r) => r.id} virtualized />
+}
+
+interface KeysetPage {
+  items: DemoRow[]
+  next_cursor: string | null
+  total: number
+}
+
+// In-memory mock of the ARCH §4.10 keyset endpoint: pages by the cursor (the last row's id), default
+// limit 100, returns next_cursor=null at the end. No offset arithmetic — it locates the slice from the
+// cursor row, exactly as a real keyset query resolves (sort_key, id). The real /api/events + useInfinite
+// query wiring is Story 5-2; here useInfiniteQuery drives the mock to prove the Table's paging seam.
+function mockKeysetPage(all: DemoRow[], cursor: string | null, limit = 100): KeysetPage {
+  const startIdx = cursor === null ? 0 : all.findIndex((r) => r.id === cursor) + 1
+  const items = all.slice(startIdx, startIdx + limit)
+  const reachedEnd = startIdx + limit >= all.length
+  return {
+    items,
+    next_cursor: reachedEnd || items.length === 0 ? null : items[items.length - 1].id,
+    total: all.length,
+  }
+}
+
+function InfiniteTableDemo() {
+  const all = useMemo(() => makeDemoRows(1000), [])
+  const query = useInfiniteQuery({
+    queryKey: ['design-system', 'infinite-table'],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      new Promise<KeysetPage>((resolve) =>
+        setTimeout(() => resolve(mockKeysetPage(all, pageParam)), 250),
+      ),
+    getNextPageParam: (lastPage) => lastPage.next_cursor,
+  })
+  const rows = query.data?.pages.flatMap((p) => p.items) ?? []
+  return (
+    <Table
+      rows={rows}
+      columns={scaleColumns}
+      rowKey={(r) => r.id}
+      loading={query.isLoading}
+      virtualized
+      infinite={{
+        hasNextPage: !!query.hasNextPage,
+        isFetchingNextPage: query.isFetchingNextPage,
+        fetchNextPage: () => query.fetchNextPage(),
+      }}
     />
   )
 }

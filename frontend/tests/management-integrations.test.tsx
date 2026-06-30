@@ -1,19 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
-import type { ReactNode } from 'react'
-import { ManagementTab } from '../src/components/settings/ManagementTab'
+import { screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { useAuthStore } from '../src/stores/authStore'
-import type { Household, Person } from '../src/types/auth'
+import type { Person } from '../src/types/auth'
 import type { FxProvider, FxProviderType } from '../src/types/fxProvider'
+import { HH, PREFS, makeResponse, renderManagementTab as renderTab } from './fixtures/household'
 
-const HH: Household = { householdId: 'h1', name: "Ben's Household", baseCurrency: 'SGD', timezone: 'Asia/Singapore' }
 const OWNER: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: true,
   theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false,
-  notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
+  notificationPrefs: PREFS,
 }
 const ADMIN: Person = { ...OWNER, personId: 'p2', displayName: 'Al', email: 'al@example.com', role: 'admin', canCreateHousehold: false }
 
@@ -26,10 +22,6 @@ const PROVIDERS: FxProvider[] = [
   { id: 'f1', provider_type: 'frankfurter', name: 'Frankfurter (ECB)', base_url: 'https://api.frankfurter.dev', api_key_secret_ref: null, priority: 0, is_enabled: true, last_status: null, last_checked_at: null, requires_key: false, key_configured: false },
   { id: 'o1', provider_type: 'openexchangerates', name: 'Open Exchange Rates', base_url: 'https://openexchangerates.org/api', api_key_secret_ref: 'EXCHANGERATE_API_KEY', priority: 1, is_enabled: false, last_status: null, last_checked_at: null, requires_key: true, key_configured: false },
 ]
-
-function makeResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-}
 
 function routeFetch() {
   return vi.fn(async (url: string | URL, opts?: RequestInit) => {
@@ -47,16 +39,6 @@ function routeFetch() {
     if (/\/api\/fx-providers\/[^/]+$/.test(u) && method === 'DELETE') return makeResponse(null, 204)
     throw new Error(`unexpected fetch ${u}`)
   })
-}
-
-function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  )
-  return render(<ManagementTab />, { wrapper })
 }
 
 let fetchMock: ReturnType<typeof vi.fn>

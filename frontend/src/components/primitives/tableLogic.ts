@@ -53,3 +53,31 @@ export type CommitTrigger = 'enter' | 'escape' | 'blur-out' | 'blur-within'
 export function shouldCommit(trigger: CommitTrigger): boolean {
   return trigger === 'enter' || trigger === 'blur-out'
 }
+
+/**
+ * Infinite-scroll (keyset paging, ARCH §4.10) fetch decision. The virtualized Table asks for the next
+ * page once the last windowed row index reaches within `overscan` of the end — but only while a next
+ * page exists AND no fetch is already in flight (the consumer owns the `useInfiniteQuery`; Table only
+ * signals — Table.tsx boundary). Pure so the near-bottom boundary is unit-tested without a DOM.
+ */
+export interface NearBottomArgs {
+  /** The greatest row index currently mounted by the virtualizer. */
+  lastIndex: number
+  /** Rows already loaded (the data source length). */
+  rowCount: number
+  /** The virtualizer's overscan buffer — fetch when within this many rows of the end. */
+  overscan: number
+  hasNextPage: boolean
+  isFetchingNextPage: boolean
+}
+
+export function shouldFetchNext({
+  lastIndex,
+  rowCount,
+  overscan,
+  hasNextPage,
+  isFetchingNextPage,
+}: NearBottomArgs): boolean {
+  if (!hasNextPage || isFetchingNextPage || rowCount === 0) return false
+  return lastIndex >= rowCount - 1 - overscan
+}

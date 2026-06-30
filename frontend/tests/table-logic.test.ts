@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextSort, sortRows, shouldCommit } from '../src/components/primitives/tableLogic'
+import { nextSort, sortRows, shouldCommit, shouldFetchNext } from '../src/components/primitives/tableLogic'
 
 interface Row {
   id: string
@@ -56,5 +56,25 @@ describe('shouldCommit (inline-edit commit decision)', () => {
   it('does not commit on Esc or blur-within (popup opened inside the cell)', () => {
     expect(shouldCommit('escape')).toBe(false)
     expect(shouldCommit('blur-within')).toBe(false)
+  })
+})
+
+describe('shouldFetchNext (infinite keyset paging decision)', () => {
+  const base = { rowCount: 100, overscan: 8, hasNextPage: true, isFetchingNextPage: false }
+  it('fetches once the last mounted row is within `overscan` of the end', () => {
+    expect(shouldFetchNext({ ...base, lastIndex: 91 })).toBe(true) // 91 >= 100-1-8 = 91
+    expect(shouldFetchNext({ ...base, lastIndex: 99 })).toBe(true)
+  })
+  it('does not fetch while still far from the bottom', () => {
+    expect(shouldFetchNext({ ...base, lastIndex: 50 })).toBe(false)
+  })
+  it('does not fetch when there is no next page (terminates the scroll)', () => {
+    expect(shouldFetchNext({ ...base, lastIndex: 99, hasNextPage: false })).toBe(false)
+  })
+  it('does not re-fire while a fetch is already in flight', () => {
+    expect(shouldFetchNext({ ...base, lastIndex: 99, isFetchingNextPage: true })).toBe(false)
+  })
+  it('does not fetch on an empty source', () => {
+    expect(shouldFetchNext({ ...base, lastIndex: -1, rowCount: 0 })).toBe(false)
   })
 })

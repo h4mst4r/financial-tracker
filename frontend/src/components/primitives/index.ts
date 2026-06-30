@@ -41,7 +41,7 @@ export type { ZoneProps } from './Zone'
 export { Dot } from './Dot'
 export type { DotProps, DotTone } from './Dot'
 export { Table } from './Table'
-export type { ColumnDef, CellEditContext, TableProps, SortState, SortDir } from './Table'
+export type { ColumnDef, CellEditContext, InfiniteSource, TableProps, SortState, SortDir } from './Table'
 export { dateColumn, textColumn, moneyColumn, selectColumn, actionsColumn } from './tableColumns'
 export { FilterBar } from './FilterBar'
 export type {

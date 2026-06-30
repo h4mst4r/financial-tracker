@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
+import { hexToOklab, mixOklab, luminanceFromOklab, contrastFromLuminance, type Oklab } from './helpers/oklab'
 
 // Story 5F.2 — the §0.11 contrast-floor guard for the DERIVED ramp. The structural ladder + text
 // emphasis are computed in CSS via `color-mix(in oklab, …)` from each theme's authored extremes
@@ -13,48 +14,10 @@ import { describe, it, expect } from 'vitest'
 
 const INDEX_CSS = readFileSync(join(__dirname, '..', 'src', 'index.css'), 'utf8')
 
-/* ── OKLab mix, mirroring CSS `color-mix(in oklab, a, b f%)` (f = fraction of b) ── */
-function hexToRgb(hex: string): [number, number, number] {
-  let h = hex.replace('#', '')
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
-  const n = parseInt(h, 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-function hexToOklab(hex: string): [number, number, number] {
-  const [r, g, b] = hexToRgb(hex).map((v) => lin(v / 255)) as [number, number, number]
-  const l_ = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-  const m_ = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-  const s_ = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-  return [
-    0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
-    1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
-    0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_,
-  ]
-}
-type Oklab = [number, number, number]
-/** color-mix(in oklab, a, b f%) — f is the fraction (0..1) of b. Stays in OKLab (no sRGB round-trip,
- *  so it matches the browser's `color-mix(in oklab)` to full precision — the live-verified ground truth). */
-function mixOklab(A: Oklab, B: Oklab, f: number): Oklab {
-  return [A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, A[2] + (B[2] - A[2]) * f]
-}
-/** WCAG relative luminance of an OKLab colour (OKLab → linear sRGB → luminance, gamut-clamped). */
-function luminance([L, a, b]: Oklab): number {
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
-  const s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
-  const cl = (v: number) => Math.max(0, Math.min(1, v))
-  const r = cl(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)
-  const g = cl(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
-  const bl = cl(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
-  return 0.2126 * r + 0.7152 * g + 0.0722 * bl
-}
-function contrast(x: Oklab, y: Oklab): number {
-  const lx = luminance(x)
-  const ly = luminance(y)
-  const [hi, lo] = lx >= ly ? [lx, ly] : [ly, lx]
-  return (hi + 0.05) / (lo + 0.05)
-}
+/* ── OKLab mix + WCAG contrast: shared test-only re-derivation (tests/helpers/oklab.ts), mirroring CSS
+   `color-mix(in oklab, a, b f%)` at full precision — the live-verified ground truth. ── */
+const contrast = (x: Oklab, y: Oklab): number =>
+  contrastFromLuminance(luminanceFromOklab(x), luminanceFromOklab(y))
 
 /* ── Parse a [data-theme] block's input vars (base-dark lives in @theme; it also carries the dark
    profile-fraction + emphasis defaults the other dark themes inherit). ── */

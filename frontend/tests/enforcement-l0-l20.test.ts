@@ -324,15 +324,7 @@ describe('Part II · L20 — every app scroll region reserves the gutter (scroll
   })
 })
 
-// ─── Pointers — the pre-existing guards that own L1/L1a, L17, L18 run in this suite's CI lane ────────
-describe('Part II · L1/L1a · L17 · L18 — the pre-existing guards exist and run', () => {
-  it('L1/L1a ramp-parity guard file exists (ramp-derivation.test.ts)', () => {
-    expect(() => readFileSync(join(__dirname, 'ramp-derivation.test.ts'), 'utf8')).not.toThrow()
-  })
-  it('L17 token-hygiene guard file exists (design-tokens.test.ts)', () => {
-    expect(() => readFileSync(join(__dirname, 'design-tokens.test.ts'), 'utf8')).not.toThrow()
-  })
-  it('L18 completeness guard file exists (design-system-completeness.test.tsx)', () => {
-    expect(() => readFileSync(join(__dirname, 'design-system-completeness.test.tsx'), 'utf8')).not.toThrow()
-  })
-})
+// L1/L1a, L17, and L18 are enforced by their own suites (ramp-derivation.test.ts,
+// design-tokens.test.ts, design-system-completeness.test.tsx) — they run in the same CI lane on their
+// own. No "the file exists" assertion here: a readFileSync().not.toThrow() proves nothing about whether
+// a guard runs, and a rename surfaces as that suite's own failure.

@@ -1,19 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
-import type { ReactNode } from 'react'
-import { ManagementTab } from '../src/components/settings/ManagementTab'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { useAuthStore } from '../src/stores/authStore'
-import type { Household, Person } from '../src/types/auth'
+import type { Person } from '../src/types/auth'
 import type { InvitationManage, ListResponse, Member } from '../src/types/household'
+import { HH, PREFS, makeResponse, renderManagementTab as renderTab } from './fixtures/household'
 
-const HH: Household = { householdId: 'h1', name: "Ben's Household", baseCurrency: 'SGD', timezone: 'Asia/Singapore' }
 const OWNER: Person = {
   personId: 'p1', displayName: 'Ben', email: 'ben@example.com', role: 'owner',
   pictureUrl: null, defaultView: 'household', displayCurrency: 'SGD', canCreateHousehold: true,
   theme: 'base', font: 'base', density: 'comfortable', displayFormat: 'DD-MM-YYYY', reduceMotion: false,
-  notificationPrefs: { budgetWarnings: true, budgetOverruns: true, missedRecurring: true, upcomingPayments: false, fxStale: true, backups: false },
+  notificationPrefs: PREFS,
 }
 const MEMBER: Person = { ...OWNER, personId: 'p2', email: 'mem@example.com', role: 'member', canCreateHousehold: false }
 
@@ -29,9 +25,6 @@ const MANAGE: ListResponse<InvitationManage> = {
   total: 2,
 }
 
-function makeResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-}
 function noContent() {
   return new Response(null, { status: 204 })
 }
@@ -54,16 +47,6 @@ function routeFetch() {
     if (opts?.method === 'DELETE') return noContent()
     throw new Error(`unexpected fetch ${u}`)
   })
-}
-
-function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  )
-  return render(<ManagementTab />, { wrapper })
 }
 
 let fetchMock: ReturnType<typeof vi.fn>

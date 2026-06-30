@@ -18,6 +18,16 @@ window.matchMedia = (query: string): MediaQueryList =>
     dispatchEvent: () => false,
   }) as MediaQueryList
 
+// jsdom has no ResizeObserver; @tanstack/react-virtual (Table virtualized/infinite modes, 5f-8)
+// observes the scroll element's rect with it. A no-op stub is enough — jsdom reports 0-sized rects
+// anyway, so windowing degrades to a small bounded set (sufficient for the bounded-DOM assertions).
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+window.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver
+
 afterEach(() => {
   cleanup()
 })

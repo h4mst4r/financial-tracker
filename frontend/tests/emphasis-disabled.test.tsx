@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { Input, Dropdown, SegmentedControl, Checkbox, Button } from '../src/components/primitives'
+import { mixHexOklab, luminanceFromHex, contrastFromLuminance } from './helpers/oklab'
 
 // Story 5f-5 — Emphasis & Disabled Cleanup. Two guards:
 //  1. §3a disabled wiring — every control routes through the ONE `disabled` utility (no opacity).
@@ -53,52 +54,11 @@ describe('§3a disabled — one utility, no opacity (B14/L5)', () => {
 })
 
 describe('§2 faint stop — solved to the 3:1 sub-floor (distinct from muted 4.5:1)', () => {
-  // OKLab mix matching CSS `color-mix(in oklab, pole, surface e%)`; WCAG contrast on sRGB luminance.
-  const hexToRgb = (h: string): [number, number, number] => {
-    const n = parseInt(h.replace('#', ''), 16)
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-  }
-  const lin = (c: number) => (c / 255 <= 0.04045 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4)
-  const unlin = (c: number) => {
-    const v = c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055
-    return Math.max(0, Math.min(255, Math.round(v * 255)))
-  }
-  const toOklab = (hex: string): [number, number, number] => {
-    const [r, g, b] = hexToRgb(hex).map((v) => lin(v)) as [number, number, number]
-    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-    return [
-      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-    ]
-  }
-  const fromOklab = ([L, A, B]: [number, number, number]): string => {
-    const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3
-    const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3
-    const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3
-    const R = unlin(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)
-    const G = unlin(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
-    const Bb = unlin(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)
-    return '#' + [R, G, Bb].map((v) => v.toString(16).padStart(2, '0')).join('')
-  }
-  const mix = (a: string, b: string, p: number) => {
-    const oa = toOklab(a)
-    const ob = toOklab(b)
-    const t = p / 100
-    return fromOklab([oa[0] + (ob[0] - oa[0]) * t, oa[1] + (ob[1] - oa[1]) * t, oa[2] + (ob[2] - oa[2]) * t])
-  }
-  const relLum = (hex: string) => {
-    const [r, g, b] = hexToRgb(hex)
-    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-  }
-  const contrast = (a: string, b: string) => {
-    const la = relLum(a)
-    const lb = relLum(b)
-    const [hi, lo] = la >= lb ? [la, lb] : [lb, la]
-    return (hi + 0.05) / (lo + 0.05)
-  }
+  // OKLab mix matching CSS `color-mix(in oklab, pole, surface e%)` resolved to a concrete swatch, then
+  // WCAG contrast on its sRGB luminance — the shared test-only re-derivation (tests/helpers/oklab.ts).
+  const mix = mixHexOklab
+  const contrast = (a: string, b: string) =>
+    contrastFromLuminance(luminanceFromHex(a), luminanceFromHex(b))
 
   // base-dark: --text-pole #fff over --color-surface = mix(--ramp-lo #080817, --ramp-hi #4f5070, --f-surface 22%).
   const pole = '#ffffff'

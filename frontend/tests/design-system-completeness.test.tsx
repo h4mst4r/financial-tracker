@@ -38,13 +38,13 @@ const SECTION_MARKER: Record<string, string> = {
   // Foundation
   'semantic-text': '.monetary-value',
   'value-atoms': '.monetary-value',
-  icon: 'svg',
+  icon: 'svg.lucide', // a real lucide glyph, not a synthetic <svg>
   // Primitives
   button: 'button',
-  badge: 'span',
+  badge: 'span.bg-success-fill', // the real §4 Badge token fill — a bare <span> stand-in wouldn't carry it
   dot: '[data-testid="dot"]',
   avatar: '[role="img"]',
-  'segmented-control': 'button',
+  'segmented-control': '.bg-control-active', // the real active-segment token, not just any <button>group
   toggle: 'button[role="switch"]',
   'progress-bar': '[role="progressbar"]',
   'mini-sparkline': 'svg.spark',
@@ -69,7 +69,11 @@ const SECTION_MARKER: Record<string, string> = {
   // Category Components
   'category-tree': '[data-testid="category-tree-row"]',
   'category-defaults': '[data-testid="category-defaults-prompt"]',
-  // Feedback & overlay (the demos render real trigger Buttons; the overlays portal on interaction)
+  // Feedback & overlay — the section holds only the real trigger Button at rest; the overlay itself
+  // portals to document.body on interaction, so it never lives INSIDE the <section> for a querySelector
+  // to find. 'button' is therefore the honest non-interactive ceiling here; that the *real* overlay
+  // component (not a stand-in) is wired is proven by the dedicated suites (overlay-primitives.test.tsx,
+  // entity-modal.test.tsx), which open each overlay and assert its portalled role/content.
   toast: 'button',
   'confirmation-dialog': 'button',
   modal: 'button',

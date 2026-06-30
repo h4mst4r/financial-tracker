@@ -458,9 +458,17 @@ Equal z-index → DOM/commit order decides paint; the lesson is the nesting, not
 - Every `primitives/index.ts` export must map to a `/design-system` section or
   `design-system-completeness.test.tsx` fails. Column factories live in their own `.tsx` to dodge
   `react-refresh/only-export-components`.
-- Seams (deferred, not bugs): `moneyColumn` display→`<MonetaryValue>` = 5.0b; `statusColumn`→StatusBadge =
-  5.0c; category/currency/account/person cols + amount+ccy edit cell = 5.2; aggregation profile (totals,
-  drill) = 9.3; reorderable config profile + bespoke-table retrofit = 5.12.
+- **Scale modes (5f-8):** `virtualized` windows the DOM via `@tanstack/react-virtual` (only visible rows +
+  an `overscan` buffer mount → bounded DOM); `infinite` (implies `virtualized`) is a server keyset-paging
+  **seam** — Table detects near-bottom + calls the consumer-supplied `infinite.fetchNextPage` and renders a
+  loading sentinel, but **never owns the query** (`useInfiniteQuery` lives in the consumer; boundary at
+  `Table.tsx:10`). Never a numbered pager (UX line 481). Row height = the `--ledger-row-height` density
+  token (read via `getComputedStyle`; L13 — no literal). The windowing uses leading/trailing **spacer
+  `<tr>`s** (padding rows) so the `colgroup`/`tableLayout:fixed` grid survives. Declare `virtualized` for
+  any list expected to exceed ~a few hundred rows.
+- Seams (deferred, not bugs): category/currency/account/person cols + amount+ccy edit cell = 5.2;
+  aggregation profile (totals, drill) = 9.2b; reorderable config profile + bespoke-table retrofit = 5.12.
+  *(`moneyColumn`→`MonetaryValue` and `statusColumn`→Badge+registry landed in 5f-3/5f-4.)*
 
 ## 3. State & API Rules
 

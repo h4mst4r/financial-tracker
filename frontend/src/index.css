@@ -367,6 +367,11 @@
   --control-height:    40px;
   --control-padding-y:  8px;
   --density-row-gap:    8px;
+  /* Ledger row height (§15) — the Table's virtualizer needs a known row height to window the DOM.
+     = py-control top+bottom (2 x 8) + the text-sm line box (20) + the 1px row border-b = 37. Read in
+     JS via getComputedStyle for estimateSize; declared as a resolved length (not calc) so the read
+     returns "37px", not the unresolved expression. Compact tightens it below. */
+  --ledger-row-height: 37px;
   /* Toggle dims (comfortable = bible .toggle: track 40x24, thumb 20, on-travel 16). */
   --toggle-track-w:    40px;
   --toggle-track-h:    24px;
@@ -377,6 +382,9 @@
   --control-height:    32px;
   --control-padding-y:  4px;
   --density-row-gap:    6px;
+  /* Compact ledger row = py-control (2 x 4) + 20 line box + 1px border = 29 (mirrors the comfortable
+     derivation above with the tightened padding). */
+  --ledger-row-height: 29px;
   /* Compact: derived proportionally from the 40 to 32 control-height step (no bible exemplar). */
   --toggle-track-w:    32px;
   --toggle-track-h:    20px;

@@ -467,7 +467,6 @@ export function CategoryTree({
       onDragCancel={() => setActiveCat(null)}
     >
       <div className="flex flex-col gap-1">
-        {showPromoteZone && <RootDropZone />}
         {parents.map((parent) => {
           const children = childrenOf(parent.id)
           const parentMenu = rowMenu(
@@ -516,6 +515,11 @@ export function CategoryTree({
             />
           )
         })}
+        {/* Promote target renders at the END of the list, never the top: appearing above the rows on
+            drag-start would shift every row (incl. the dragged one) down by the Zone's height, and
+            @dnd-kit anchors the DragOverlay to that post-shift position → the lifted chip lands a
+            Zone-height below the cursor. Appended last, it shifts nothing above it. */}
+        {showPromoteZone && <RootDropZone />}
       </div>
       <DragOverlay>{activeCat ? <DragChip category={activeCat} /> : null}</DragOverlay>
     </DndContext>
