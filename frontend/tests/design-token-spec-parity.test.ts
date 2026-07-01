@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
+import { PALETTES } from '../src/theme/palettes'
 
 // Anti-drift guard (CLAUDE.md P5). Spec defines concrete values → tests enforce → /design-system demos.
 // Story 5f-8 retired the design bible as the visual arbiter: this test replaces the old bible.css ↔
@@ -147,6 +148,26 @@ describe('UX spec ↔ index.css — radius / font parity', () => {
     expect(primaryFamily(rawToken(indexCss, 'font-mono'))).toBe('JetBrains Mono')
   })
 
+  // [Source: ux-design-specification.md §17 — the mobile bottom-nav bar is fixed chrome of height
+  //  --nav-mobile-h (48px, ≥ the 44px touch floor); drives the < md <main> inset + bulk-bar offset +
+  //  toast clearance (5f-11 D1). Pinned so the chrome height can't silently drift.]
+  it('mobile bottom-nav height matches the spec (§17 — 48px, ≥ 44px touch floor)', () => {
+    expect(rawToken(indexCss, 'nav-mobile-h')).toBe('48px')
+  })
+
+  // [Source: ux-design-specification.md §9 — modal-tier backdrop = "dim + blur 4px"; blur is modal-only
+  //  (FRONTEND-AUDIT D10). The radius is a single global token; pin it so it can't silently drift.]
+  it('modal backdrop blur radius matches the spec (§9 — 4px, modal-only)', () => {
+    expect(rawToken(indexCss, 'backdrop-blur')).toBe('4px')
+  })
+
+  // [Source: ux-design-specification.md §9 — the blur is a transparency effect and honours the OS
+  //  prefers-reduced-transparency setting (collapses to 0, dim scrim kept). Guard the toggle so it can't
+  //  be silently dropped.]
+  it('modal blur honours prefers-reduced-transparency (collapses to 0px)', () => {
+    expect(indexCss).toMatch(/@media\s*\(prefers-reduced-transparency:\s*reduce\)\s*\{[^}]*--backdrop-blur:\s*0px/)
+  })
+
   // Shadows are DERIVED in index.css since 5f-2 (each step's alpha lerps the per-theme --shadow-lo/-hi
   // via calc(); offset/blur geometry is global). The geometry is still authored — pin it so it can't
   // drift (the per-theme opacity is owned by ramp-derivation.test.ts).
@@ -155,5 +176,89 @@ describe('UX spec ↔ index.css — radius / font parity', () => {
     expect(rawToken(indexCss, 'shadow-md')).toContain('0 2px 8px')
     expect(rawToken(indexCss, 'shadow-lg')).toContain('0 8px 24px')
     expect(rawToken(indexCss, 'shadow-xl')).toContain('0 16px 48px')
+  })
+})
+
+// ── FRONTEND-AUDIT F8 — immersive tint/tintRamp: TS ↔ CSS single-source parity ──────────────────────
+// The immersive remap reads `tint`/`tintRamp` from theme/palettes.ts (the JS engine's snap ramp) while the
+// [data-theme] block in index.css authors what the theme actually renders. If they diverge, the resolver
+// snaps entity colours to a ramp the theme doesn't paint (the "split source of truth" F8 flagged). Assert
+// every JS ramp hex is authored somewhere in the matching index.css theme block.
+
+/** Concatenated text of every `[data-theme="<theme>"] { … }` block (a theme may split §0 inputs + anchors
+ *  across blocks). No nested braces inside these blocks. */
+function themeBlockText(css: string, theme: string): string {
+  const re = new RegExp(`\\[data-theme="${theme}"\\]\\s*\\{([^}]*)\\}`, 'g')
+  return [...css.matchAll(re)].map((m) => m[1]).join('\n')
+}
+
+describe('immersive tint/tintRamp — theme/palettes.ts ↔ index.css parity (FRONTEND-AUDIT F8)', () => {
+  const indexCss = readFileSync(INDEX_CSS, 'utf8')
+
+  it('self-test: the block extractor finds the gameboy anchor', () => {
+    expect(themeBlockText(indexCss, 'gameboy').toLowerCase()).toContain('#8bac0f')
+  })
+
+  for (const [theme, meta] of Object.entries(PALETTES)) {
+    if (!meta.immersive) continue
+    it(`every palettes.ts tint/tintRamp hex is authored in the ${theme} theme block`, () => {
+      const block = themeBlockText(indexCss, theme).toLowerCase()
+      const jsHexes = [meta.tint, ...(meta.tintRamp ?? [])].filter((h): h is string => !!h).map((h) => h.toLowerCase())
+      expect(jsHexes.length).toBeGreaterThan(0) // an immersive palette must declare its ramp
+      const missing = jsHexes.filter((h) => !block.includes(h))
+      expect(missing).toEqual([])
+    })
+  }
+})
+
+// ── FRONTEND-AUDIT F9/D8 — compact density: the §15 transform is spec-locked, pin it ────────────────
+// [Source: ux-design-specification.md §15 Density — compact = a transform on the comfortable tokens:
+//  control/row heights ×0.8, vertical padding −1 spacing step (e.g. control-height 40→32, py xs→2xs).]
+// The core transform (control-height + vertical padding) is spec-exemplar'd, so pin it here against drift.
+// NOT pinned (residual spec-gap, escalated to UX): the compact toggle geometry + compact row-gap, which
+// index.css:393 itself labels "no bible exemplar" — the systematized spec has no locked value for them.
+
+/** A token read WITHIN a specific selector block (the same token name lives in `:root` and the compact
+ *  block, so a whole-file scan would return the wrong tier). Returns the value in the first block matching
+ *  the selector that declares the token. No nested braces inside these blocks. */
+function scopedToken(css: string, selector: string, name: string): string | undefined {
+  const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  for (const m of css.matchAll(new RegExp(`${esc}\\s*\\{([^}]*)\\}`, 'g'))) {
+    const t = m[1].match(new RegExp(`--${name}\\s*:\\s*([^;]+);`))
+    if (t) return t[1].trim()
+  }
+  return undefined
+}
+
+describe('UX spec ↔ index.css — compact density transform parity (§15, FRONTEND-AUDIT F9/D8)', () => {
+  const indexCss = readFileSync(INDEX_CSS, 'utf8')
+
+  it('self-test: the scoped reader distinguishes the comfortable vs compact tier', () => {
+    expect(scopedToken(indexCss, ':root', 'control-height')).toBe('40px')
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'control-height')).toBe('32px')
+  })
+
+  it('comfortable (default tier) — control-height 40 / vertical padding 8', () => {
+    expect(scopedToken(indexCss, ':root', 'control-height')).toBe('40px')
+    expect(scopedToken(indexCss, ':root', 'control-padding-y')).toBe('8px')
+  })
+
+  it('compact = ×0.8 control-height (40→32) + −1-step vertical padding (xs 8 → 2xs 4) [§15]', () => {
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'control-height')).toBe('32px')
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'control-padding-y')).toBe('4px')
+  })
+
+  it('compact row-gap = −1 step, on-scale (xs 8 → 2xs 4) [§15, FRONTEND-AUDIT F9]', () => {
+    expect(scopedToken(indexCss, ':root', 'density-row-gap')).toBe('8px')
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'density-row-gap')).toBe('4px')
+  })
+
+  it('compact toggle = track-w & thumb ×0.8, track-h/travel derived (2px inset) [§15]', () => {
+    // free values (×0.8): track-w 40→32, thumb 20→16
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'toggle-track-w')).toBe('32px')
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'toggle-thumb')).toBe('16px')
+    // derived: track-h = thumb + 2·inset = 20; travel = track-w − thumb − 2·inset = 12
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'toggle-track-h')).toBe('20px')
+    expect(scopedToken(indexCss, '[data-density="compact"]', 'toggle-thumb-travel')).toBe('12px')
   })
 })

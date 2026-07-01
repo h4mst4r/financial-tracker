@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { contrastText } from '../../theme/colour'
 
+// Avatar initials (and the "+N" overflow count) render at a fixed fraction of the avatar size — the one
+// legible ratio locked in UX §8 ("Avatar initials = ×0.40 of the avatar size"). A named constant, not a
+// magic literal (FRONTEND-AUDIT B9); guarded by avatar.test.tsx.
+const AVATAR_INITIALS_RATIO = 0.4
+
 interface AvatarProps {
   src?: string
   /** Required for a person avatar (initials + aria); omit only for the `overflow` count variant. */
@@ -22,7 +27,7 @@ export function Avatar({ src, name = '', colour, size = 32, className = '', over
         role="img"
         aria-label={`${overflow} more`}
         className={`inline-flex items-center justify-center rounded-full bg-surface-active font-medium text-text-default ${className}`}
-        style={{ width: size, height: size, fontSize: size * 0.4 }}
+        style={{ width: size, height: size, fontSize: size * AVATAR_INITIALS_RATIO }}
       >
         +{overflow}
       </span>
@@ -72,7 +77,7 @@ export function Avatar({ src, name = '', colour, size = 32, className = '', over
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.38,
+        fontSize: size * AVATAR_INITIALS_RATIO,
         backgroundColor: bgColor,
         color: textColour,
       }}

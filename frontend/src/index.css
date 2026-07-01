@@ -83,6 +83,9 @@
   --color-ring-glow-accent:  color-mix(in oklab, var(--color-accent-secondary) var(--alpha-ring-glow), transparent);
   --color-ring-glow-error:   color-mix(in oklab, var(--color-error)            var(--alpha-ring-glow), transparent);
   --color-backdrop:          rgb(0 0 0 / 0.7);
+  /* Modal-tier backdrop blur (UX §9 — "dim + blur 4px"; blur is modal-only, separable from dim). Global
+     (not per-theme); consumed by the .backdrop-blur-modal utility on the Modal backdrop only. */
+  --backdrop-blur:           4px;
 
   /* ── Colour · semantic (UX §0.1/§0.9 status + inflow/outflow) ── */
   --color-success:       #22c55e;
@@ -207,6 +210,11 @@
      top-right cluster (search · alerts bell · avatar menu) + a centered command palette, so a toast
      never obscures an open menu/panel. A named spacing token (no magic px). ── */
   --toast-inset-bottom: var(--spacing-lg);
+
+  /* ── Mobile bottom-nav bar (UX §17) — fixed chrome height; ≥ --touch-target (44px). Density-
+     independent (mobile chrome doesn't follow desktop density tiers). Single source for the bar
+     height, the <main> bottom inset, < md bottom-pinned offsets, and the < md toast clearance. ── */
+  --nav-mobile-h: 48px;
 }
 
 /* Default for the runtime per-instance entity colour so a fill utility used without an
@@ -360,6 +368,11 @@
 @media (prefers-reduced-motion: reduce) { :root { --motion-factor: 0; } html { scroll-behavior: auto; } }
 [data-reduce-motion="true"] { --motion-factor: 0; scroll-behavior: auto; }
 
+/* Reduced-transparency (a11y, UX §9): the modal backdrop blur is a TRANSPARENCY effect (not motion), so it
+   honours the OS prefers-reduced-transparency setting — collapse the blur to 0 (the dim scrim is kept, so
+   the modal still separates). Distinct axis from reduce-motion above. */
+@media (prefers-reduced-transparency: reduce) { :root { --backdrop-blur: 0px; } }
+
 /* ── Density (UX §0.4) — comfortable default in :root; [data-density="compact"] tightens.
    Absence of data-density = comfortable (mirrors theme/font/reduce-motion). Per-person seam
    in themeStore; toggle UI is 1.8c, persistence 2-9. ── */
@@ -381,11 +394,13 @@
 [data-density="compact"] {
   --control-height:    32px;
   --control-padding-y:  4px;
-  --density-row-gap:    6px;
+  /* gaps −1 spacing step (UX §15): comfortable xs 8 → compact 2xs 4 (on-scale; was an off-scale 6px). */
+  --density-row-gap:    4px;
   /* Compact ledger row = py-control (2 x 4) + 20 line box + 1px border = 29 (mirrors the comfortable
      derivation above with the tightened padding). */
   --ledger-row-height: 29px;
-  /* Compact: derived proportionally from the 40 to 32 control-height step (no bible exemplar). */
+  /* Compact toggle (UX §15): track-w & thumb ×0.8 (40→32 · 20→16), constant 2px thumb inset;
+     track-h = thumb + 2·inset = 20, travel = track-w − thumb − 2·inset = 12 (both derived). */
   --toggle-track-w:    32px;
   --toggle-track-h:    20px;
   --toggle-thumb:      16px;
@@ -506,6 +521,12 @@
 @utility max-h-bottom-sheet { max-height: 80vh; }
 @utility sheet-handle       { width: 2.5rem; height: 0.25rem; }
 
+/* ── Mobile bottom-nav chrome (UX §17, --nav-mobile-h): the fixed bar height, the < md <main>
+   bottom inset, and the bottom offset for < md bottom-pinned elements (e.g. BulkActionBar). P4. ── */
+@utility h-nav-mobile      { height: var(--nav-mobile-h); }
+@utility pb-nav-mobile     { padding-bottom: var(--nav-mobile-h); }
+@utility bottom-nav-mobile { bottom: var(--nav-mobile-h); }
+
 /* ── /design-system AppShell demo: clipped preview height so the shell doesn't take the page. P4. ── */
 @utility h-appshell-demo { height: 26rem; }
 
@@ -527,6 +548,12 @@
    Same dodge as max-w-input/max-w-tooltip above. Values track the design bible (.pubpage 380, .modal 440). ── */
 @utility max-w-empty-state { max-width: 380px; }
 @utility max-w-modal       { max-width: 440px; }
+/* Modal-tier backdrop blur (UX §9 — dim + blur 4px, modal-only). Applied to the Modal backdrop scrim on
+   top of its bg-backdrop dim; no other elevation tier blurs. -webkit- for Safari. P4. */
+@utility backdrop-blur-modal {
+  backdrop-filter: blur(var(--backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--backdrop-blur));
+}
 /* Tall-form cap (Story 4.12): a centred EntityModal taller than this scrolls its body, header/footer
    pinned (the insurance form). Interim until the §8.2 side-drawer (Story 7.3). P4. */
 @utility max-h-modal       { max-height: 90vh; }
@@ -571,6 +598,8 @@
    ToastContainer, never a transitionend, because a 0s reduce-motion transition emits none. (§1.1 places
    the stack via bottom-toast.) ── */
 @utility bottom-toast { bottom: var(--toast-inset-bottom); }
+/* < md the toast stack clears the fixed mobile nav bar (UX §17) — stacks the resting inset above it. */
+@utility bottom-toast-mobile { bottom: calc(var(--nav-mobile-h) + var(--toast-inset-bottom)); }
 /* Slide uses `translate-x-*`, which compiles to the `translate` property in Tailwind v4 (NOT
    `transform`) — so the property list must name `translate`, or the slide snaps while only the fade runs. */
 @utility transition-toast { transition-property: grid-template-rows, opacity, translate; }

@@ -4,7 +4,7 @@ import { EMPTY_STATE } from '../config/emptyStateRegistry'
 import { EntityPage, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
 import { CategoryTree } from '../components/category/CategoryTree'
-import { CategoryDefaultsPrompt } from '../components/category/CategoryDefaultsPrompt'
+import { Button } from '../components/primitives/Button'
 import { Label } from '../components/primitives/Label'
 import { Input } from '../components/primitives/Input'
 import { SegmentedControl } from '../components/primitives/SegmentedControl'
@@ -353,11 +353,14 @@ export function Categories() {
         emptyTitle={EMPTY_STATE.categories.title}
         emptyDescription={EMPTY_STATE.categories.description}
         emptyAction={
-          <CategoryDefaultsPrompt
-            onCreateDefaults={onCreateDefaults}
-            onNewCategory={openCreate}
-            isCreating={isSeeding}
-          />
+          <div className="flex flex-wrap items-center justify-center gap-sm">
+            <Button onClick={onCreateDefaults} disabled={isSeeding}>
+              Create defaults
+            </Button>
+            <Button variant="outline" onClick={openCreate}>
+              New category
+            </Button>
+          </div>
         }
       >
         <CategoryTree
@@ -373,8 +376,12 @@ export function Categories() {
         />
       </EntityPage>
 
-      {/* Bulk-action bar — pinned to the bottom of the list region; hidden at zero selection. */}
-      <div className="sticky bottom-lg mt-md flex justify-center">
+      {/* Bulk-action bar — pinned to the bottom of the list region; hidden at zero selection. < md it
+          pins flush above the fixed mobile nav and goes full-width (the bar itself scrolls its actions).
+          NB: `bottom-0` (not bottom-nav-mobile) — `AppShell <main>` already insets its bottom by
+          --nav-mobile-h (UX §17), and sticky `bottom` is measured from that padded scrollport edge, so a
+          second nav-height offset here would COMPOUND into a gap. ≥ md it's the centred sticky bar. */}
+      <div className="sticky bottom-lg max-md:bottom-0 mt-md flex justify-center">
         <BulkActionBar count={selected.length} onClear={select.clear} actions={bulkActions} />
       </div>
 

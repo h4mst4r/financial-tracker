@@ -71,7 +71,7 @@ export function ToastContainer() {
   if (toasts.length === 0) return <></>
 
   return (
-    <div className="fixed bottom-toast right-md z-toast flex flex-col">
+    <div className="fixed bottom-toast max-md:bottom-toast-mobile right-md z-toast flex flex-col">
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} />
       ))}

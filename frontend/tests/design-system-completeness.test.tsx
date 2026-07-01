@@ -68,7 +68,6 @@ const SECTION_MARKER: Record<string, string> = {
   'emoji-icon-picker': 'button[aria-haspopup="dialog"]',
   // Category Components
   'category-tree': '[data-testid="category-tree-row"]',
-  'category-defaults': '[data-testid="category-defaults-prompt"]',
   // Feedback & overlay — the section holds only the real trigger Button at rest; the overlay itself
   // portals to document.body on interaction, so it never lives INSIDE the <section> for a querySelector
   // to find. 'button' is therefore the honest non-interactive ceiling here; that the *real* overlay

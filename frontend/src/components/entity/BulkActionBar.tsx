@@ -121,7 +121,7 @@ export function BulkActionBar({ count, onClear, actions }: BulkActionBarProps) {
       role="toolbar"
       aria-label="Bulk actions"
       data-testid="bulk-action-bar"
-      className="animate-slide-up flex flex-nowrap items-center gap-sm overflow-x-auto rounded-lg border border-border bg-surface-overlay px-md py-sm shadow-lg"
+      className="animate-slide-up flex flex-nowrap items-center gap-sm overflow-x-auto rounded-lg border border-border bg-surface-overlay px-md py-sm shadow-lg max-md:w-full"
     >
       <b className="whitespace-nowrap text-sm font-semibold">{count} selected</b>
       {/* Clear = a ghost ICON button (the `×` glyph only), per UX line 530 — no text label. The label

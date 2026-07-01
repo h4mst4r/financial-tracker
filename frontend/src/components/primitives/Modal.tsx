@@ -100,7 +100,7 @@ export function Modal({
       onClick={handleBackdropClick}
     >
       <div
-        className={`fixed inset-0 bg-backdrop transition-opacity duration-base ${entered ? 'opacity-100' : 'opacity-0'}`}
+        className={`fixed inset-0 bg-backdrop backdrop-blur-modal transition-opacity duration-base ${entered ? 'opacity-100' : 'opacity-0'}`}
       />
       <div
         ref={panelRef}

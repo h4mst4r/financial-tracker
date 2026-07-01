@@ -457,6 +457,82 @@ describe('ConfirmationDialog', () => {
     ))
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
   })
+
+  it('confirmText gates the primary: disabled until the typed value matches', () => {
+    render(wrap(
+      <ConfirmationDialog
+        open
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        title="Delete"
+        message="Type to confirm"
+        confirmText="DELETE"
+        confirmInputLabel="Type DELETE"
+        confirmInputAriaLabel="Type DELETE to confirm"
+      />
+    ))
+    const confirmBtn = screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement
+    const input = screen.getByLabelText('Type DELETE to confirm') as HTMLInputElement
+    expect(confirmBtn.disabled).toBe(true)
+    fireEvent.change(input, { target: { value: 'wrong' } })
+    expect(confirmBtn.disabled).toBe(true)
+    fireEvent.change(input, { target: { value: 'DELETE' } })
+    expect(confirmBtn.disabled).toBe(false)
+  })
+
+  it('busy still disables the primary even when the confirm value matches', () => {
+    render(wrap(
+      <ConfirmationDialog
+        open
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        title="Delete"
+        message="Type to confirm"
+        confirmText="DELETE"
+        confirmInputAriaLabel="Type DELETE to confirm"
+        busy
+      />
+    ))
+    fireEvent.change(screen.getByLabelText('Type DELETE to confirm'), { target: { value: 'DELETE' } })
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('no confirmText: no input renders and the primary is enabled (the plain default)', () => {
+    render(wrap(
+      <ConfirmationDialog open onClose={vi.fn()} onConfirm={vi.fn()} title="X" message="Y" />
+    ))
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('reopening resets the typed confirm value', () => {
+    function Harness() {
+      const [open, setOpen] = useState(true)
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>reopen</button>
+          <ConfirmationDialog
+            open={open}
+            onClose={() => setOpen(false)}
+            onConfirm={vi.fn()}
+            title="Delete"
+            message="Type to confirm"
+            confirmText="DELETE"
+            confirmInputAriaLabel="Type DELETE to confirm"
+          />
+        </>
+      )
+    }
+    render(wrap(<Harness />))
+    fireEvent.change(screen.getByLabelText('Type DELETE to confirm'), { target: { value: 'DELETE' } })
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(false)
+    // Close (Cancel) then reopen — the typed value must not carry over.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'reopen' }))
+    const input = screen.getByLabelText('Type DELETE to confirm') as HTMLInputElement
+    expect(input.value).toBe('')
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true)
+  })
 })
 
 /* ── Toast ── */

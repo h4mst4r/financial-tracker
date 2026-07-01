@@ -967,15 +967,7 @@ function LeaveHousehold() {
 function DeleteHousehold() {
   const household = useAuthStore((s) => s.household)
   const [open, setOpen] = useState(false)
-  const [typed, setTyped] = useState('')
   const del = useDeleteHousehold()
-
-  function close() {
-    setOpen(false)
-    setTyped('')
-  }
-
-  const confirmed = typed === household?.name
 
   return (
     <div className="flex items-center justify-between gap-md">
@@ -989,40 +981,27 @@ function DeleteHousehold() {
       <Button variant="danger" onClick={() => setOpen(true)} disabled={del.isPending}>
         Delete household
       </Button>
-      <Modal
+      <ConfirmationDialog
         open={open}
-        onClose={close}
+        onClose={() => setOpen(false)}
+        // Confirm runs the delete WITHOUT auto-closing — success clears auth → redirect to /login
+        // unmounts this; failure leaves the dialog open. (The old raw-Modal Delete behaved the same.)
+        onConfirm={() => del.mutate()}
+        closeOnConfirm={false}
         title="Delete household"
-        footer={
+        confirmLabel="Delete household"
+        busy={del.isPending}
+        confirmText={household?.name}
+        confirmInputLabel="Household name"
+        confirmInputAriaLabel="Type the household name to confirm"
+        message={
           <>
-            <Button variant="ghost" onClick={close} disabled={del.isPending}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => del.mutate()}
-              disabled={!confirmed || del.isPending}
-            >
-              Delete household
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-2xs">
-          <p className="text-sm text-text-default">
             This permanently deletes <strong className="text-text-strong">{household?.name}</strong>{' '}
             and all its data, and signs out every member. This cannot be undone. Type the household
             name to confirm.
-          </p>
-          <Label htmlFor="delete-confirm">Household name</Label>
-          <Input
-            id="delete-confirm"
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            aria-label="Type the household name to confirm"
-          />
-        </div>
-      </Modal>
+          </>
+        }
+      />
     </div>
   )
 }

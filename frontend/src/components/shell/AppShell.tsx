@@ -11,7 +11,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
-        <main className="flex-1 overflow-y-auto scrollbar-gutter-stable">{children}</main>
+        {/* < md reserve bottom space for the fixed mobile Menu bar (UX §17, --nav-mobile-h) so scrolled
+            content never hides behind it; ≥ md there is no bottom bar. */}
+        <main className="flex-1 overflow-y-auto scrollbar-gutter-stable pb-nav-mobile md:pb-0">{children}</main>
       </div>
     </div>
   )

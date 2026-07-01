@@ -452,6 +452,17 @@ Both `Modal` and `ContextMenu` `createPortal` to `document.body`.
 Equal z-index → DOM/commit order decides paint; the lesson is the nesting, not the number. Verify live
 (`document.elementFromPoint` on the action button) — jsdom has no stacking/paint.
 
+**ConfirmationDialog confirm-input safeguard (UX §Layer-2 — type-to-confirm).** For a high-risk destructive
+confirm (delete-household, drop-data), pass `confirmText` (the exact value the user must type). The dialog then
+renders a labelled `Input` below the `message` and keeps the primary (destructive) `Button` **disabled until the
+typed value `=== confirmText`** (combined with `busy`, so it's `busy || !match`). Pair it with
+`confirmInputLabel` (visible `<Label>`) and/or `confirmInputAriaLabel` (the a11y name — overrides the visible
+label). **The dialog owns the typed value and resets it on close**, so a reopened dialog is never pre-filled — do
+NOT hand-roll a raw `Modal` + local `typed` state for this. Omit `confirmText` for the plain decision dialog
+(default, unchanged). Reach for `closeOnConfirm={false}` when the confirm action itself unmounts the dialog (e.g.
+delete → clear-auth → redirect), so it doesn't flash a reset state before unmounting. See `DeleteHousehold`
+(`ManagementTab.tsx`) for the canonical consumer.
+
 ### 2.13 Searchable Dropdown; Toast & Scroll-Gutter Polish
 
 - **Dropdown has an opt-in `searchable` prop** (Story 1.13) — ONE combobox component, reuse for any "type
@@ -467,6 +478,30 @@ Equal z-index → DOM/commit order decides paint; the lesson is the nesting, not
   `grid-template-rows 0fr↔1fr` (height growth bumps older toasts) + inner `translate-x`/`opacity` slide.
   Removal is **timer-driven** (`TOAST_EXIT_MS`), NOT `transitionend` — a 0s reduce-motion transition emits
   no `transitionend`, so the toast would stick in the DOM.
+- **Dropdown menu width = `max(trigger, content)`** (5f-11, UX §436): the portalled panel is `w-max` +
+  inline `minWidth: pos.width` (the trigger width as a floor) — **never** a fixed `width: pos.width`. So a
+  full-width field trigger keeps a trigger-width menu (content ≤ trigger) while a deliberately-compact
+  trigger (`w-bulk-picker`, the BulkActionBar pickers) lets its menu grow to its labels instead of wrapping.
+  This is the **default for every Dropdown** — do NOT add a per-call `menuFit`-style flag (that was tried and
+  reverted as unspecced drift; the §436 rule supersedes it). **Law:** a Dropdown menu never wraps an option row.
+
+### 2.14a Mobile bottom-nav chrome & `< md` bottom-pinned elements (5f-11, UX §17)
+
+- **`--nav-mobile-h` (48px)** is the one source for the fixed mobile Menu bar height (`h-nav-mobile` on
+  `Sidebar`'s `MobileNav` bar), the `AppShell <main>` bottom inset (`pb-nav-mobile md:pb-0` — so scrolled
+  content clears the bar `< md`), and the offset for any `< md` bottom-pinned element.
+- **A bottom-pinned `< md` element clears the nav — but HOW depends on whether it lives inside the padded
+  `<main>` or not.** Two cases, don't conflate them:
+  - **Inside `<main>` (sticky):** `BulkActionBar`'s wrapper is `bottom-lg max-md:bottom-0` (+ the bar
+    `max-md:w-full`, keeping `overflow-x-auto` so actions scroll not clip). It uses **`bottom-0`, not
+    `bottom-nav-mobile`** — `<main>` already insets its bottom by `--nav-mobile-h`, and sticky `bottom` is
+    measured from that padded scrollport edge, so a second nav-height offset would **compound into a 48px gap**
+    (caught in 5f-11 code review). Rely on the inset; pin flush with `bottom-0`.
+  - **Outside `<main>` (fixed):** `ToastContainer` is mounted outside AppShell (so its z isn't trapped), so it
+    gets **no** `<main>` padding and must add the whole clearance itself: `bottom-toast max-md:bottom-toast-mobile`
+    (`calc(--nav-mobile-h + --toast-inset-bottom)`).
+  - Overlap is fixed by the **inset/offset**, not z — §9 already stacks `sticky` (z200) below the mobile nav
+    (z300). For any future `< md` bottom chrome, first ask: inside the padded scroll container, or fixed outside it?
 
 ### 2.14 Table\<T\> Record-Ledger Primitive (Story 5.0a)
 

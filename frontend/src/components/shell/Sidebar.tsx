@@ -92,7 +92,7 @@ function MobileNav() {
       <button
         data-testid="mobile-menu-bar"
         onClick={() => setOpen(true)}
-        className="z-sidebar fixed inset-x-0 bottom-0 flex items-center justify-center gap-sm border-t border-border bg-surface px-md py-sm text-sm text-text-strong"
+        className="z-sidebar fixed inset-x-0 bottom-0 flex h-nav-mobile items-center justify-center gap-sm border-t border-border bg-surface px-md text-sm text-text-strong"
       >
         <Icon icon={CONTROL_ICON.menu} /> Menu
       </button>

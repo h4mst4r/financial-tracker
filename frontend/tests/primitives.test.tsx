@@ -228,6 +228,17 @@ describe('Dropdown', () => {
     expect(options.filter((o) => o.getAttribute('tabindex') === '-1')).toHaveLength(1)
   })
 
+  it('menu panel sizes to its content, not the trigger width (5f-11 D3 — w-max + min-width, no fixed width)', () => {
+    render(wrap(<Dropdown value="" options={opts} onChange={() => {}} placeholder="Pick" />))
+    fireEvent.click(screen.getByRole('button', { name: /Pick/i }))
+    const panel = screen.getByRole('listbox')
+    // The panel grows to max(trigger, content): `w-max` + a trigger-width floor via inline min-width —
+    // it must NOT be locked to a fixed trigger `width` (the pre-5f-11 behaviour that wrapped labels).
+    expect(panel.className).toContain('w-max')
+    expect(panel.style.width).toBe('')
+    expect(panel.style.minWidth).not.toBe('')
+  })
+
   /* ── searchable mode (story 1.13, AC1) ── */
 
   const searchOpts = [

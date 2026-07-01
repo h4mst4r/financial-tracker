@@ -113,15 +113,12 @@ describe('Categories page', () => {
 
   // ── Story 3.3: Create-defaults empty state (FR-C-007) ──
 
-  test('empty state shows the Create defaults prompt + a chip preview', () => {
+  test('empty state shows the Create defaults + New category actions (UX §6/§18)', () => {
     mockItems = []
     renderPage()
     expect(screen.getByRole('button', { name: 'Create defaults' })).toBeTruthy()
     // The secondary New-category action also appears (exact name — the toolbar's is "+ New category").
     expect(screen.getByRole('button', { name: 'New category' })).toBeTruthy()
-    // Chip preview mirrors the seed (income chip present).
-    expect(screen.getByText('Salary')).toBeTruthy()
-    expect(screen.getByText('Food & Dining')).toBeTruthy()
   })
 
   test('Create defaults posts to the defaults endpoint then refetches', async () => {

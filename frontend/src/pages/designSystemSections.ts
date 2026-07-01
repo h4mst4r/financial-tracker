@@ -62,7 +62,6 @@ export const DESIGN_SYSTEM_SECTIONS: DesignSystemSection[] = [
   { id: 'colour-picker', label: 'ColourPicker', group: 'Pickers' },
   { id: 'emoji-icon-picker', label: 'EmojiIconPicker', group: 'Pickers' },
   { id: 'category-tree', label: 'CategoryTree', group: 'Category Components' },
-  { id: 'category-defaults', label: 'Create defaults', group: 'Category Components' },
   { id: 'toast', label: 'Toast', group: 'Feedback & overlay' },
   { id: 'confirmation-dialog', label: 'ConfirmationDialog', group: 'Feedback & overlay' },
   { id: 'modal', label: 'Modal', group: 'Feedback & overlay' },

@@ -152,8 +152,8 @@ export function Dropdown({ value, options, onChange, placeholder, disabled, id, 
           ref={panelRef}
           role="listbox"
           tabIndex={-1}
-          className="fixed z-popover bg-surface-raised border border-border rounded-md shadow-lg"
-          style={{ left: pos.x, top: pos.y, width: pos.width }}
+          className="fixed z-popover w-max bg-surface-raised border border-border rounded-md shadow-lg"
+          style={{ left: pos.x, top: pos.y, minWidth: pos.width }}
           onKeyDown={onKeyDown}
         >
           {searchable && (

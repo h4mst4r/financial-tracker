@@ -187,7 +187,7 @@ Inter (sans) · JetBrains Mono (money, columnar contexts only). Scale (geometric
 
 ## 8. Spacing / Radius / Size
 
-Spacing (8px): 2xs 4 · xs 8 · sm 12 · md 16 · lg 24 · xl 32 · 2xl 48. Radius (4px): sm 4 · md 8 · lg 12 (card) · xl 16 · full. **Size** (icon / avatar / indicator): xs 16 · sm 20 · md 24 · lg 32 · xl 40 · 2xl 48. **Control height** (button/input/segment/row): base 40 · compact 32 (the ×0.8 density transform, §15). **Law:** no raw px / arbitrary Tailwind values in TSX.
+Spacing (8px): 2xs 4 · xs 8 · sm 12 · md 16 · lg 24 · xl 32 · 2xl 48. Radius (4px): sm 4 · md 8 · lg 12 (card) · xl 16 · full. **Size** (icon / avatar / indicator): xs 16 · sm 20 · md 24 · lg 32 · xl 40 · 2xl 48. **Avatar initials** = **×0.40 of the avatar size** (the one legible ratio — e.g. md 24→9.6, lg 32→12.8, xl 40→16; xs/sm avatars are image-first). **Control height** (button/input/segment/row): base 40 · compact 32 (the ×0.8 density transform, §15). **Law:** no raw px / arbitrary Tailwind values in TSX.
 
 **Content-region (slot) rule:** any region hosting routed or centred content — **AppShell main · NeutralShell centre · Modal / Dialog / Drawer body · page content · EmptyState** — **fills its available main-axis** and **sets `min-w-0` / `min-h-0`** (defeats the flex min-content collapse — the recurring "one-word-wide" bug) and **owns its own overflow/scroll**. One rule; every slot inherits it. **Law:** a content slot without the min-axis reset FAILS.
 
@@ -203,11 +203,11 @@ Two axes: **tone** (§1) and **elevation** = `{ z, shadow, below-treatment }`. S
 | 100 | dropdown | lg | click-catcher (no dim) |
 | 200 | sticky | none → sm on scroll | none |
 | 300 | sidebar | desktop none / mobile xl | desktop none / mobile backdrop |
-| 400 | modal | xl | backdrop (dim + optional blur) |
+| 400 | modal | xl | backdrop (dim + blur 4px) |
 | 500 | toast | lg | none — never blocks |
 | 600 | tooltip | md / none | none, `pointer-events:none` |
 
-Backdrop lives **only** at the modal family (+ mobile drawer); a `ConfirmationDialog` is modal-family (backdrop), **not** a toast. Nested modals stack within the band, each its own backdrop. Blur is modal-only, separable from dim.
+Backdrop lives **only** at the modal family (+ mobile drawer); a `ConfirmationDialog` is modal-family (backdrop), **not** a toast. Nested modals stack within the band, each its own backdrop. Blur is modal-only, separable from dim — the modal-tier backdrop is **dim + `blur(4px)`** (the `--backdrop-blur` token); no other tier blurs. **A11y (accessibility floor):** the blur is a *transparency* effect (not motion), so it honours the OS **`prefers-reduced-transparency`** setting — under `reduce` the blur collapses to `0` while the dim scrim is kept, so the modal still separates. It does **not** couple to `prefers-reduced-motion`/`data-reduce-motion` (a different axis).
 
 **Shadow** — geometry per step is fixed (`y blur`: sm `0 1 2` · md `0 2 8` · lg `0 8 24` · xl `0 16 48`). **Opacity = `lerp(opacity-lo, opacity-hi, step)`** (§0a): a theme authors just the **two extremes** — dark `[.30, .55]`, light `[.06, .16]` (light needs stronger; dark leans on the surface-lift). Colour = `shadow-tint` (if unset, inherits near-black `#000`).
 
@@ -295,7 +295,7 @@ No touch hover → affordances always-visible or via long-press.
 
 ## 15. Density
 
-comfortable (default) / compact = a **transform on spacing/size tokens**: control/row heights **×0.8**, vertical padding **−1 spacing step**, gaps **−1 step** (e.g. control-height 40→32, `py` xs→2xs). **Law:** any hardcoded height/padding not reading a density token FAILS compact.
+comfortable (default) / compact = a **transform on spacing/size tokens**: control/row heights **×0.8**, vertical padding **−1 spacing step**, gaps **−1 step** (e.g. control-height 40→32, `py` xs→2xs, row-gap xs→2xs). **Toggle** track/thumb follow the same ×0.8 (track-w 40→32 · thumb 20→16) with a constant **2px thumb inset**; track-h = thumb + 2·inset and travel = track-w − thumb − 2·inset are **derived**, not authored. **Law:** any hardcoded height/padding not reading a density token FAILS compact.
 
 ## 16. Reduce-motion
 
@@ -303,7 +303,7 @@ comfortable (default) / compact = a **transform on spacing/size tokens**: contro
 
 ## 17. Responsive & Accessibility
 
-**Responsive:** card grids → 1 col (`auto-fit/minmax`, never scroll-x on touch) · CategoryTree stays a strip · pickers/modals → bottom sheets `< md` · ledgers hand-tune (table → cards) · mobile nav = slide-up bottom sheet · expand/rail persists per person.
+**Responsive:** card grids → 1 col (`auto-fit/minmax`, never scroll-x on touch) · CategoryTree stays a strip · pickers/modals → bottom sheets `< md` · ledgers hand-tune (table → cards) · mobile nav = slide-up bottom sheet, whose **fixed bar is chrome of height `--nav-mobile-h` (48px, ≥ the 44px touch floor; §9 sidebar-band z300)** — the AppShell content slot (`<main>`) **insets its bottom by `--nav-mobile-h` `< md`**, any `< md` bottom-pinned element offsets from it (not the viewport edge), and `< md` **toasts** clear it (`bottom += --nav-mobile-h`); **Law:** `< md`, no scroll content, toast, or bottom-pinned chrome sits under the nav bar · expand/rail persists per person.
 
 **Accessibility (WCAG 2.1 AA):**
 - Contrast floor 4.5:1 (3:1 ≥18px/bold), **terminal**.
@@ -433,7 +433,7 @@ Skins below compose these — `Button` = Pressable + label/icon · `Modal` = Pop
 
 | primitive | made of | inherits |
 |---|---|---|
-| **Dropdown** ✓ | Field + Popover + Menu + option rows; **`searchable` variant** = a filter Input at the panel top (roving ↑↓ · ↵ select · Esc close) for long lists | open trigger = `accent-secondary` (§6) · option hover = `surface-active` (§1) · §13 list-slide |
+| **Dropdown** ✓ | Field + Popover + Menu + option rows; **`searchable` variant** = a filter Input at the panel top (roving ↑↓ · ↵ select · Esc close) for long lists | open trigger = `accent-secondary` (§6) · option hover = `surface-active` (§1) · §13 list-slide · **menu width = `max(trigger, content)`** (viewport-clamped 8px): full-width trigger ⇒ = trigger, compact trigger (`w-bulk-picker`) ⇒ grows to its labels; the default — **no per-call flag**; intrinsic pickers (Emoji/Colour) are the same rule with a `min-w-picker` floor. **Law:** a Dropdown menu never wraps an option row |
 | **DatePicker** ✓ | Field (**typeable input** — a typed date parses) + Popover + **MonthGrid** | picked day = solid `accent-secondary` (§6) · §13 month-slide |
 | **CustomRangePicker** ○ | Field + Popover + **MonthGrid** (two-month desktop / one-month `< md`) + preset rail (Last 7/30 · This/Last month · This quarter · This/last year · YTD · All time · Custom) | **selection = a continuous `selection-fill` band** over the in-range days (wrapping onto each week row); the **start & end dates are solid `accent-secondary` endpoint cells** (§6); selected preset = `bg-accent-active`/`text-accent` · §13 month-slide |
 | **GridPicker** base ○ | Field + Popover + grid of Pressable cells; **selected cell = `accent-secondary` ring (§6)** | — |
@@ -527,7 +527,7 @@ The **only** new primitive the Viewer needs; everything else it composes already
 | **EntityCard** ✓ | Card + Avatar/Icon + MonetaryValue(hero) + MiniSparkline + FavouriteStar + ContextMenu + Badge(archived) + owner Avatars | §3 entity calm/vivid fill · §6 selection ring/fill + tick · §13 hover-lift |
 | **EntityDetailView** ✓ | the read surface an `EntityCard` **tap** opens (edit stays ⋮→`EntityModal`) — Modal + subtype rows (Label+value) + Table (history) + MiniSparkline + Visualize launch. **Generic to any entity rendered as an `EntityCard`** (Accounts = first consumer; **a Transaction is an `EntityCard` on mobile** (card/tx), so it opens one too) | §3 entity calm/vivid fill (same rules as EntityCard) |
 | **EntityModal** ✓ | Modal + Field(s) + Cancel/primary Buttons — *detail block below* | §3 entity tint · §17 bottom-sheet `< md`; tall-form → Drawer variant |
-| **BulkActionBar** ✓ | sticky bar + count + Clear `×` (ghost icon Button) + **actions** ∈ {Button · **inline picker** (Dropdown/SegmentedControl — single-target) · destructive→ConfirmationDialog} (destructive after `Divider`) | §9 sticky z-band · §13 bulk-bar-slide |
+| **BulkActionBar** ✓ | sticky bar + count + Clear `×` (ghost icon Button) + **actions** ∈ {Button · **inline picker** (Dropdown/SegmentedControl — single-target) · destructive→ConfirmationDialog} (destructive after `Divider`) | §9 sticky z-band · §13 bulk-bar-slide · **`< md`:** full-width, pinned **flush above the nav** with `bottom-0` — the content slot already insets its bottom by `--nav-mobile-h` (§17), and sticky `bottom` is measured from that padded scrollport edge, so the bar must **not** re-add a nav-height offset (that would compound into a gap). Action row **horizontally scrollable** (`overflow-x-auto`) so the full set is reachable; stays in the `sticky` band (z200, below nav z300) — the **inset**, not z, prevents overlap *(the §17 "no scroll-x on touch" rule is card-grid-scoped — a scrollable toolbar complies)*. `≥ md` unchanged |
 | **CategoryTree** ✓ | tree row (Pressable) + expand-chevron (Pressable) + Icon[glyph] + Badge[type] + Badge[archived] + Checkbox + Add-`＋` + DragHandle + ContextMenu | §3 entity tint · §14 drag (`@dnd-kit`) · §13 merge-slide |
 | **FilterBar** ✓ | descriptor controls (`search │ dateRange │ dropdown │ segmented │ popover`) + clear-all; **two profiles** (record-list · aggregation) | §1 surface · serialises to `VisualizationFilter` |
 | **CommandPalette** ○ | Modal (high-centre) + search Input + Menu — **results grouped + capped + counted** (Transactions · Accounts · Categories · Currencies · Budgets · Members, then a **Commands** group: "Go to {module}" / "+ New {entity}") · row = leading `Badge`/`Avatar` + label + muted sublabel + active-row ↵ hint · **ranking** exact > prefix > substring, tie-break `updated_at`, **archived last** · **household-scoped** (respects Individual member filter) · states empty→recents · loading→`Skeleton` rows · none→`EmptyState`+New | §9 modal-tier · §13 modal-in · §17 focus-trap |

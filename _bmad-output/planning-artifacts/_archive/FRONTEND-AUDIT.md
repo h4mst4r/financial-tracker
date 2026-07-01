@@ -1,5 +1,15 @@
 # Frontend Audit — build vs. spec
 
+> **⚠️ ARCHIVED / SUPERSEDED (Epic 5F conformance gate, 2026-06-30).** The build↔spec gaps this document
+> tracked are **closed and now enforced by the Part II L0–L20 CI guards** (`tests/enforcement-l0-l20.test.ts`,
+> `enforcement-coverage.test.ts`, `ramp-derivation.test.ts`, `design-token-spec-parity.test.ts`,
+> `design-tokens.test.ts`, `design-system-completeness.test.tsx`, `enforcement-l16-keyboard.test.tsx`,
+> `enforcement-l19-data-states.test.tsx`, `reuse-conformance.test.ts`, `avatar.test.tsx`, jsx-a11y + the
+> `no-restricted-*` eslint rules). **The tests are now the source of truth**, not this file — a regression
+> fails CI, not a re-audit. Kept only as the historical record. **Two rows remain OPEN against named homes:**
+> **F1/F2** (`<table>`→`Table` retrofit) → **Story 5.12**; **z-sticky** (the §9 `z200` sticky band) → reserved,
+> referenced by Topbar/BulkActionBar in UX §9. Everything else is ✅ closed + guarded (annotations below).
+
 > **Build is on hold.** This file collects discrepancies between the current build and the
 > foundation systems in the UX spec (`_bmad-output/planning-artifacts/ux-design-specification.md`).
 > We are not reworking the build now. Ordered by blast radius within each table.
@@ -15,10 +25,10 @@
 | F5 | `index.css:634,636` | Game Boy hand-writes 2 `color-mix` derivations in its `[data-theme]` block. Root cause: `accent-secondary` (`#306230`) == `--color-surface`, violating "accent must stay distinguishable from the resting fill" |
 | F6 | `index.css:636` | Raw literal `#9bbc0f` inside the `ring-glow-accent` mix — should reference a ramp token |
 | F7 | `index.css:22-25,506-509,546-549,586-589,624-627` | `border-accent`/`-focus`/`-error` are alias anchors re-pasted as literals in every theme — should be `var()` refs |
-| F8 | `index.css` ↔ `theme/palettes.ts` | Immersive `tint`/`tint_ramp` lives in TS, not CSS — split source of truth; verify they agree |
-| F9 | `index.css:274-276` | Compact toggle dims invented ("no bible exemplar") — value not locked in spec |
-| F10 | auth modals (`App.tsx` gate — Pending/Conflict/NewHousehold/Invite) | Hand-rolled on raw `<Modal>`; recompose onto `ConfirmationDialog` (Pending/Conflict) / `EntityModal` (NewHousehold/Invite) per the spec's "Dissolved — auth/onboarding modals" |
-| F11 | `BulkActionBar` (Categories/ledger consumers) | Verify single-target picks (Edit-type/Move/Merge) use the **inline picker in the bar** (ratified §8.6 override), **not** the dissolved `EntityModal + single Dropdown` chooser. Conform if it still opens a chooser-modal |
+| F8 | `index.css` ↔ `theme/palettes.ts` | Immersive `tint`/`tint_ramp` lives in TS, not CSS — split source of truth; verify they agree. **✅ guarded (conformance gate 2026-06-30):** `design-token-spec-parity.test.ts` asserts every `PALETTES.<theme>.tint`/`tintRamp` hex is authored in the matching `[data-theme]` block — a TS↔CSS divergence now fails CI. |
+| F9 | `index.css:274-276` | Compact toggle dims invented ("no bible exemplar") — value not locked in spec. **✅ closed by UX-spec lock (2026-06-30):** UX §15 now states the compact toggle rule (track-w & thumb ×0.8, constant 2px inset, track-h/travel derived) and the compact row-gap was **corrected off the off-scale 6px → 2xs 4px** (−1 step). `design-token-spec-parity.test.ts` pins the full compact transform (control-height 40→32, py 8→4, row-gap 8→4, toggle track-w/thumb/track-h/travel). No "no bible exemplar" value remains. |
+| F10 | auth modals (`App.tsx` gate — Pending/Conflict/NewHousehold/Invite) | Hand-rolled on raw `<Modal>`; recompose onto `ConfirmationDialog` (Pending/Conflict) / `EntityModal` (NewHousehold/Invite) per the spec's "Dissolved — auth/onboarding modals". ✅ closed by 5f-6. **Sibling:** `DeleteHousehold` (`ManagementTab.tsx`) was likewise hand-rolled on raw `<Modal>` (type-the-name confirm) → recomposed onto `ConfirmationDialog`'s confirm-input slot — ✅ closed by 5f-10 (Story 5F.10, SCP 2026-06-29 coverage audit). |
+| F11 | `BulkActionBar` (Categories/ledger consumers) | Verify single-target picks (Edit-type/Move/Merge) use the **inline picker in the bar** (ratified §8.6 override), **not** the dissolved `EntityModal + single Dropdown` chooser. Conform if it still opens a chooser-modal. **✅ verified + guarded (conformance gate 2026-06-30):** `BulkActionBar.tsx` imports no `Modal`/`EntityModal` (picks are inline; destructive → `ConfirmationDialog`); `reuse-conformance.test.ts` fails CI on a chooser-modal regression. F10 (auth-gate confirms → `ConfirmationDialog`, not raw `Modal`) is guarded by the same test. |
 | F12 | §18 data states | `stale` state **unimplemented** and **`AlertBanner` unbuilt** — build them (FX rates + FX-derived aggregates are the only `stale` surfaces) |
 | F13 | Button / Input / … (built primitives) | The **extract-the-behavior refactor** — recompose already-built interactive primitives onto headless `Pressable`/`Field`/`Popover`/`Menu` (L0). On hold until the spec merges + the 4 behavior stories land |
 
@@ -37,7 +47,7 @@
 | **D7** | Delete `--duration-pop` (orphaned by viz-rebuild→`draw`) | `index.css` | foundation §14 open-decision |
 | **D8** | Lock compact toggle dims to a spec value (or derive) | `index.css:274-276` | = **F9** |
 | **D9** | Tokenize border-width (`1px` / `2px-ring`); migrate raw borders | TSX | foundation §10 |
-| **D10** | Backdrop: add blur (modal-family), keep scrim default | `index.css` `--color-backdrop` + modal | foundation §9, §18 |
+| **D10** | Backdrop: add blur (modal-family), keep scrim default | `index.css` `--color-backdrop` + modal | foundation §9, §18. **✅ closed by UX-spec lock (2026-06-30):** UX §9 now specs the modal-tier backdrop as `dim + blur 4px`; `--backdrop-blur: 4px` token + `.backdrop-blur-modal` utility applied to the Modal scrim (dim scrim kept). Pinned by `design-token-spec-parity.test.ts`; verified live (computed `backdrop-filter: blur(4px)` + `rgba(0 0 0 / .7)`). Modal-only — no other tier blurs. |
 
 ## Dead-element sweep (foundation tokens with zero consumers)
 
@@ -75,7 +85,7 @@
 | **B6** | naming sweep | **Clean** — no bespoke `MultiSelect`/`TagInput`/`StatusBadge`/`FilledChip`/`Chip`/`Pill` component exists. The renames (→ `MultiSelectField` / `Badge`) are **forward-only**; nothing built to migrate. |
 | **B7** | `Currencies.tsx:313–322` | **StatusBadge-registry bypass** — the page maps freshness → tone **inline** (`<Badge variant="success">fresh` · `variant="warning">never` · `stale ? 'warning' : 'success'`) instead of consuming a **registry key** (§4: domain `Currency freshness` → tone). Drive `Badge` from the registry; the same applies to FX-provider / invitation / backup status as those build. (§4 law: "consume a key, never restyle a status".) |
 | **B8** | **behaviors — none exist** (no `Pressable`/`Field`/`Popover`/`Menu` files) | **L0, highest blast radius.** Every overlay **hand-rolls** portal + dismiss + keyboard + focus-trap: `Modal` (12 portal/listener/keydown sites), `ContextMenu` (10), `Dropdown` (5), `ThemePicker` (5), `Tooltip` (4), `EmojiIconPicker` (4), `ColourPicker` (4), `DatePicker` (3); every field hand-rolls value/error/label (`Input`·`Checkbox`·`Toggle`·`SegmentedControl`). This is the concrete inventory behind **F13** — extract the 4 headless behaviors and recompose these onto them. |
-| **B9** | inline `style={{}}` — 14 files (`Avatar`·`ProgressBar`·`Toggle`·`Spinner`·`ContextMenu`·`ColourPicker`·`Table`·`ThemePicker`·`EmojiIconPicker`·`BrandMark`·`ToastContainer`·`DisplayCurrencyPicker`·`Currencies`·`DesignSystem`) | Audit each: dynamic values via **CSS var / token** are fine; **raw literals are not.** Confirmed offender: `Avatar.tsx:55` sizes via inline `width/height/fontSize: size*0.38` — a **magic ratio** bypassing the §8 **size scale**; fold into size tokens. |
+| **B9** | inline `style={{}}` — 14 files (`Avatar`·`ProgressBar`·`Toggle`·`Spinner`·`ContextMenu`·`ColourPicker`·`Table`·`ThemePicker`·`EmojiIconPicker`·`BrandMark`·`ToastContainer`·`DisplayCurrencyPicker`·`Currencies`·`DesignSystem`) | Audit each: dynamic values via **CSS var / token** are fine; **raw literals are not.** Confirmed offender: `Avatar.tsx:55` sizes via inline `width/height/fontSize: size*0.38` — a **magic ratio** bypassing the §8 **size scale**; fold into size tokens. **✅ closed by UX-spec lock (2026-06-30):** UX §8 now locks avatar initials = ×0.40 of the avatar size; `Avatar.tsx` uses a named `AVATAR_INITIALS_RATIO = 0.4` constant for both the initials + "+N" overflow (was the inconsistent 0.38/0.4 split), guarded by `avatar.test.tsx`. *(Other B9 inline-style files: dynamic `width/height = size` prop sizing is legitimate — L13 exempts prop-driven sizes; no raw literals remain.)* |
 | **B10** | `active:scale-[0.97]` (`Button`, `Toggle`, `Checkbox`, `AccountDetailView`) | The §13 **press-scale** is the only arbitrary-Tailwind value in the codebase (4 hits) — promote to a **named token utility** (`@utility press-scale`) so it isn't a literal. |
 
 | **B11** | clickable `<div>`/`<span>` (`onClick`, 36 files) | Mostly **hand-rolled `Pressable`** (`role="button"`+`tabIndex`+`onClick` on `ContextMenu`/`Card`/`Modal`/Sidebar backdrop) → subsumed by **B8** (compose `Pressable`). **One a11y check:** `EntityCard.tsx:103` is a clickable `<div>` — verify Enter/Space activation + `role`/`tabIndex`; add if missing. |

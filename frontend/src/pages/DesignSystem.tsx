@@ -67,7 +67,6 @@ import { AppShell } from '../components/shell/AppShell'
 import { EntityPage, EntityCard, EntityModal, BulkActionBar } from '../components/entity'
 import type { BulkAction } from '../components/entity'
 import { CategoryTree } from '../components/category/CategoryTree'
-import { CategoryDefaultsPrompt } from '../components/category/CategoryDefaultsPrompt'
 import type { Category } from '../types/category'
 import { useMultiSelect } from '../hooks/useMultiSelect'
 import { TIMEZONE_OPTIONS } from '../lib/timezones'
@@ -149,6 +148,7 @@ export function DesignSystem() {
   // Overlay state
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmInputOpen, setConfirmInputOpen] = useState(false)
 
   // EntityPage demo harness (composite scaffold; content tiles are placeholders — EntityCard is 1.9b).
   const [epView, setEpView] = useState<'grid' | 'list'>('grid')
@@ -1075,13 +1075,6 @@ export function DesignSystem() {
           </div>
         </section>
 
-        {/* CategoryDefaultsPrompt — the zero-active-categories empty state (UX §6, FR-C-007). */}
-        <section id="category-defaults" className="mb-xl">
-          <h2 className="text-lg font-medium mb-sm">Create defaults (empty state)</h2>
-          <div className="max-w-modal">
-            <CategoryDefaultsPrompt onCreateDefaults={() => {}} onNewCategory={() => {}} />
-          </div>
-        </section>
 
         {/* ─────────────────────── Feedback & overlay (bible §7 / §8) ─────────────────────── */}
         <GroupHeading>Feedback &amp; overlay</GroupHeading>
@@ -1103,6 +1096,7 @@ export function DesignSystem() {
           <h2 className="text-lg font-medium mb-sm">ConfirmationDialog</h2>
           <div className="flex flex-wrap gap-density">
             <Button variant="danger" onClick={() => setConfirmOpen(true)}>Delete Item</Button>
+            <Button variant="danger" onClick={() => setConfirmInputOpen(true)}>Delete (confirm-input)</Button>
           </div>
           <ConfirmationDialog
             open={confirmOpen}
@@ -1111,6 +1105,19 @@ export function DesignSystem() {
             title="Delete Item"
             message="Are you sure you want to delete this item? This action cannot be undone."
             confirmLabel="Delete"
+          />
+          {/* Confirm-input safeguard variant (UX §Layer-2 type-to-confirm): primary stays disabled
+              until the typed value matches `confirmText`. */}
+          <ConfirmationDialog
+            open={confirmInputOpen}
+            onClose={() => setConfirmInputOpen(false)}
+            onConfirm={() => alert('Confirmed deletion')}
+            title="Delete Item"
+            message="This permanently deletes the item and cannot be undone. Type DELETE to confirm."
+            confirmLabel="Delete"
+            confirmText="DELETE"
+            confirmInputLabel="Type DELETE to confirm"
+            confirmInputAriaLabel="Type DELETE to confirm"
           />
         </section>
 
