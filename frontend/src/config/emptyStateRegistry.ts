@@ -53,6 +53,11 @@ export const EMPTY_STATE = {
     title: 'No categories yet',
     description: 'Start with our defaults or add your own.',
   },
+  transactions: {
+    icon: navIcon('/transactions'),
+    title: 'No transactions yet',
+    description: 'Record a transaction to see it here.',
+  },
   invitations: {
     icon: ACTION_ICON.revokeInvite,
     title: 'No invitations yet',

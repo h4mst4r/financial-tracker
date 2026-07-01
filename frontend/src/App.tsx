@@ -14,6 +14,7 @@ import { Settings } from './pages/Settings'
 import { Categories } from './pages/Categories'
 import { Currencies } from './pages/Currencies'
 import { AccountsList } from './pages/AccountsList'
+import { Transactions } from './pages/Transactions'
 import { JoinHousehold } from './pages/JoinHousehold'
 import { PublicError } from './pages/public/PublicError'
 import { Spinner } from './components/primitives/Spinner'
@@ -109,6 +110,7 @@ function GatedApp({
             path="/insurance"
             element={<AccountsList subtypes={['insurance']} title="Insurance" newLabel="policy" emptyKey="insurance" />}
           />
+          <Route path="/transactions" element={<Transactions />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/currencies" element={<Currencies />} />
           <Route path="/settings" element={<Settings />} />

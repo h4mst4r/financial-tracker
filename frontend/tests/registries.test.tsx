@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest'
 import {
   Check, AlertTriangle, XCircle, Info, TriangleAlert, CalendarX,
   Star, X, MoreVertical, Pencil, ChevronDown, Menu, Wallet, MailX,
-  Shield, House, ShieldCheck, Building2,
+  Shield, House, ShieldCheck, Building2, ArrowLeftRight,
 } from 'lucide-react'
 import {
   STATUS_REGISTRY,
   statusTone,
+  statusToneForStatus,
   BADGE_VARIANT_FOR_TONE,
   type StatusTone,
 } from '../src/config/statusRegistry'
@@ -33,6 +34,17 @@ describe('status registry (§4)', () => {
     expect(statusTone('recurringOccurrence', 'missed')).toBe('critical')
     expect(statusTone('transaction', 'pending')).toBe('warning')
     expect(statusTone('transaction', 'cancelled')).toBe('neutral')
+    // FX base-source indicator (Story 5.1): formula→info · spot→neutral · manual→warning (§4 line 146).
+    expect(statusTone('fxBaseSource', 'formula')).toBe('info')
+    expect(statusTone('fxBaseSource', 'spot')).toBe('neutral')
+    expect(statusTone('fxBaseSource', 'manual')).toBe('warning')
+  })
+
+  it('statusToneForStatus is string-tolerant: known → tone, unknown → neutral', () => {
+    expect(statusToneForStatus('transaction', 'pending')).toBe('warning')
+    expect(statusToneForStatus('transaction', 'cancelled')).toBe('neutral')
+    // `completed`/`reconciled` are not §4 transaction keys yet (that vocab is Story 5.4) → neutral.
+    expect(statusToneForStatus('transaction', 'completed')).toBe('neutral')
   })
 
   it('uses only the five §4 tones — no domain invents a sixth', () => {
@@ -113,6 +125,9 @@ describe('empty/error registry (§18 + §11)', () => {
     // Non-module surfaces override the icon.
     expect(EMPTY_STATE.invitations.icon).toBe(MailX)
     expect(EMPTY_STATE.settingsPlaceholder.title).toBe('Coming soon')
+    // Transactions ledger empty state (Story 5.1) — on the Transactions nav glyph.
+    expect(EMPTY_STATE.transactions.icon).toBe(ArrowLeftRight)
+    expect(EMPTY_STATE.transactions.title).toBe('No transactions yet')
   })
 
   it('expands the four account-subtype empties (each on the Accounts nav glyph)', () => {

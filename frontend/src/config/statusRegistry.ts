@@ -44,6 +44,11 @@ export const STATUS_REGISTRY = defineStatusRegistry({
   // both blue), so it resolves through this one semantic registry like every other badge, not a
   // separate "category badge" concept.
   categoryType: { income: 'positive', expense: 'critical', both: 'info' },
+  // Transaction FX base-source indicator (UX §4 line 146, Story 5.1). The money block's Base-amount
+  // source renders as the input BORDER tone (§10) + a tag — formula (Epic-7-reachable) → info · spot
+  // → neutral · manual → warning. Deferred to 5.1 by 5f-4; the border consumes this key, never a
+  // call-site colour.
+  fxBaseSource: { formula: 'info', spot: 'neutral', manual: 'warning' },
 })
 
 export type StatusDomain = keyof typeof STATUS_REGISTRY
@@ -72,4 +77,12 @@ export const BADGE_VARIANT_FOR_TONE: Record<StatusTone, BadgeVariant> = {
 export function badgeVariantForStatus(domain: StatusDomain, status: string): BadgeVariant {
   const tone = (STATUS_REGISTRY[domain] as Record<string, StatusTone | undefined>)[status]
   return tone ? BADGE_VARIANT_FOR_TONE[tone] : 'neutral'
+}
+
+/** String-tolerant §4 tone for a {domain, status} where `status` is a wire string — unknown → `neutral`.
+ *  The `Dot`-facing sibling of `badgeVariantForStatus` (a `Dot` consumes a `StatusTone`, not a
+ *  `BadgeVariant`). Lets a ledger status dot resolve from the raw `transaction_status` string
+ *  (`completed`/`reconciled` are not §4 keys yet — that vocab is Story 5.4 — so they read `neutral`). */
+export function statusToneForStatus(domain: StatusDomain, status: string): StatusTone {
+  return (STATUS_REGISTRY[domain] as Record<string, StatusTone | undefined>)[status] ?? 'neutral'
 }
