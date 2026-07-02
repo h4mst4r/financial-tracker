@@ -156,9 +156,7 @@ export function Transactions() {
   }
 
   return (
-    // Interim page gutter matching the Accounts convention (AccountsList p-lg). The shared
-    // AppShell-owns-`--page-gutter` refactor is the deferred correct-course item.
-    <div className="flex flex-col gap-md p-lg">
+    <div className="flex flex-col gap-md">
       <div className="flex flex-wrap items-center justify-between gap-sm">
         <div>
           <h3 className="text-lg font-semibold text-text-strong">Transactions</h3>

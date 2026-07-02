@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { useRef, useState } from 'react'
-import { render, screen, fireEvent, renderHook } from '@testing-library/react'
+import { render, screen, fireEvent, renderHook, act } from '@testing-library/react'
 import { usePressable } from '../src/components/primitives/behaviors/usePressable'
 import { useField } from '../src/components/primitives/behaviors/useField'
 import { useMenu } from '../src/components/primitives/behaviors/useMenu'
 import { usePopover } from '../src/components/primitives/behaviors/usePopover'
+import { useFormValidation, type ValidatedField } from '../src/components/primitives/behaviors/useFormValidation'
 
 // Headless coverage for the four interaction behaviors (UX "Behaviors", L0). The 13 recomposed
 // primitives exercise these end-to-end; these tests pin each behavior's contract in isolation.
@@ -149,5 +150,62 @@ describe('usePopover', () => {
     expect(onClose).not.toHaveBeenCalled()
     fireEvent.mouseDown(screen.getByText('outside')) // outside — dismisses
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+/* ── useFormValidation (UX §6) ── */
+
+describe('useFormValidation', () => {
+  it('all valid → submit calls onValid; no attempted/summary', () => {
+    const fields: ValidatedField[] = [{ id: 'a', invalid: false }, { id: 'b', invalid: false }]
+    const { result } = renderHook(() => useFormValidation({ fields }))
+    const onValid = vi.fn()
+    act(() => result.current.submit(onValid))
+    expect(onValid).toHaveBeenCalledTimes(1)
+    expect(result.current.attempted).toBe(false)
+    expect(result.current.showSummary).toBe(false)
+  })
+
+  it('invalid → submit does NOT call onValid; sets attempted + populates errors + shows summary', () => {
+    const fields: ValidatedField[] = [{ id: 'a', invalid: true }, { id: 'b', invalid: false }]
+    const { result } = renderHook(() => useFormValidation({ fields }))
+    const onValid = vi.fn()
+    // errors empty before any attempt
+    expect(result.current.errors).toEqual({})
+    act(() => result.current.submit(onValid))
+    expect(onValid).not.toHaveBeenCalled()
+    expect(result.current.attempted).toBe(true)
+    expect(result.current.errors).toEqual({ a: true, b: false })
+    expect(result.current.showSummary).toBe(true)
+  })
+
+  it('focuses the FIRST offending field on a failed submit', () => {
+    const input = document.createElement('input')
+    input.id = 'first-bad'
+    document.body.appendChild(input)
+    const fields: ValidatedField[] = [
+      { id: 'ok', invalid: false },
+      { id: 'first-bad', invalid: true },
+      { id: 'also-bad', invalid: true },
+    ]
+    const { result } = renderHook(() => useFormValidation({ fields }))
+    act(() => result.current.submit(vi.fn()))
+    expect(document.activeElement).toBe(input)
+    input.remove()
+  })
+
+  it('re-validates on change: fixing a field clears its error and lets the next submit through', () => {
+    let fields: ValidatedField[] = [{ id: 'a', invalid: true }]
+    const { result, rerender } = renderHook(() => useFormValidation({ fields }))
+    act(() => result.current.submit(vi.fn()))
+    expect(result.current.errors).toEqual({ a: true })
+    // the field becomes valid; a re-render recomputes errors live
+    fields = [{ id: 'a', invalid: false }]
+    rerender()
+    expect(result.current.errors).toEqual({ a: false })
+    expect(result.current.showSummary).toBe(false)
+    const onValid = vi.fn()
+    act(() => result.current.submit(onValid))
+    expect(onValid).toHaveBeenCalledTimes(1)
   })
 })

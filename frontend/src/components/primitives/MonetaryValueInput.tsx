@@ -16,6 +16,8 @@ interface MonetaryValueInputProps {
   id?: string
   disabled?: boolean
   placeholder?: string
+  /** Error-ring the amount input (UX §6 form validation). */
+  error?: boolean
 }
 
 export function MonetaryValueInput({
@@ -27,6 +29,7 @@ export function MonetaryValueInput({
   id,
   disabled,
   placeholder = '0.00',
+  error,
 }: MonetaryValueInputProps) {
   const options = currencyOptions.map((code) => ({ value: code, label: code }))
   return (
@@ -47,6 +50,7 @@ export function MonetaryValueInput({
         disabled={disabled}
         onChange={(e) => onAmountChange(e.target.value)}
         placeholder={placeholder}
+        error={error}
         className="font-mono"
       />
     </div>

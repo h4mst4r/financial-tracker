@@ -26,7 +26,7 @@ import { branding } from './config/branding'
 // `/` redirects here so the landing page and the nav agree.
 function DashboardHome() {
   return (
-    <div className="p-lg text-text-strong">
+    <div className="text-text-strong">
       <h1 className="text-2xl font-medium">{branding.appName}</h1>
     </div>
   )

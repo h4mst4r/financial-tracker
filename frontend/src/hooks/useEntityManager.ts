@@ -19,6 +19,8 @@ export interface EntityManager<T extends BaseEntity> {
   items: T[]
   total: number
   isLoading: boolean
+  /** A create/update mutation is in-flight — gates the modal's Save so it can't double-fire (UX §6). */
+  isSaving: boolean
   isError: boolean
   error: unknown
   refetch: () => void
@@ -90,6 +92,7 @@ export function useEntityManager<T extends BaseEntity>(
     items: list.data?.items ?? [],
     total: list.data?.total ?? 0,
     isLoading: list.isLoading,
+    isSaving: createMutation.isPending || updateMutation.isPending,
     isError: list.isError,
     error: list.error,
     refetch: () => void list.refetch(),

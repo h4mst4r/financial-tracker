@@ -9,6 +9,7 @@ import { DatePicker } from '../components/primitives/DatePicker'
 import { SegmentedControl } from '../components/primitives/SegmentedControl'
 import { MonetaryValueInput } from '../components/primitives/MonetaryValueInput'
 import { MonetaryValue } from '../components/primitives/MonetaryValue'
+import { useFormValidation, REQUIRED_FIELDS_NOTE } from '../components/primitives/behaviors'
 import { Badge } from '../components/primitives/Badge'
 import { Avatar } from '../components/primitives/Avatar'
 import { Dot } from '../components/primitives/Dot'
@@ -100,6 +101,7 @@ interface TransactionModalProps {
 export function TransactionModal({ open, onClose, onSubmit }: TransactionModalProps) {
   const currentPersonId = useAuthStore((s) => s.currentPerson?.personId)
   const [form, setForm] = useState<FormState>(() => emptyForm('', ''))
+  const [saving, setSaving] = useState(false)
 
   const currencyQuery = useQuery({
     queryKey: ['currencies'],
@@ -158,11 +160,15 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
   const overrideNum = Number(form.amount_base || 0)
   const fxDelta = form.override_base ? baseCalculated - overrideNum : 0
 
-  const saveDisabled =
-    form.name.trim() === '' ||
-    !amountOk(form.amount) ||
-    form.currency === '' ||
-    (isForeign && form.override_base && !amountOk(form.amount_base))
+  // UX §6 — Save is never disabled for missing/invalid fields (only while the create is in-flight); a
+  // submit attempt reddens + shakes the offending Field, focuses the first, and shows the summary note.
+  const validation = useFormValidation({
+    fields: [
+      { id: 'txn-name', invalid: form.name.trim() === '' },
+      { id: 'txn-amount', invalid: !amountOk(form.amount) || form.currency === '' },
+      { id: 'txn-base', invalid: isForeign && form.override_base && !amountOk(form.amount_base) },
+    ],
+  })
 
   const handleSave = async () => {
     const payload: TransactionCreate = {
@@ -184,7 +190,12 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
       amount_base:
         isForeign && form.override_base ? cleanAmount(form.amount_base.trim()) : undefined,
     }
-    await onSubmit(payload)
+    setSaving(true)
+    try {
+      await onSubmit(payload)
+    } finally {
+      setSaving(false)
+    }
   }
 
   // Paid-with rows disambiguate accounts by type glyph + institution + owner (D1) — so two "DBS" rows
@@ -236,8 +247,10 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
       open={open}
       onClose={onClose}
       title="New transaction"
-      onSave={handleSave}
-      saveDisabled={saveDisabled}
+      onSave={() => validation.submit(handleSave)}
+      saveDisabled={saving}
+      errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
+      shakeSave={validation.shaking}
       saveLabel="Add"
     >
       <div className="flex flex-col gap-xs">
@@ -249,6 +262,7 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
           value={form.name}
           onChange={(e) => set('name', e.target.value)}
           placeholder="e.g. Groceries"
+          error={validation.errors['txn-name']}
         />
       </div>
 
@@ -314,6 +328,7 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
           currencyOptions={currencyCodes}
           onAmountChange={(v) => set('amount', v)}
           onCurrencyChange={(v) => set('currency', v)}
+          error={validation.errors['txn-amount']}
         />
       </div>
 

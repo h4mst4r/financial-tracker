@@ -40,7 +40,9 @@ export function formatDateDisplay(iso: string, displayFormat: DisplayFormat = cu
  * never throws.
  */
 export function parseDateInput(input: string, displayFormat: DisplayFormat = currentDisplayFormat()): string | null {
-  const date = parse(input, DATE_FNS_PATTERN[displayFormat], new Date())
+  // Accept either `/` or `-` as the separator (UX §DatePicker "a typed date parses") — normalise `/` to
+  // the `-` the patterns use, so `15/06/2026` and `15-06-2026` parse identically.
+  const date = parse(input.replace(/\//g, '-'), DATE_FNS_PATTERN[displayFormat], new Date())
   if (!isValid(date)) return null
   return format(date, ISO_FORMAT)
 }

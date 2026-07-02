@@ -52,6 +52,41 @@ describe('EntityModal (story 1.9b)', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it('renders the errorSummary in an error-tint Zone above the footer (UX §6)', () => {
+    const { rerender } = render(
+      <EntityModal open onClose={vi.fn()} title="Edit" onSave={vi.fn()}>
+        <input aria-label="Name" />
+      </EntityModal>,
+    )
+    // No summary until the consumer signals one.
+    expect(screen.queryByTestId('entity-modal-error-summary')).not.toBeInTheDocument()
+    rerender(
+      <EntityModal open onClose={vi.fn()} title="Edit" onSave={vi.fn()} errorSummary="Please complete the required fields.">
+        <input aria-label="Name" />
+      </EntityModal>,
+    )
+    const summary = screen.getByTestId('entity-modal-error-summary')
+    expect(summary).toHaveTextContent('Please complete the required fields.')
+    expect(summary.className).toContain('text-error') // error tint (§4→§3)
+  })
+
+  it('shakes the Save button (error-bounce) when shakeSave is set — the fields do not shake (UX §6)', () => {
+    const { rerender } = render(
+      <EntityModal open onClose={vi.fn()} title="Edit" onSave={vi.fn()}>
+        <input aria-label="Name" />
+      </EntityModal>,
+    )
+    expect(screen.getByRole('button', { name: 'Save' }).className).not.toContain('animate-error-bounce')
+    rerender(
+      <EntityModal open onClose={vi.fn()} title="Edit" onSave={vi.fn()} shakeSave>
+        <input aria-label="Name" />
+      </EntityModal>,
+    )
+    expect(screen.getByRole('button', { name: 'Save' }).className).toContain('animate-error-bounce')
+    // the shake is on the primary action only — not on the field
+    expect(screen.getByLabelText('Name').className ?? '').not.toContain('animate-error-bounce')
+  })
+
   it('honours custom save/cancel labels', () => {
     render(
       <EntityModal

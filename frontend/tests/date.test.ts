@@ -70,4 +70,17 @@ describe('parseDateInput', () => {
       expect(parseDateInput(formatDateDisplay(iso, fmt), fmt)).toBe(iso)
     }
   })
+
+  // UX §DatePicker "a typed date parses" — `/` and `-` separators parse identically (primitive-level).
+  it('accepts `/` separators identically to `-` in every display format', () => {
+    expect(parseDateInput('15/06/2026')).toBe(parseDateInput('15-06-2026'))
+    expect(parseDateInput('15/06/2026')).toBe('2026-06-15')
+    expect(parseDateInput('01/15/2026', 'MM-DD-YYYY')).toBe('2026-01-15')
+    expect(parseDateInput('2026/01/15', 'YYYY-MM-DD')).toBe('2026-01-15')
+  })
+
+  it('still rejects genuinely unparseable input regardless of separator', () => {
+    expect(parseDateInput('32/13/2026')).toBeNull()
+    expect(parseDateInput('15/06')).toBeNull()
+  })
 })

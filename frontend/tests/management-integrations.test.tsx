@@ -72,6 +72,20 @@ describe('ManagementTab — Integrations (FX providers)', () => {
     expect(screen.getByText('Add provider')).toBeTruthy()
   })
 
+  test('Add is enabled with an empty form; submitting blocks with the §6 error summary (no POST)', async () => {
+    renderTab()
+    fireEvent.click(await screen.findByText('Add provider'))
+    const dialog = await screen.findByRole('dialog')
+    const add = within(dialog).getByRole('button', { name: 'Add' }) as HTMLButtonElement
+    expect(add.disabled).toBe(false) // UX §6 — never disabled for missing input
+    fireEvent.click(add)
+    // Blocked: the error-summary Zone renders and nothing is POSTed (a required field is empty).
+    expect(within(dialog).getByTestId('entity-modal-error-summary')).toBeTruthy()
+    expect(
+      fetchMock.mock.calls.some(([u, o]) => String(u) === '/api/fx-providers' && o?.method === 'POST'),
+    ).toBe(false)
+  })
+
   test('non-owner (admin) sees read-only roster: no Add, no toggle, no ⋮', async () => {
     useAuthStore.setState({ currentPerson: ADMIN })
     renderTab()

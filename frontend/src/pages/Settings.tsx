@@ -19,7 +19,7 @@ export function Settings() {
   const [tab, setTab] = useState('profile')
 
   return (
-    <div className="p-lg">
+    <div>
       <div className="mx-auto flex max-w-3xl flex-col gap-lg">
         <h1 className="text-2xl font-medium text-text-strong">Settings</h1>
         <div className="max-w-input">

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { EntityModal } from '../entity/EntityModal'
 import { Input } from '../primitives/Input'
 import { Label } from '../primitives/Label'
+import { useFormValidation, REQUIRED_FIELDS_NOTE } from '../primitives/behaviors'
 import { useAlertStore } from '../../stores/alertStore'
 import { api, ApiError } from '../../api/client'
 import type { InvitationManage } from '../../types/household'
@@ -49,7 +50,9 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
   }
 
   const trimmed = email.trim()
-  const canSend = trimmed.includes('@') && !create.isPending
+  // UX §6 — Send is never disabled for a missing email (only while the invite is in-flight); a submit
+  // attempt with no `@` reddens + shakes the field and shows the summary note.
+  const validation = useFormValidation({ fields: [{ id: 'invite-email', invalid: !trimmed.includes('@') }] })
 
   return (
     <EntityModal
@@ -57,10 +60,12 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
       title="Invite a member"
       cancelLabel="Cancel"
       saveLabel="Send"
-      saveDisabled={!canSend}
+      saveDisabled={create.isPending}
       cancelDisabled={create.isPending}
+      errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
+      shakeSave={validation.shaking}
       onClose={handleClose}
-      onSave={() => create.mutate()}
+      onSave={() => validation.submit(() => create.mutate())}
     >
       <div className="flex flex-col gap-2xs md:col-span-2">
         <Label htmlFor="invite-email">Google email</Label>
@@ -72,6 +77,7 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
             setEmail(e.target.value)
             if (error) setError(null)
           }}
+          error={!!error || validation.errors['invite-email']}
         />
         {error && <p className="text-sm text-error">{error}</p>}
       </div>

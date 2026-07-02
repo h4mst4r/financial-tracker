@@ -228,6 +228,16 @@
   --entity-emph-surface: var(--color-surface-raised);
 }
 
+/* ── Page gutter (UX §8 "Page gutter — one source") — the routed-content gutter is owned ONCE by
+   AppShell <main> via this named token so a new route can't ship edge-to-edge: lg 24px ≥ md · md 16px
+   < md. Routed pages never add their own outer p-*; a full-bleed surface opts out explicitly. The
+   breakpoint tracks the Tailwind `md:` variant (theme(--breakpoint-md)), so it can't drift from it. P4. */
+:root { --page-gutter: var(--spacing-md); }
+/* stylelint can't parse Tailwind's build-time theme() inside a media condition (Tailwind/Lightning CSS
+   resolves it to the --breakpoint-md px at build — verified in the compiled output). */
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (width >= theme(--breakpoint-md)) { :root { --page-gutter: var(--spacing-lg); } }
+
 /* ── Z-index utilities (z-index is not a @theme namespace, so wrap each) ── */
 @utility z-below    { z-index: var(--z-below); }
 @utility z-base     { z-index: var(--z-base); }
@@ -527,6 +537,9 @@
 @utility pb-nav-mobile     { padding-bottom: var(--nav-mobile-h); }
 @utility bottom-nav-mobile { bottom: var(--nav-mobile-h); }
 
+/* ── Page gutter (UX §8) — the one AppShell <main> padding utility; value from --page-gutter. P4. ── */
+@utility p-page-gutter { padding: var(--page-gutter); }
+
 /* ── /design-system AppShell demo: clipped preview height so the shell doesn't take the page. P4. ── */
 @utility h-appshell-demo { height: 26rem; }
 
@@ -588,6 +601,18 @@
   100% { transform: translateY(0); opacity: 1; }
 }
 @utility animate-slide-up { animation: slide-up calc(var(--duration-base) * var(--motion-factor)) ease-out; }
+
+/* ── Error-bounce shake (UX §6 form-submission validation + §13 "error-bounce | emphatic 500 | spring |
+   translate (shake) | reduced none"). A single horizontal shake on the PRIMARY ACTION (Save/Add) when a
+   submit is attempted with invalid/missing fields — signalling "not allowed" while the offending fields
+   ring. Motion-aware like animate-shimmer: * var(--motion-factor) collapses the duration to 0s under
+   reduce-motion (§14 reduced kind = none — the ring/summary still show). ── */
+@keyframes error-bounce {
+  0%, 100% { transform: translateX(0); }
+  15%, 45%, 75% { transform: translateX(-4px); }
+  30%, 60%, 90% { transform: translateX(4px); }
+}
+@utility animate-error-bounce { animation: error-bounce calc(var(--duration-emphatic) * var(--motion-factor)) ease-in-out; }
 
 /* ── Toast enter / exit (UX §0.7 "Toast in/out", §7). The toast body slides in from the right + fades
    (translate-x-full→0, opacity 0→1) while its row height animates 0fr→1fr, so a new toast at the bottom

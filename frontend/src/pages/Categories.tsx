@@ -13,6 +13,7 @@ import { ColourPicker, DEFAULT_ENTITY_COLOUR } from '../components/primitives/Co
 import { EmojiIconPicker, GlyphView } from '../components/primitives/EmojiIconPicker'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { useEntityManager } from '../hooks/useEntityManager'
+import { useFormValidation, REQUIRED_FIELDS_NOTE } from '../components/primitives/behaviors'
 import { useMultiSelect } from '../hooks/useMultiSelect'
 import { useAlertStore } from '../stores/alertStore'
 import { api, ApiError } from '../api/client'
@@ -325,10 +326,17 @@ export function Categories() {
   )
   const visible = manager.items.filter((c) => matchIds.has(c.id) || parentIds.has(c.id))
 
-  const saveDisabled = form.name.trim() === '' || !/^#[0-9a-fA-F]{6}$/.test(form.color)
+  // UX §6 — Save is never disabled for missing fields; a submit attempt reddens + shakes the offending
+  // Field, focuses the first, and shows the summary note. Colour is always a valid hex from the picker.
+  const validation = useFormValidation({
+    fields: [
+      { id: 'cat-name', invalid: form.name.trim() === '' },
+      { id: 'cat-colour', invalid: !/^#[0-9a-fA-F]{6}$/.test(form.color) },
+    ],
+  })
 
   return (
-    <div className="p-lg">
+    <div>
       <EntityPage
         title="Categories"
         info="Organise spending and income into a 2-level tree."
@@ -389,8 +397,10 @@ export function Categories() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={form.id ? 'Edit category' : form.parentId ? 'New subcategory' : 'New category'}
-        onSave={handleSave}
-        saveDisabled={saveDisabled}
+        onSave={() => validation.submit(handleSave)}
+        saveDisabled={manager.isSaving}
+        errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
+        shakeSave={validation.shaking}
         saveLabel={form.id ? 'Save' : 'Create'}
       >
         <div className="flex flex-col gap-xs md:col-span-2">
@@ -402,6 +412,7 @@ export function Categories() {
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="e.g. Groceries"
+            error={validation.errors['cat-name']}
           />
         </div>
 

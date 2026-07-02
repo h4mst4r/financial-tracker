@@ -11,9 +11,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
-        {/* < md reserve bottom space for the fixed mobile Menu bar (UX §17, --nav-mobile-h) so scrolled
-            content never hides behind it; ≥ md there is no bottom bar. */}
-        <main className="flex-1 overflow-y-auto scrollbar-gutter-stable pb-nav-mobile md:pb-0">{children}</main>
+        {/* <main> owns the routed-content gutter (UX §8, --page-gutter: 24 ≥ md / 16 < md) so no page
+            hand-rolls it. < md the bottom padding is raised to clear the fixed mobile Menu bar (UX §17,
+            --nav-mobile-h 48px) — a longhand pb override of the gutter shorthand; ≥ md there is no bar,
+            so the 24px gutter bottom stands. */}
+        <main className="flex-1 overflow-y-auto scrollbar-gutter-stable p-page-gutter max-md:pb-nav-mobile">
+          {children}
+        </main>
       </div>
     </div>
   )

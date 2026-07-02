@@ -22,9 +22,10 @@ const importsModule = (src: string, module: string) =>
   new RegExp(`from\\s*['"][^'"]*/${module}['"]`).test(src)
 
 describe('reuse conformance · F10 — auth-gate confirms compose ConfirmationDialog, not a raw Modal', () => {
-  // The two auth-gate decision dialogs (App.tsx gate). DeleteHousehold lives in ManagementTab, which also
-  // hosts the FX-provider FORM Modal (a legitimate raw Modal) — its confirm parity is covered behaviourally
-  // by danger-zone.test.tsx, so it is not file-guarded here.
+  // The two auth-gate decision dialogs (App.tsx gate). DeleteHousehold lives in ManagementTab (composes
+  // ConfirmationDialog; confirm parity covered by danger-zone.test.tsx). The FX-provider FORM now composes
+  // EntityModal too (§6 conformance) — so no ManagementTab surface hand-rolls a raw Modal; ManagementTab is
+  // file-guarded below.
   for (const f of ['components/HouseholdConflictDialog.tsx', 'components/PendingInvitationDialog.tsx']) {
     it(`${f} composes ConfirmationDialog and does not hand-roll a raw Modal`, () => {
       const src = read(f)
@@ -32,6 +33,12 @@ describe('reuse conformance · F10 — auth-gate confirms compose ConfirmationDi
       expect(importsModule(src, 'Modal')).toBe(false)
     })
   }
+
+  it('ManagementTab hosts no hand-rolled raw Modal — its FX-provider form composes EntityModal', () => {
+    const src = read('components/settings/ManagementTab.tsx')
+    expect(importsModule(src, 'Modal')).toBe(false)
+    expect(importsModule(src, 'EntityModal')).toBe(true)
+  })
 
   it('self-test: the Modal-import detector actually fires on a raw-Modal import', () => {
     expect(importsModule(`import { Modal } from './primitives/Modal'`, 'Modal')).toBe(true)

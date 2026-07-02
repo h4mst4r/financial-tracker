@@ -12,6 +12,7 @@ import { ContextMenu } from '../components/primitives/ContextMenu'
 import type { ContextMenuEntry } from '../components/primitives'
 import { ColourPicker } from '../components/primitives/ColourPicker'
 import { Dropdown } from '../components/primitives/Dropdown'
+import { useFormValidation, REQUIRED_FIELDS_NOTE } from '../components/primitives/behaviors'
 import { ConfirmationDialog } from '../components/primitives/ConfirmationDialog'
 import { MiniSparkline } from '../components/primitives/MiniSparkline'
 import { NumberValue } from '../components/primitives/NumberValue'
@@ -76,6 +77,7 @@ export function Currencies() {
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Currency | null>(null)
   const pushToast = useAlertStore((s) => s.pushToast)
   // A currency's own colour is role-4 entity identity (UX §0.1), so it must theme like any other
@@ -196,6 +198,7 @@ export function Currencies() {
       vivid: form.vivid,
       is_display_active: form.isDisplayActive,
     }
+    setSaving(true)
     try {
       if (form.id) {
         // The FX fee (percentage number, as-is) is editable only for a non-base currency.
@@ -209,6 +212,8 @@ export function Currencies() {
     } catch (err) {
       // 409 (duplicate code) / 400 (bad code) surface here, keeping the modal open.
       toastError(err, 'Could not save the currency.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -233,11 +238,17 @@ export function Currencies() {
     (c) => q === '' || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q),
   )
 
-  const saveDisabled =
-    !CODE_RE.test(form.code.trim().toUpperCase()) ||
-    form.name.trim() === '' ||
-    form.symbol.trim() === '' ||
-    !/^#[0-9a-fA-F]{6}$/.test(form.colour)
+  // UX §6 — Save is never disabled for missing fields (only while a save is in-flight); a submit attempt
+  // reddens + shakes the offending Field, focuses the first, and shows the summary note. Colour is always
+  // a valid hex from the picker.
+  const validation = useFormValidation({
+    fields: [
+      { id: 'cur-code', invalid: !CODE_RE.test(form.code.trim().toUpperCase()) },
+      { id: 'cur-symbol', invalid: form.symbol.trim() === '' },
+      { id: 'cur-name', invalid: form.name.trim() === '' },
+      { id: 'cur-colour', invalid: !/^#[0-9a-fA-F]{6}$/.test(form.colour) },
+    ],
+  })
 
   const rowMenu = (c: Currency): ContextMenuEntry[] => {
     const items: ContextMenuEntry[] = [{ label: 'Edit', icon: ACTION_ICON.edit, onClick: () => openEdit(c) }]
@@ -255,7 +266,7 @@ export function Currencies() {
   }
 
   return (
-    <div className="p-lg">
+    <div>
       <EntityPage
         title="Currencies"
         info={`${currencies.length} ${currencies.length === 1 ? 'currency' : 'currencies'}`}
@@ -385,8 +396,10 @@ export function Currencies() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={form.id ? 'Edit currency' : 'New currency'}
-        onSave={handleSave}
-        saveDisabled={saveDisabled}
+        onSave={() => validation.submit(handleSave)}
+        saveDisabled={saving}
+        errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
+        shakeSave={validation.shaking}
         saveLabel={form.id ? 'Save' : 'Add'}
       >
         <div className="flex flex-col gap-xs">
@@ -416,6 +429,7 @@ export function Currencies() {
             onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value }))}
             placeholder="e.g. $"
             maxLength={5}
+            error={validation.errors['cur-symbol']}
           />
         </div>
 
@@ -428,6 +442,7 @@ export function Currencies() {
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="e.g. US Dollar"
+            error={validation.errors['cur-name']}
           />
         </div>
 

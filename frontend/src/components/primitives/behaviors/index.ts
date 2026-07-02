@@ -1,4 +1,4 @@
-// The four headless interaction behaviors (UX "Behaviors", L0) + the Portal host. Behaviors are
+// The headless interaction behaviors (UX "Behaviors", L0) + the Portal host. Behaviors are
 // headless (no standalone demo) so they are deliberately NOT re-exported through `primitives/index.ts`
 // — the /design-system completeness guard requires a gallery entry for every public-barrel export, and
 // a behavior has nothing to render. Import them directly from `behaviors/`.
@@ -11,3 +11,5 @@ export { usePopover } from './usePopover'
 export type { UsePopoverOptions } from './usePopover'
 export { useMenu } from './useMenu'
 export type { UseMenuOptions } from './useMenu'
+export { useFormValidation, REQUIRED_FIELDS_NOTE } from './useFormValidation'
+export type { ValidatedField, UseFormValidationResult } from './useFormValidation'

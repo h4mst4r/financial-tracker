@@ -178,10 +178,11 @@ export function AccountsList({ subtypes, title, newLabel, emptyKey }: AccountsLi
     }
   }
 
-  // Stacked owner avatars (UX §2.1) — only on MULTI-owner accounts (avatars communicate sharing).
-  // ponytail: shows up to 3 (2 + a +N chip when more); households are small so overflow is rare.
+  // Stacked owner avatars (UX §EntityCard) — shown whenever the account has ANY owner, incl. a single
+  // owner, so ownership is always legible. Shows up to 3 (2 + a +N chip when more); households are
+  // small so overflow is rare.
   const ownersSlot = (a: Account) => {
-    if (a.owner_ids.length <= 1) return undefined
+    if (a.owner_ids.length === 0) return undefined
     const MAX = 3
     const showCount = a.owner_ids.length > MAX ? MAX - 1 : a.owner_ids.length
     const shown = a.owner_ids.slice(0, showCount)
@@ -371,7 +372,7 @@ export function AccountsList({ subtypes, title, newLabel, emptyKey }: AccountsLi
   )
 
   return (
-    <div className="p-lg">
+    <div>
       <EntityPage
         title={title}
         info={`${visible.length} ${visible.length === 1 ? newLabel : plural(newLabel)}`}

@@ -16,7 +16,8 @@ import { Skeleton } from '../primitives/Skeleton'
 import { EmptyState } from '../primitives/EmptyState'
 import { ContextMenu, type ContextMenuEntry } from '../primitives/ContextMenu'
 import { ConfirmationDialog } from '../primitives/ConfirmationDialog'
-import { Modal } from '../primitives/Modal'
+import { EntityModal } from '../entity/EntityModal'
+import { useFormValidation, REQUIRED_FIELDS_NOTE } from '../primitives/behaviors'
 import { InviteModal } from './InviteModal'
 import { useAuthStore } from '../../stores/authStore'
 import { useAlertStore } from '../../stores/alertStore'
@@ -609,6 +610,7 @@ function IntegrationsSection() {
   const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FxFormState>(EMPTY_FX_FORM)
+  const [saving, setSaving] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState<FxProvider | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -691,6 +693,7 @@ function IntegrationsSection() {
   }
 
   const handleSave = async () => {
+    setSaving(true)
     try {
       if (form.id) {
         await api.patch(`/api/fx-providers/${form.id}`, {
@@ -714,10 +717,21 @@ function IntegrationsSection() {
       setModalOpen(false)
     } catch (err) {
       toastError(err, 'Could not save the provider.')
+    } finally {
+      setSaving(false)
     }
   }
 
-  const saveDisabled = form.providerType === '' || form.name.trim() === '' || form.baseUrl.trim() === ''
+  // UX §6 — Save is never disabled for missing fields (only while a save is in-flight); a submit attempt
+  // reddens the offending Field, focuses the first, shakes the Save button, and shows the summary note.
+  // Type is pre-selected+read-only on edit (always set). Key ref stays optional (parity with the old gate).
+  const validation = useFormValidation({
+    fields: [
+      { id: 'fx-type', invalid: form.providerType === '' },
+      { id: 'fx-name', invalid: form.name.trim() === '' },
+      { id: 'fx-base-url', invalid: form.baseUrl.trim() === '' },
+    ],
+  })
 
   function rowMenu(p: FxProvider, index: number): ContextMenuEntry[] {
     return [
@@ -824,82 +838,78 @@ function IntegrationsSection() {
         </Button>
       </Zone>
 
-      <Modal
+      <EntityModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={form.id ? 'Edit provider' : 'Add FX provider'}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saveDisabled}>
-              {form.id ? 'Save' : 'Add'}
-            </Button>
-          </>
-        }
+        onSave={() => validation.submit(handleSave)}
+        saveDisabled={saving}
+        errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
+        shakeSave={validation.shaking}
+        saveLabel={form.id ? 'Save' : 'Add'}
       >
-        <div className="flex flex-col gap-md">
-          <div className="flex flex-col gap-2xs">
-            <Label htmlFor="fx-type">Provider type</Label>
-            {form.id ? (
-              <Input id="fx-type" value={typeLabel(form.providerType)} disabled readOnly />
-            ) : (
-              <Dropdown
-                id="fx-type"
-                value={form.providerType}
-                placeholder="Select a provider"
-                options={(types ?? []).map((t) => ({ value: t.provider_type, label: t.display_name }))}
-                onChange={onTypeChange}
-              />
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2xs">
-            <Label htmlFor="fx-name">Name</Label>
-            <Input
-              id="fx-name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+        {/* Simple stacked form — each field spans both grid columns (EntityModal's body is a 2-col grid). */}
+        <div className="flex flex-col gap-2xs md:col-span-2">
+          <Label htmlFor="fx-type">Provider type</Label>
+          {form.id ? (
+            <Input id="fx-type" value={typeLabel(form.providerType)} disabled readOnly />
+          ) : (
+            <Dropdown
+              id="fx-type"
+              value={form.providerType}
+              placeholder="Select a provider"
+              options={(types ?? []).map((t) => ({ value: t.provider_type, label: t.display_name }))}
+              onChange={onTypeChange}
             />
-          </div>
-
-          <div className="flex flex-col gap-2xs">
-            <Label htmlFor="fx-base-url">Base URL</Label>
-            <Input
-              id="fx-base-url"
-              value={form.baseUrl}
-              onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
-            />
-          </div>
-
-          {selectedTypeRequiresKey && (
-            <div className="flex flex-col gap-2xs">
-              <Label htmlFor="fx-secret-ref">API key secret reference</Label>
-              <Input
-                id="fx-secret-ref"
-                value={form.apiKeySecretRef}
-                onChange={(e) => setForm((f) => ({ ...f, apiKeySecretRef: e.target.value }))}
-                placeholder="e.g. EXCHANGERATE_API_KEY"
-              />
-              <span className="text-xs text-text-muted">
-                Name of the environment secret holding the key — the key value is never stored here.
-              </span>
-            </div>
           )}
-
-          {/* Not a <label>: the Toggle is self-labelled (aria-label) and renders its own control, so a
-              wrapping <label> has no associatable control — the visible text is a sibling caption. */}
-          <div className="flex items-center gap-sm">
-            <Toggle
-              checked={form.isEnabled}
-              onChange={(isEnabled) => setForm((f) => ({ ...f, isEnabled }))}
-              aria-label="Enabled"
-            />
-            <span className="text-sm text-text-default">Enabled</span>
-          </div>
         </div>
-      </Modal>
+
+        <div className="flex flex-col gap-2xs md:col-span-2">
+          <Label htmlFor="fx-name">Name</Label>
+          <Input
+            id="fx-name"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            error={validation.errors['fx-name']}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2xs md:col-span-2">
+          <Label htmlFor="fx-base-url">Base URL</Label>
+          <Input
+            id="fx-base-url"
+            value={form.baseUrl}
+            onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+            error={validation.errors['fx-base-url']}
+          />
+        </div>
+
+        {selectedTypeRequiresKey && (
+          <div className="flex flex-col gap-2xs md:col-span-2">
+            <Label htmlFor="fx-secret-ref">API key secret reference</Label>
+            <Input
+              id="fx-secret-ref"
+              value={form.apiKeySecretRef}
+              onChange={(e) => setForm((f) => ({ ...f, apiKeySecretRef: e.target.value }))}
+              placeholder="e.g. EXCHANGERATE_API_KEY"
+            />
+            <span className="text-xs text-text-muted">
+              Name of the environment secret holding the key — the key value is never stored here.
+            </span>
+          </div>
+        )}
+
+        {/* Not a <label>: the Toggle is self-labelled (aria-label) and renders its own control, so a
+            wrapping <label> has no associatable control — the visible text is a sibling caption. */}
+        <div className="flex items-center gap-sm md:col-span-2">
+          <Toggle
+            checked={form.isEnabled}
+            onChange={(isEnabled) => setForm((f) => ({ ...f, isEnabled }))}
+            aria-label="Enabled"
+          />
+          <span className="text-sm text-text-default">Enabled</span>
+        </div>
+      </EntityModal>
 
       <ConfirmationDialog
         open={confirmRemove !== null}

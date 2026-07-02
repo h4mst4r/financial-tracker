@@ -10,6 +10,7 @@ import { Avatar } from '../components/primitives/Avatar'
 import { ColourPicker } from '../components/primitives/ColourPicker'
 import { DatePicker } from '../components/primitives/DatePicker'
 import { MonetaryValueInput } from '../components/primitives/MonetaryValueInput'
+import { useFormValidation, REQUIRED_FIELDS_NOTE, type ValidatedField } from '../components/primitives/behaviors'
 import { api } from '../api/client'
 import { cleanAmount } from '../lib/currency'
 import { useAuthStore } from '../stores/authStore'
@@ -260,6 +261,7 @@ export function AccountModal({
 }: AccountModalProps) {
   const currentPersonId = useAuthStore((s) => s.currentPerson?.personId)
   const [form, setForm] = useState<FormState>(emptyForm)
+  const [saving, setSaving] = useState(false)
 
   const membersQuery = useQuery({
     queryKey: ['household', 'members'],
@@ -374,35 +376,58 @@ export function AccountModal({
     coverage_personal_accident: nonNegOk(form.coverage_personal_accident),
     surrender_value: nonNegOk(form.surrender_value),
   }
-  const subtypeInvalid =
-    (form.account_type === 'bank' && (!fieldOk.interest_rate || !fieldOk.reserved_amount)) ||
-    (form.account_type === 'credit_card' &&
-      (!fieldOk.credit_limit ||
-        !fieldOk.annual_fee ||
-        !fieldOk.bonus_limit ||
-        !fieldOk.billing_day ||
-        !fieldOk.due_day ||
-        !fieldOk.reward_points ||
-        !fieldOk.reward_rate)) ||
-    (form.account_type === 'capital' && !fieldOk.cost_basis) ||
-    (form.account_type === 'asset' && !fieldOk.purchase_value) ||
-    (form.account_type === 'insurance' &&
-      (!fieldOk.coverage_death ||
-        !fieldOk.coverage_tpd ||
-        !fieldOk.coverage_ci ||
-        !fieldOk.coverage_early_ci ||
-        !fieldOk.coverage_personal_accident ||
-        !fieldOk.surrender_value))
 
-  // Opening balance must be a decimal (a credit card's may be negative) — block non-numeric input
-  // client-side instead of letting it round-trip to a generic backend 422.
-  const saveDisabled =
-    form.name.trim() === '' ||
-    (isLedger &&
-      (!/^-?\d+(\.\d+)?$/.test(form.opening_balance.trim()) || form.opening_balance_date === '')) ||
-    !/^#[0-9a-fA-F]{6}$/.test(form.colour) ||
-    subtypeInvalid ||
-    (showInitialValue && !fieldOk.initial_value)
+  // The active subtype's format-field validity, ordered to visual order (the first invalid is the submit
+  // focus target). Empty is valid; only a malformed value is invalid — so a hidden subtype's fields stay
+  // valid. Mirrors `subtypeInvalid`.
+  const subtypeValidationFields: ValidatedField[] =
+    form.account_type === 'bank'
+      ? [
+          { id: 'acct-interest-rate', invalid: !fieldOk.interest_rate },
+          { id: 'acct-reserved', invalid: !fieldOk.reserved_amount },
+        ]
+      : form.account_type === 'credit_card'
+        ? [
+            { id: 'acct-credit-limit', invalid: !fieldOk.credit_limit },
+            { id: 'acct-annual-fee', invalid: !fieldOk.annual_fee },
+            { id: 'acct-billing-day', invalid: !fieldOk.billing_day },
+            { id: 'acct-due-day', invalid: !fieldOk.due_day },
+            { id: 'acct-reward-points', invalid: !fieldOk.reward_points },
+            { id: 'acct-reward-rate', invalid: !fieldOk.reward_rate },
+            { id: 'acct-bonus-limit', invalid: !fieldOk.bonus_limit },
+          ]
+        : form.account_type === 'capital'
+          ? [{ id: 'acct-cost-basis', invalid: !fieldOk.cost_basis }]
+          : form.account_type === 'asset'
+            ? [{ id: 'acct-purchase-value', invalid: !fieldOk.purchase_value }]
+            : form.account_type === 'insurance'
+              ? [
+                  { id: 'acct-coverage-death', invalid: !fieldOk.coverage_death },
+                  { id: 'acct-coverage-tpd', invalid: !fieldOk.coverage_tpd },
+                  { id: 'acct-coverage-ci', invalid: !fieldOk.coverage_ci },
+                  { id: 'acct-coverage-early-ci', invalid: !fieldOk.coverage_early_ci },
+                  { id: 'acct-coverage-pa', invalid: !fieldOk.coverage_personal_accident },
+                  { id: 'acct-surrender-value', invalid: !fieldOk.surrender_value },
+                ]
+              : []
+
+  // UX §6 — Save is never disabled for missing/invalid fields (only while a save is in-flight); a submit
+  // attempt reddens + shakes each offending Field, focuses the first, and shows the summary note. Opening
+  // balance must be a decimal (a credit card's may be negative). Colour is always a valid hex (picker).
+  const validation = useFormValidation({
+    fields: [
+      { id: 'acct-name', invalid: form.name.trim() === '' },
+      ...(isLedger
+        ? [
+            { id: 'acct-opening', invalid: !/^-?\d+(\.\d+)?$/.test(form.opening_balance.trim()) },
+            { id: 'acct-opening-date', invalid: form.opening_balance_date === '' },
+          ]
+        : []),
+      { id: 'acct-colour', invalid: !/^#[0-9a-fA-F]{6}$/.test(form.colour) },
+      ...subtypeValidationFields,
+      ...(showInitialValue ? [{ id: 'acct-initial-value', invalid: !fieldOk.initial_value }] : []),
+    ],
+  })
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -476,23 +501,28 @@ export function AccountModal({
                     surrender_inquiry_date: form.surrender_inquiry_date || null,
                   }
                 : {}
-    if (editing) {
-      // PATCH — no `account_type` (immutable STI discriminator); owners go via the owner PUT.
-      // Currency only when it actually changed (the backend locks it once the account has history).
-      const currencyPatch = form.currency !== editing.currency ? { currency: form.currency } : {}
-      await onSubmit(
-        { ...shared, ...currencyPatch, ...ledger, ...subtype },
-        editing.id,
-        form.ownerIds,
-        null,
-      )
-    } else {
-      await onSubmit(
-        { account_type: form.account_type, currency: form.currency, ...shared, ...ledger, ...subtype },
-        null,
-        form.ownerIds,
-        showInitialValue ? form.initial_value.trim() || null : null,
-      )
+    setSaving(true)
+    try {
+      if (editing) {
+        // PATCH — no `account_type` (immutable STI discriminator); owners go via the owner PUT.
+        // Currency only when it actually changed (the backend locks it once the account has history).
+        const currencyPatch = form.currency !== editing.currency ? { currency: form.currency } : {}
+        await onSubmit(
+          { ...shared, ...currencyPatch, ...ledger, ...subtype },
+          editing.id,
+          form.ownerIds,
+          null,
+        )
+      } else {
+        await onSubmit(
+          { account_type: form.account_type, currency: form.currency, ...shared, ...ledger, ...subtype },
+          null,
+          form.ownerIds,
+          showInitialValue ? form.initial_value.trim() || null : null,
+        )
+      }
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -504,8 +534,10 @@ export function AccountModal({
       open={open}
       onClose={onClose}
       title={editing ? 'Edit account' : 'New account'}
-      onSave={handleSave}
-      saveDisabled={saveDisabled}
+      onSave={() => validation.submit(handleSave)}
+      saveDisabled={saving}
+      errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
+      shakeSave={validation.shaking}
       saveLabel={editing ? 'Save' : 'Add'}
     >
       <div className="flex flex-col gap-xs">
@@ -541,6 +573,7 @@ export function AccountModal({
           value={form.name}
           onChange={(e) => set('name', e.target.value)}
           placeholder="e.g. DBS Multiplier"
+          error={validation.errors['acct-name']}
         />
       </div>
 
@@ -587,6 +620,7 @@ export function AccountModal({
               currencyOptions={[form.currency]}
               onAmountChange={(v) => set('opening_balance', v)}
               onCurrencyChange={() => {}}
+              error={validation.errors['acct-opening']}
             />
           </div>
           <div className="flex flex-col gap-xs">

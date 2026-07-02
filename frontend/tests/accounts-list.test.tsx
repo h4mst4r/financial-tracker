@@ -282,15 +282,22 @@ describe('AccountsList', () => {
 
   // ── Multiple owners (Story 4.3) ──
 
-  test('a multi-owner card renders stacked owner avatars; single-owner shows none', async () => {
+  test('owner avatars always render — a single-owner card shows its owner, multi-owner shows both (UX §EntityCard)', async () => {
     renderPage()
     await screen.findByText('Joint Savings')
-    // Only m1 (owners p1+p2) renders avatars → exactly Ben + Alex. b1/b2 single-owner show none.
-    // (Every card's MiniSparkline is also role="img" — exclude it; this test is about owner avatars.)
-    const avatars = (await screen.findAllByRole('img')).filter(
-      (a) => a.getAttribute('aria-label') !== 'Value history sparkline',
-    )
-    expect(avatars.map((a) => a.getAttribute('aria-label')).sort()).toEqual(['Alex', 'Ben'])
+    // Owner avatars are shown whenever an account has ANY owner (incl. a single owner). Every card's
+    // MiniSparkline is also role="img" — exclude it; this test is about owner avatars.
+    const ownerAvatars = (card: HTMLElement) =>
+      within(card)
+        .queryAllByRole('img')
+        .filter((a) => a.getAttribute('aria-label') !== 'Value history sparkline')
+        .map((a) => a.getAttribute('aria-label'))
+
+    const single = screen.getByText('DBS Multiplier').closest('[data-testid="entity-card"]') as HTMLElement
+    expect(ownerAvatars(single)).toEqual(['Ben'])
+
+    const multi = screen.getByText('Joint Savings').closest('[data-testid="entity-card"]') as HTMLElement
+    expect(ownerAvatars(multi).sort()).toEqual(['Alex', 'Ben'])
   })
 
   test('editing an account: owner chips prefill and adding an owner PUTs the new set', async () => {
@@ -574,7 +581,7 @@ describe('AccountsList', () => {
     expect((screen.getByLabelText(/Due day/) as HTMLInputElement).value).toBe('28')
   })
 
-  test('an out-of-range due day blocks Save', async () => {
+  test('an out-of-range due day is caught on submit — Save stays enabled, submit blocked with a summary (UX §6)', async () => {
     renderPage()
     await screen.findByText('DBS Multiplier')
     fireEvent.click(screen.getByTestId('entity-page-new'))
@@ -583,7 +590,11 @@ describe('AccountsList', () => {
     fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Card' } })
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '0' } })
     fireEvent.change(screen.getByLabelText(/Due day/), { target: { value: '40' } })
-    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+    const add = screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement
+    expect(add.disabled).toBe(false) // never disabled for invalid input
+    fireEvent.click(add) // submit is blocked: the summary note appears + the field is reddened
+    expect(screen.getByTestId('entity-modal-error-summary')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Due day/).className).toContain('ring-glow-error')
   })
 
   // ── Capital / asset / insurance details (Story 4.8) ──
@@ -684,13 +695,17 @@ describe('AccountsList', () => {
     expect('interest_rate' in body).toBe(false) // no cross-subtype keys
   })
 
-  test('a negative cost basis blocks Save', async () => {
+  test('a negative cost basis is caught on submit — Save stays enabled, submit blocked with a summary (UX §6)', async () => {
     renderPage(['capital']) // type pre-selected + locked to capital
     await screen.findByText('Growth Fund')
     fireEvent.click(screen.getByTestId('entity-page-new'))
     fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: 'My Fund' } })
     fireEvent.change(screen.getByLabelText(/Cost basis/), { target: { value: '-5000' } })
-    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+    const add = screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement
+    expect(add.disabled).toBe(false)
+    fireEvent.click(add)
+    expect(screen.getByTestId('entity-modal-error-summary')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Cost basis/).className).toContain('ring-glow-error')
   })
 
   test('editing an insurance prefills policy type + coverage fields (AC4)', async () => {
@@ -860,7 +875,7 @@ describe('AccountsList', () => {
     expect(body.reward_rate).toBeNull()
   })
 
-  test('an out-of-range cashback rate (≥100) blocks Save', async () => {
+  test('an out-of-range cashback rate (≥100) is caught on submit — Save stays enabled, submit blocked (UX §6)', async () => {
     renderPage(['bank', 'credit_card'])
     await screen.findByText('DBS Multiplier')
     fireEvent.click(screen.getByTestId('entity-page-new'))
@@ -870,7 +885,11 @@ describe('AccountsList', () => {
     fireEvent.click(screen.getByLabelText(/Reward type/))
     fireEvent.click(screen.getByRole('option', { name: 'cashback' }))
     fireEvent.change(await screen.findByLabelText(/Cashback rate/), { target: { value: '150' } })
-    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+    const add = screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement
+    expect(add.disabled).toBe(false)
+    fireEvent.click(add)
+    expect(screen.getByTestId('entity-modal-error-summary')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Cashback rate/).className).toContain('ring-glow-error')
   })
 
   test('editing a points card to cashback nulls reward_points and PATCHes reward_rate', async () => {
