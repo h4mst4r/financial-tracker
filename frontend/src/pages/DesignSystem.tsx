@@ -55,6 +55,7 @@ import {
   dateColumn,
   textColumn,
   moneyColumn,
+  categoryColumn,
   selectColumn,
   actionsColumn,
   FilterBar,
@@ -686,6 +687,16 @@ export function DesignSystem() {
             <Badge variant="warning">Warning</Badge>
             <Badge variant="info">Info</Badge>
             <Badge variant="error">Error</Badge>
+            <Badge variant="outline">Outline</Badge>
+          </div>
+
+          {/* §5 entity variant — colour-led chip tinted to a per-instance entity colour (Category /
+              Account, §153), resolved through useEntityColour (immersive-safe). */}
+          <h3 className="text-sm font-medium text-text-default mt-md mb-xs">Entity (§5)</h3>
+          <div className="flex flex-wrap gap-density">
+            <Badge entityColor="#8b5cf6">Subscriptions</Badge>
+            <Badge entityColor="#22c55e">Groceries</Badge>
+            <Badge entityColor="#f59e0b">Transport</Badge>
           </div>
 
           {/* Status registry (§4) — a surface passes a {domain, status} key, never a colour. */}
@@ -1245,14 +1256,15 @@ interface DemoRow {
   name: string
   amount: string
   currency: string
+  category: { name: string; color: string }
 }
 
 // A self-contained record-ledger Table demo (the real exported primitive) for /design-system.
 function TableDemo() {
   const [rows, setRows] = useState<DemoRow[]>([
-    { id: 'r1', status: 'active', date: '2026-06-12', name: 'Netflix', amount: '-20.20', currency: 'SGD' },
-    { id: 'r2', status: 'active', date: '2026-06-11', name: 'NTUC FairPrice', amount: '-84.20', currency: 'SGD' },
-    { id: 'r3', status: 'active', date: '2026-06-01', name: 'Salary', amount: '6500.00', currency: 'SGD' },
+    { id: 'r1', status: 'active', date: '2026-06-12', name: 'Netflix', amount: '-20.20', currency: 'SGD', category: { name: 'Subscriptions', color: '#8b5cf6' } },
+    { id: 'r2', status: 'active', date: '2026-06-11', name: 'NTUC FairPrice', amount: '-84.20', currency: 'SGD', category: { name: 'Groceries', color: '#22c55e' } },
+    { id: 'r3', status: 'active', date: '2026-06-01', name: 'Salary', amount: '6500.00', currency: 'SGD', category: { name: 'Income', color: '#3b82f6' } },
   ])
   const select = useMultiSelect()
   const [qaName, setQaName] = useState('')
@@ -1264,7 +1276,7 @@ function TableDemo() {
   const addRow = () => {
     if (!qaName.trim()) return
     setRows((rs) => [
-      { id: `r${Date.now()}`, status: 'active', date: '2026-06-13', name: qaName, amount: qaAmount || '0.00', currency: 'SGD' },
+      { id: `r${Date.now()}`, status: 'active', date: '2026-06-13', name: qaName, amount: qaAmount || '0.00', currency: 'SGD', category: { name: 'Uncategorised', color: '#64748b' } },
       ...rs,
     ])
     setQaName('')
@@ -1317,6 +1329,12 @@ function TableDemo() {
 // A deterministic synthetic dataset. Ids are zero-padded + sequential so the id doubles as the keyset
 // sort_key (the mock pages by "the row after this id", modelling (sort_key, id) — NOT a numeric offset).
 const SCALE_MERCHANTS = ['Netflix', 'NTUC FairPrice', 'Grab', 'Shopee', 'Spotify', 'Starbucks', 'Shell', 'Salary']
+const SCALE_CATEGORIES = [
+  { name: 'Subscriptions', color: '#8b5cf6' },
+  { name: 'Groceries', color: '#22c55e' },
+  { name: 'Transport', color: '#f59e0b' },
+  { name: 'Income', color: '#3b82f6' },
+]
 function makeDemoRows(n: number): DemoRow[] {
   return Array.from({ length: n }, (_, i): DemoRow => {
     const day = (i % 28) + 1
@@ -1327,6 +1345,7 @@ function makeDemoRows(n: number): DemoRow[] {
       name: `${SCALE_MERCHANTS[i % SCALE_MERCHANTS.length]} #${i}`,
       amount: (i % 7 === 0 ? 1 : -1) * (10 + (i % 90)) + '.00',
       currency: 'SGD',
+      category: SCALE_CATEGORIES[i % SCALE_CATEGORIES.length],
     }
   })
 }
@@ -1334,6 +1353,9 @@ function makeDemoRows(n: number): DemoRow[] {
 const scaleColumns: ColumnDef<DemoRow>[] = [
   dateColumn<DemoRow>({ key: 'date', get: (r) => r.date }),
   textColumn<DemoRow>({ key: 'name', header: 'Name', get: (r) => r.name }),
+  // Colour-led categoryColumn (§12.7) — the real factory. `hideBelow` demos the §12.6 responsive
+  // fold (this column drops below `lg`).
+  { ...categoryColumn<DemoRow>({ get: (r) => r.category, width: '10rem' }), hideBelow: 'lg' },
   moneyColumn<DemoRow>({ key: 'amount', header: 'Amount', get: (r) => r.amount, currencyOf: (r) => r.currency, signColour: true }),
 ]
 

@@ -5,9 +5,11 @@ transactions; `GET /api/events/{id}` reads one. **Any member** may create/read (
 admin/owner gate on `accounts`) — the AC is "As any member". Scoping is always `get_household_id`
 (the session's household, never the body). Snake_case wire.
 
-Story 5.2 layers the ledger (filters, cursor pagination, inline edit) onto `GET /api/events`; the
-`?include_archived=` flag is the only query param today.
+`GET /api/events` takes the ledger's server-side filters + sort + keyset pagination (Story 5.2,
+ARCH §4.10). Inline-edit PATCH is Story 5.3.
 """
+
+from datetime import date
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +22,7 @@ from backend.schemas.event import (
     TransactionCreate,
     TransactionListOut,
     TransactionResponse,
+    TransactionSummary,
     response_for,
 )
 from backend.services import event as event_service
@@ -36,15 +39,49 @@ def _to_response(event: FinancialEvent) -> TransactionResponse:
 @router.get("/events")
 async def list_events(
     include_archived: bool = False,
+    search: str | None = None,
+    date_start: date | None = None,
+    date_end: date | None = None,
+    category_id: str | None = None,
+    type: str | None = None,
+    account_id: str | None = None,
+    person_id: str | None = None,
+    status: str | None = None,
+    gst: bool | None = None,
+    reconciled: bool | None = None,
+    sort: str | None = None,
+    cursor: str | None = None,
+    limit: int = 100,
     household_id: str = Depends(get_household_id),
     db: AsyncSession = Depends(get_db),
 ) -> TransactionListOut:
-    """The household's transactions (any member), newest-first. `{items, total}` per the list rule.
-    Filters + cursor pagination are the Story 5.2 seam."""
-    rows, total = await event_service.list_transactions(
-        db, household_id, include_archived=include_archived
+    """The household's transactions (any member) with server-side filters + sort + keyset
+    pagination (ARCH §4.10). `{items, total, next_cursor, summary}`. `type`/`status`/`gst` are the
+    short wire names for `transaction_type`/`transaction_status`/`is_gst_claimable`."""
+    rows, next_cursor, total, summary = await event_service.list_transactions(
+        db,
+        household_id,
+        include_archived=include_archived,
+        search=search,
+        date_start=date_start,
+        date_end=date_end,
+        category_id=category_id,
+        transaction_type=type,
+        account_id=account_id,
+        person_id=person_id,
+        transaction_status=status,
+        is_gst_claimable=gst,
+        reconciled=reconciled,
+        sort=sort,
+        cursor=cursor,
+        limit=limit,
     )
-    return TransactionListOut(items=[_to_response(e) for e in rows], total=total)
+    return TransactionListOut(
+        items=[_to_response(e) for e in rows],
+        total=total,
+        next_cursor=next_cursor,
+        summary=TransactionSummary(out=summary["out"], inflow=summary["inflow"]),
+    )
 
 
 @router.post("/events", status_code=201)

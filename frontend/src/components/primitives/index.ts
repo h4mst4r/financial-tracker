@@ -42,7 +42,7 @@ export { Dot } from './Dot'
 export type { DotProps, DotTone } from './Dot'
 export { Table } from './Table'
 export type { ColumnDef, CellEditContext, InfiniteSource, TableProps, SortState, SortDir } from './Table'
-export { dateColumn, textColumn, moneyColumn, selectColumn, actionsColumn } from './tableColumns'
+export { dateColumn, textColumn, moneyColumn, categoryColumn, selectColumn, actionsColumn } from './tableColumns'
 export { FilterBar } from './FilterBar'
 export type {
   FilterBarProps,

@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { ACTION_ICON } from '../../config/iconRegistry'
+import { Badge } from './Badge'
 import { Checkbox } from './Checkbox'
 import { DatePicker } from './DatePicker'
 import { Input } from './Input'
@@ -11,8 +12,8 @@ import type { ColumnDef } from './Table'
 
 // Column vocabulary (§8.7) — the reuse unit. Date + money displays render through the §7 value atoms
 // (DateValue / MonetaryValue, Story 5F.3). Remaining atom-bound columns are deferred to their story:
-// statusColumn → Badge via the §4 status registry (5f-4), categoryColumn → Badge (entity tone) /
-// currency / account / person (Story 5.2) — `StatusBadge`/`FilledChip` are dissolved into `Badge`.
+// statusColumn → Badge via the §4 status registry (5f-4). categoryColumn (Story 5.2) is colour-led —
+// the §5 entity `Badge` variant (entity-tinted chip, §751) — `StatusBadge`/`FilledChip` dissolve into `Badge`.
 // Each factory returns a ColumnDef<T> bundling display render + inline editControl.
 
 export function dateColumn<T>(opts: {
@@ -119,6 +120,31 @@ export function moneyColumn<T>(opts: {
           </span>
         )
       : undefined,
+  }
+}
+
+export function categoryColumn<T>(opts: {
+  key?: string
+  header?: ReactNode
+  /** The row's category identity, or null when uncategorised. */
+  get: (row: T) => { name: string; color: string } | null
+  width?: string
+  sortable?: boolean
+}): ColumnDef<T> {
+  return {
+    key: opts.key ?? 'category',
+    header: opts.header ?? 'Category',
+    align: 'left',
+    width: opts.width,
+    // Category is colour-led (UX §751 "Category(`Badge`, colour leads)"): the §5 entity `Badge`
+    // variant — an entity-tinted chip (fill + floor-safe text) keyed to the category colour (data).
+    sortable: opts.sortable ?? true,
+    sortValue: (row) => opts.get(row)?.name ?? '',
+    render: (row) => {
+      const c = opts.get(row)
+      if (!c) return <span className="text-text-muted">—</span>
+      return <Badge entityColor={c.color} className="max-w-full truncate">{c.name}</Badge>
+    },
   }
 }
 

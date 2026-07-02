@@ -94,9 +94,20 @@ class TransactionResponse(BaseModel):
     amount_base_source: Literal["formula", "spot", "manual"] = "spot"
 
 
+class TransactionSummary(BaseModel):
+    """Server-computed base out/in totals for the toolbar (ARCH §4.10 lines 1779-1783) — over the
+    *filtered* set, never client-summed over a paginated page. `inflow` avoids the `in` keyword."""
+
+    out: Decimal
+    inflow: Decimal
+
+
 class TransactionListOut(BaseModel):
     items: list[TransactionResponse]
     total: int
+    # Keyset pagination (ARCH §4.10): the opaque cursor of the last row, or null at the end.
+    next_cursor: str | None = None
+    summary: TransactionSummary
 
 
 def response_for(event, *, amount_base_source: str) -> TransactionResponse:

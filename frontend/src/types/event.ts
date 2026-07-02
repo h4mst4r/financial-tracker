@@ -35,6 +35,16 @@ export interface Transaction extends BaseEntity {
   amount_base_source: 'formula' | 'spot' | 'manual'
 }
 
+// One page of the ledger (Story 5.2, ARCH §4.10 keyset). `next_cursor` is the opaque cursor of the
+// last row (null at the end); `summary` is the server aggregate for the toolbar (base out/in over the
+// filtered set — never client-summed over a paginated page). Money stays a Decimal string.
+export interface TransactionListPage {
+  items: Transaction[]
+  total: number
+  next_cursor: string | null
+  summary: { out: string; inflow: string }
+}
+
 // The POST /api/events body (Story 5.1). Everything FX-derived + provenance is server-set; the client
 // sends the entered money + the optional bank-statement `amount_base` override.
 export interface TransactionCreate {

@@ -57,6 +57,9 @@ export interface ColumnDef<T> {
   editControl?: (ctx: CellEditContext<T>) => ReactNode
   /** Seed value when entering edit mode (defaults to ''). */
   editInitial?: (row: T) => string
+  /** Hide this column below the named breakpoint (§12.6 tablet "fewer columns" fold — the info must
+   *  survive elsewhere, e.g. in a sibling column's sub-line). Omit to always show. */
+  hideBelow?: 'md' | 'lg'
 }
 
 /** Server keyset-paged data source (ARCH §4.10). The consumer owns the `useInfiniteQuery` and passes
@@ -103,6 +106,18 @@ const alignClass: Record<NonNullable<ColumnDef<unknown>['align']>, string> = {
   left: 'text-left',
   right: 'text-right',
   center: 'text-center',
+}
+
+// §12.6 responsive column fold — hide a column below the breakpoint. The <col> needs `table-column`
+// (its natural display) and the cells `table-cell` so the width track collapses with the content (no
+// blank gap under `table-layout: fixed`); both are the same breakpoint, applied in lockstep.
+const HIDE_COL: Record<NonNullable<ColumnDef<unknown>['hideBelow']>, string> = {
+  md: 'hidden md:table-column',
+  lg: 'hidden lg:table-column',
+}
+const HIDE_CELL: Record<NonNullable<ColumnDef<unknown>['hideBelow']>, string> = {
+  md: 'hidden md:table-cell',
+  lg: 'hidden lg:table-cell',
 }
 
 // react-virtual buffer: rows within this many of the viewport stay mounted (so a small scroll keeps an
@@ -252,7 +267,7 @@ export function Table<T>({
           return (
             <td
               key={col.key}
-              className={`border-b border-border px-sm py-control align-middle ${alignClass[align]}`}
+              className={`border-b border-border px-sm py-control align-middle ${alignClass[align]} ${col.hideBelow ? HIDE_CELL[col.hideBelow] : ''}`}
             >
               {editingThis && col.editControl ? (
                 // Enter/Esc bubble here; blur-out (focus left the whole cell) commits, blur
@@ -327,7 +342,11 @@ export function Table<T>({
           {columns.some((c) => c.width) && (
             <colgroup>
               {columns.map((c) => (
-                <col key={c.key} style={c.width ? { width: c.width } : undefined} />
+                <col
+                  key={c.key}
+                  className={c.hideBelow ? HIDE_COL[c.hideBelow] : undefined}
+                  style={c.width ? { width: c.width } : undefined}
+                />
               ))}
             </colgroup>
           )}
@@ -340,7 +359,7 @@ export function Table<T>({
                   <th
                     key={col.key}
                     // Bible .ledger th — sentence case (NOT uppercase), 11px/500/text-muted, 8px block padding.
-                    className={`whitespace-nowrap border-b border-border px-sm py-xs text-2xs font-medium text-text-muted ${alignClass[align]}`}
+                    className={`whitespace-nowrap border-b border-border px-sm py-xs text-2xs font-medium text-text-muted ${alignClass[align]} ${col.hideBelow ? HIDE_CELL[col.hideBelow] : ''}`}
                     aria-sort={
                       col.sortable
                         ? isActive

@@ -172,6 +172,40 @@ async def _seed_category(factory, hh_id: str, person_id: str) -> str:
     return cid
 
 
+async def _seed_txns(factory, hh_id: str, person_id: str, specs: list[dict]) -> None:
+    """Bulk-insert transactions directly (fast — no HTTP) for the list/sort/pagination tests. Each
+    spec may set event_date/amount/amount_base/type/name/status/gst; the rest use sane defaults."""
+    async with factory() as db:
+        for i, s in enumerate(specs):
+            amt = Decimal(s.get("amount", "10"))
+            base = Decimal(s.get("amount_base", str(amt)))
+            db.add(
+                FinancialEvent(
+                    household_id=hh_id,
+                    created_by=person_id,
+                    status="active",
+                    event_type="transaction",
+                    transaction_status=s.get("status", "completed"),
+                    source="manual",
+                    name=s.get("name", f"T{i}"),
+                    event_date=date.fromisoformat(s["event_date"]),
+                    transaction_type=s.get("type", "outflow"),
+                    category_id=s.get("category_id"),
+                    payee_person_id=s.get("payee_person_id"),
+                    currency="SGD",
+                    amount=amt,
+                    fx_rate=Decimal("1"),
+                    amount_base_calculated=base,
+                    amount_base=base,
+                    fx_delta=Decimal("0"),
+                    is_shared_expense=False,
+                    is_gst_claimable=s.get("gst", False),
+                    reconciled=s.get("reconciled"),
+                )
+            )
+        await db.commit()
+
+
 async def _seed_session(factory, person_id: str) -> tuple[str, str]:
     async with factory() as db:
         session = await auth.create_session(
@@ -438,5 +472,259 @@ async def test_body_household_id_ignored(monkeypatch):
         async with factory() as db:
             row = (await db.execute(select(FinancialEvent))).scalar_one()
             assert row.household_id == hh_id
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.2: server-side filters ──
+
+
+async def test_list_filters(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        cat = await _seed_category(factory, hh_id, person_id)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {
+                    "name": "Lunch",
+                    "event_date": "2026-06-01",
+                    "type": "outflow",
+                    "category_id": cat,
+                },
+                {"name": "Salary", "event_date": "2026-06-15", "type": "inflow", "gst": True},
+                {
+                    "name": "Dinner",
+                    "event_date": "2026-07-01",
+                    "type": "outflow",
+                    "reconciled": True,
+                },
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        def names(params: str) -> set[str]:
+            body = client.get(f"/api/events?{params}").json()
+            return {i["name"] for i in body["items"]}
+
+        assert names("search=din") == {"Dinner"}
+        assert names("type=inflow") == {"Salary"}
+        assert names("type=outflow") == {"Lunch", "Dinner"}
+        assert names(f"category_id={cat}") == {"Lunch"}
+        assert names("gst=true") == {"Salary"}
+        assert names("reconciled=true") == {"Dinner"}
+        assert names("date_start=2026-06-10&date_end=2026-06-30") == {"Salary"}
+    finally:
+        await engine.dispose()
+
+
+async def test_reconciled_filter_includes_null_as_unreconciled(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {"name": "Recon", "event_date": "2026-06-01", "reconciled": True},
+                {"name": "Unrecon", "event_date": "2026-06-02", "reconciled": False},
+                {"name": "Never", "event_date": "2026-06-03"},  # reconciled = NULL (default)
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        def names(params: str) -> set[str]:
+            return {i["name"] for i in client.get(f"/api/events?{params}").json()["items"]}
+
+        assert names("reconciled=true") == {"Recon"}
+        # "Unreconciled" must include the never-reconciled (NULL) row, not just explicit False.
+        assert names("reconciled=false") == {"Unrecon", "Never"}
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.2: sort ──
+
+
+async def test_list_sort(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {"name": "A", "event_date": "2026-06-01", "amount": "30"},
+                {"name": "B", "event_date": "2026-06-02", "amount": "10"},
+                {"name": "C", "event_date": "2026-06-03", "amount": "20"},
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        def order(params: str) -> list[str]:
+            return [i["name"] for i in client.get(f"/api/events?{params}").json()["items"]]
+
+        assert order("sort=amount:asc") == ["B", "C", "A"]
+        assert order("sort=amount:desc") == ["A", "C", "B"]
+        assert order("sort=event_date:asc") == ["A", "B", "C"]
+        assert order("sort=event_date:desc") == ["C", "B", "A"]
+        # Unknown sort column → default (event_date desc), no 500.
+        assert order("sort=bogus") == ["C", "B", "A"]
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.2: keyset pagination ──
+
+
+async def test_list_keyset_pagination(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [{"name": f"T{i}", "event_date": f"2026-06-0{i}"} for i in range(1, 6)],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        seen: list[str] = []
+        cursor = None
+        pages = 0
+        while True:
+            url = "/api/events?sort=event_date:asc&limit=2"
+            if cursor:
+                url += f"&cursor={cursor}"
+            body = client.get(url).json()
+            assert body["total"] == 5  # total is the full filtered count, not the page size
+            assert len(body["items"]) <= 2
+            seen.extend(i["id"] for i in body["items"])
+            cursor = body["next_cursor"]
+            pages += 1
+            if cursor is None:
+                break
+            assert pages < 10  # guard against a non-terminating cursor
+        # 5 rows / 2 per page = 3 pages, no overlap, all rows seen exactly once.
+        assert pages == 3
+        assert len(seen) == 5
+        assert len(set(seen)) == 5
+    finally:
+        await engine.dispose()
+
+
+async def test_list_keyset_stable_under_insert(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [{"name": f"T{i}", "event_date": f"2026-06-0{i}"} for i in range(1, 5)],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        page1 = client.get("/api/events?sort=event_date:desc&limit=2").json()
+        page1_ids = {i["id"] for i in page1["items"]}
+        # A concurrent insert with an OLD date lands on a later page — it must not shift page 1.
+        await _seed_txns(factory, hh_id, person_id, [{"name": "Older", "event_date": "2026-05-01"}])
+        page2 = client.get(
+            f"/api/events?sort=event_date:desc&limit=2&cursor={page1['next_cursor']}"
+        ).json()
+        page2_ids = {i["id"] for i in page2["items"]}
+        assert page1_ids.isdisjoint(page2_ids)  # keyset never re-serves a page-1 row
+    finally:
+        await engine.dispose()
+
+
+async def test_list_limit_cap(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        # 201 rows → an over-cap limit must clamp to 200 (and expose a next_cursor).
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {"name": f"T{i}", "event_date": "2026-06-01", "amount": str(i + 1)}
+                for i in range(201)
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        body = client.get("/api/events?limit=9999").json()
+        assert body["total"] == 201
+        assert len(body["items"]) == 200  # clamped
+        assert body["next_cursor"] is not None
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.2: server summary reflects the filtered set ──
+
+
+async def test_summary_reflects_filter(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {"name": "O1", "event_date": "2026-06-01", "type": "outflow", "amount_base": "10"},
+                {"name": "O2", "event_date": "2026-06-02", "type": "outflow", "amount_base": "20"},
+                {"name": "I1", "event_date": "2026-06-03", "type": "inflow", "amount_base": "100"},
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        full = client.get("/api/events").json()
+        assert Decimal(str(full["summary"]["out"])) == Decimal("30")
+        assert Decimal(str(full["summary"]["inflow"])) == Decimal("100")
+
+        inflow_only = client.get("/api/events?type=inflow").json()
+        assert inflow_only["total"] == 1
+        assert Decimal(str(inflow_only["summary"]["out"])) == Decimal("0")
+        assert Decimal(str(inflow_only["summary"]["inflow"])) == Decimal("100")
+    finally:
+        await engine.dispose()
+
+
+async def test_summary_zero_for_other_household(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(factory, hh_id, person_id, [{"name": "X", "event_date": "2026-06-01"}])
+        other_person_id, _ = await _seed_household(factory)
+        osid, ocsrf = await _seed_session(factory, other_person_id)
+        other = _client_with_db(factory, monkeypatch)
+        _auth(other, osid, ocsrf)
+
+        body = other.get("/api/events").json()
+        assert body["total"] == 0
+        assert Decimal(str(body["summary"]["out"])) == Decimal("0")
+        assert Decimal(str(body["summary"]["inflow"])) == Decimal("0")
     finally:
         await engine.dispose()

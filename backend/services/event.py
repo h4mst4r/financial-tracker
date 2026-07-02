@@ -8,10 +8,13 @@ Transactions are **any-member** writes (the router does not gate on role) — th
 `accounts`/`categories` (admin/owner). Per-row edit permission (Member own-rows) is Story 5.3.
 """
 
+import base64
+import json
 from collections.abc import Sequence
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, asc, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import errors
@@ -153,27 +156,172 @@ async def get_transaction(db: AsyncSession, household_id: str, event_id: str) ->
     return event
 
 
-async def list_transactions(
-    db: AsyncSession, household_id: str, *, include_archived: bool = False
-) -> tuple[Sequence[FinancialEvent], int]:
-    """The household's transactions, newest-first (`event_date DESC, created_at DESC`). Active only
-    unless `include_archived`. Returns `(rows, total)`.
+# Keyset-sortable columns (ARCH §4.10 `sort=<col[:dir]>`). Only these three are exposed to the
+# ledger (UX §12.2 sortable Date/Amount/Base); any other `sort` value falls back to the default.
+_SORTABLE = {
+    "event_date": FinancialEvent.event_date,
+    "amount": FinancialEvent.amount,
+    "amount_base": FinancialEvent.amount_base,
+}
+_DEFAULT_SORT_COL = "event_date"
+_DEFAULT_SORT_DIR = "desc"
+_MAX_LIMIT = 200
+_DEFAULT_LIMIT = 100
 
-    # ponytail: limit/offset/cursor pagination + the FilterBar filters are the Story 5.2 ledger
-    # seam — kept out of this signature until the ledger consumes them."""
+
+def _parse_sort(sort: str | None) -> tuple[str, str]:
+    """`col[:dir]` → `(col, dir)`, allow-listed to `_SORTABLE` + `asc|desc`; else → default."""
+    if not sort:
+        return _DEFAULT_SORT_COL, _DEFAULT_SORT_DIR
+    col, _, direction = sort.partition(":")
+    if col not in _SORTABLE:
+        return _DEFAULT_SORT_COL, _DEFAULT_SORT_DIR
+    direction = direction if direction in ("asc", "desc") else "asc"
+    return col, direction
+
+
+def _encode_cursor(value: object, row_id: str) -> str:
+    """Opaque base64 of the last row's `(sort_value, id)` — a keyset cursor, not an offset."""
+    return base64.urlsafe_b64encode(json.dumps({"v": str(value), "id": row_id}).encode()).decode()
+
+
+def _decode_cursor(cursor: str, sort_col: str) -> tuple[object, str]:
+    """`(typed_sort_value, id)` from the opaque cursor. Types the value per the sort column (date vs
+    Decimal) so the row-value comparison uses the right operator."""
+    data = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+    raw, row_id = data["v"], data["id"]
+    typed: object = date.fromisoformat(raw) if sort_col == "event_date" else Decimal(raw)
+    return typed, row_id
+
+
+async def list_transactions(
+    db: AsyncSession,
+    household_id: str,
+    *,
+    include_archived: bool = False,
+    search: str | None = None,
+    date_start: date | None = None,
+    date_end: date | None = None,
+    category_id: str | None = None,
+    transaction_type: str | None = None,
+    account_id: str | None = None,
+    person_id: str | None = None,
+    transaction_status: str | None = None,
+    is_gst_claimable: bool | None = None,
+    reconciled: bool | None = None,
+    sort: str | None = None,
+    cursor: str | None = None,
+    limit: int = _DEFAULT_LIMIT,
+) -> tuple[Sequence[FinancialEvent], str | None, int, dict[str, Decimal]]:
+    """The household's transactions with server-side filters + sort + **keyset** pagination
+    (ARCH §4.10). Returns `(rows, next_cursor, total, summary)`, where `summary` = base out/in
+    totals over the *filtered* set (never derivable from `total`; ARCH lines 1779-1783).
+
+    Sort allow-list = event_date / amount / amount_base + a deterministic `id` tie-break so the
+    keyset cursor is stable. `limit` is clamped to [1, 200]."""
+    limit = max(1, min(limit, _MAX_LIMIT))
+    sort_col, sort_dir = _parse_sort(sort)
+    col = _SORTABLE[sort_col]
+
+    # Filters only (drives total + summary + the page query's base). The keyset clause is
+    # pagination, NOT a filter, so it is layered on separately below.
     where = [
         FinancialEvent.household_id == household_id,
         FinancialEvent.event_type == "transaction",
     ]
     if not include_archived:
         where.append(FinancialEvent.archived.is_(False))
+    if search:
+        where.append(FinancialEvent.name.ilike(f"%{search}%"))
+    if date_start is not None:
+        where.append(FinancialEvent.event_date >= date_start)
+    if date_end is not None:
+        where.append(FinancialEvent.event_date <= date_end)
+    if category_id is not None:
+        where.append(FinancialEvent.category_id == category_id)
+    if transaction_type in ("inflow", "outflow"):
+        where.append(FinancialEvent.transaction_type == transaction_type)
+    if account_id is not None:
+        where.append(FinancialEvent.source_account_id == account_id)
+    if person_id is not None:
+        where.append(FinancialEvent.payee_person_id == person_id)
+    if transaction_status is not None:
+        where.append(FinancialEvent.transaction_status == transaction_status)
+    if is_gst_claimable is not None:
+        where.append(FinancialEvent.is_gst_claimable.is_(is_gst_claimable))
+    if reconciled is not None:
+        if reconciled:
+            where.append(FinancialEvent.reconciled.is_(True))
+        else:
+            # "Unreconciled" = never-reconciled too: `reconciled` is NULL until Story 5.4 sets it,
+            # so a bare `IS 0` would return nothing while every row is effectively unreconciled.
+            where.append(
+                or_(FinancialEvent.reconciled.is_(False), FinancialEvent.reconciled.is_(None))
+            )
+
     total = (
         await db.execute(select(func.count()).select_from(FinancialEvent).where(*where))
     ).scalar_one()
+
+    # Toolbar summary — server aggregate over the filtered set (ARCH lines 1779-1783). coalesce
+    # so an empty set yields 0, not None.
+    summary_row = (
+        await db.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                FinancialEvent.transaction_type == "outflow",
+                                FinancialEvent.amount_base,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                FinancialEvent.transaction_type == "inflow",
+                                FinancialEvent.amount_base,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            ).where(*where)
+        )
+    ).one()
+    summary = {"out": Decimal(summary_row[0]), "inflow": Decimal(summary_row[1])}
+
+    # Keyset page clause: rows strictly "after" the cursor row in the sort order (row-value
+    # compare, id tie-break same direction). Fetch limit+1 to detect a next page in one query.
+    page_where = list(where)
+    if cursor:
+        cur_value, cur_id = _decode_cursor(cursor, sort_col)
+        if sort_dir == "asc":
+            page_where.append(
+                or_(col > cur_value, and_(col == cur_value, FinancialEvent.id > cur_id))
+            )
+        else:
+            page_where.append(
+                or_(col < cur_value, and_(col == cur_value, FinancialEvent.id < cur_id))
+            )
+
+    order = asc if sort_dir == "asc" else desc
     stmt = (
         select(FinancialEvent)
-        .where(*where)
-        .order_by(FinancialEvent.event_date.desc(), FinancialEvent.created_at.desc())
+        .where(*page_where)
+        .order_by(order(col), order(FinancialEvent.id))
+        .limit(limit + 1)
     )
-    rows = (await db.execute(stmt)).scalars().all()
-    return rows, total
+    rows = list((await db.execute(stmt)).scalars().all())
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = (
+        _encode_cursor(getattr(rows[-1], sort_col), rows[-1].id) if has_more and rows else None
+    )
+    return rows, next_cursor, total, summary

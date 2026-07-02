@@ -117,6 +117,7 @@ export const PRIMITIVE_DEMO_SECTION: Record<string, string> = {
   dateColumn: 'table',
   textColumn: 'table',
   moneyColumn: 'table',
+  categoryColumn: 'table',
   selectColumn: 'table',
   actionsColumn: 'table',
   // FilterBar + its serializer are demoed in the one #filterbar section (FilterBarDemo).
