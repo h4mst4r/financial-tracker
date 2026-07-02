@@ -645,8 +645,6 @@ def upgrade() -> None:
         sa.Column("linked_recurring_id", sa.String(length=36), nullable=True),
         sa.Column("source", sa.String(length=20), nullable=False),
         sa.Column("external_ref", sa.String(length=200), nullable=True),
-        sa.Column("reconciled", sa.Boolean(), nullable=True),
-        sa.Column("reconciled_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("duplicate_of", sa.String(length=36), nullable=True),
         sa.Column("frequency_text", sa.String(length=50), nullable=True),
         sa.Column("frequency_rule", sa.Text(), nullable=True),

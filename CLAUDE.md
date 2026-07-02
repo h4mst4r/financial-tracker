@@ -41,6 +41,12 @@ Story files live in `_bmad-output/implementation-artifacts/stories/`. Read the s
 
 **P7 — Keep planning artifacts greenfield and in-sync.** (a) The planning artifacts read as a **pure greenfield spec** — no provenance/archaeology, no `(as-built)` / delta tags, no "prior build" citations; *strip* such cruft, don't document it. (b) When a frontend story builds/changes specced UI, update **UX spec + `/design-system` together during dev** (not deferred to a re-review pass) — no SCP needed for in-story P5 parity. (c) `bmad-create-story` output must **lock every spec-deferred value verbatim** — "use sensible values" / "either X or Y" are defects; the dev agent transcribes, it doesn't design.
 
+**P8 — Never invent; surface every decision at story-end (highest priority alongside P0).** The recurring failure mode: when the spec is ambiguous, silent, or self-contradictory, the agent fills the gap, rationalises the fill as "spec-compliant", and bakes it into the spec + tests so it reads as native. That is forbidden. Four hard rules:
+1. **Owner-decision flags are BLOCKERS.** Any "owner decision", "flag for owner", "spec gap", or unresolved contradiction between spec sources **halts** implementation until the human rules. The agent may **never** substitute its own recommendation for the human's decision and proceed — including flags it wrote itself at create-story time.
+2. **No design-introducing spec edits during dev-story.** In-story spec edits are limited to **verbatim value/token lockstep** (P7b). Any edit that *introduces or changes a rule/behaviour* is forbidden — that is a `correct-course`, not an inline edit. Reaching to edit the spec to make code look authorised is the alarm itself.
+3. **Every test traces to a spec line.** A test asserting behaviour with no AC/spec citation is how invention is laundered into "green/verified". No citation → it is a spec gap, not a feature.
+4. **Report decisions in the completion message, not a buried file.** Every `bmad-dev-story` / `bmad-quick-dev` run **ends its chat hand-off with an explicit "Decisions & assumptions I made" list** — each item citing its spec line, or marked **"NONE — needs your ruling"**. Anything unspecced that the agent nonetheless built is surfaced here, in chat, so the human reviews a short list instead of re-deriving the diff. Create-story raises its owner-flags the same way. A run that made calls but reports "none" is a defect.
+
 ---
 
 ## 3. Story Execution Protocol

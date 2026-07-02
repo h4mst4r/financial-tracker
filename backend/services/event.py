@@ -182,9 +182,10 @@ async def update_transaction(
 
     Editing any money field (`amount`/`currency`/`amount_base`) re-resolves the FX block through the
     shared `_resolve_fx`; a supplied `amount_base` is the inline Base-{base} **manual override**
-    (`amount_base_source → manual`), while a money edit that omits it re-fills from spot. `status`/
-    `reconciled`/`tags`/`duplicate_of` are NOT editable here (Stories 5.4/5.10/5.6 — absent from the
-    schema)."""
+    (`amount_base_source → manual`), while a money edit that omits it re-fills from spot.
+    `transaction_status` (pending/completed/cancelled/reconciled) is a plain scalar; `reconciled`
+    is foreign-only, so it is coerced back to `completed` on a base-currency row (SCP 2026-07-02).
+    `tags`/`duplicate_of` are NOT editable here (Stories 5.10/5.6 — absent from the schema)."""
     event = await get_transaction(db, household_id, event_id)
     assert_can_modify(event, actor_id, actor_role)
 
@@ -199,7 +200,8 @@ async def update_transaction(
 
     before = _scalar_snapshot(event)
 
-    # Apply the non-money scalar fields verbatim; the money block needs quantize + FX recompute.
+    # Apply the plain scalar fields verbatim (incl. `transaction_status`); the money block needs
+    # quantize + FX recompute, handled below.
     for key, value in fields.items():
         if key not in _MONEY_EDIT_KEYS:
             setattr(event, key, value)
@@ -226,6 +228,17 @@ async def update_transaction(
         event.source_account_id = None
     if event.transaction_type == "inflow":
         event.is_shared_expense = False
+    # `reconciled` is a foreign-only status — a base-currency row has no FX to verify, so it can
+    # never be reconciled (SCP 2026-07-02 R1/R4). Coerce back to `completed` if the row is (or was
+    # edited to be) base currency. Only when the status or currency actually changed this PATCH —
+    # nothing else can affect the foreign/reconciled invariant, and re-resolving the currency on an
+    # unrelated edit is wasteful (and would 400 a reconciled row whose currency was since deleted).
+    if event.transaction_status == "reconciled" and (
+        "transaction_status" in fields or "currency" in fields
+    ):
+        _, is_base = await _resolve_currency(db, household_id, event.currency)
+        if is_base:
+            event.transaction_status = "completed"
 
     event.updated_by = actor_id
     await db.flush()
@@ -342,9 +355,9 @@ async def duplicate_transaction(
     clone.fx_delta = Decimal(0)
     clone.duplicate_of = None
     clone.archived = False
-    # A fresh template is unreconciled — never inherit the source's reconciliation (Story 5.4 seam).
-    clone.reconciled = None
-    clone.reconciled_at = None
+    # A fresh template starts at the default status — never inherit the source's reconciled/void
+    # state (SCP 2026-07-02: reconciliation is a status, not a flag).
+    clone.transaction_status = "completed"
     db.add(clone)
     await db.flush()
     await audit.log(
@@ -455,20 +468,31 @@ async def list_transactions(
         where.append(FinancialEvent.is_gst_claimable.is_(is_gst_claimable))
     if reconciled is not None:
         if reconciled:
-            where.append(FinancialEvent.reconciled.is_(True))
+            where.append(FinancialEvent.transaction_status == "reconciled")
         else:
-            # "Unreconciled" = never-reconciled too: `reconciled` is NULL until Story 5.4 sets it,
-            # so a bare `IS 0` would return nothing while every row is effectively unreconciled.
-            where.append(
-                or_(FinancialEvent.reconciled.is_(False), FinancialEvent.reconciled.is_(None))
-            )
+            # "Unreconciled" is the FOREIGN worklist — rows not yet reconciled, excluding base-
+            # currency rows (which have no FX to verify, SCP 2026-07-02 R6). Resolve the base code
+            # once; a household always has exactly one base currency.
+            base_code = (
+                await db.execute(
+                    select(Currency.code).where(
+                        Currency.household_id == household_id, Currency.is_base.is_(True)
+                    )
+                )
+            ).scalar_one_or_none()
+            where.append(FinancialEvent.transaction_status != "reconciled")
+            if base_code is not None:
+                where.append(FinancialEvent.currency != base_code)
 
     total = (
         await db.execute(select(func.count()).select_from(FinancialEvent).where(*where))
     ).scalar_one()
 
     # Toolbar summary — server aggregate over the filtered set (ARCH lines 1779-1783). coalesce
-    # so an empty set yields 0, not None.
+    # so an empty set yields 0, not None. Cancelled transactions are excluded from every live
+    # aggregation (Story 5.4, FR-E-005) — so the out/in totals drop them, but the items/total/cursor
+    # keep them (a cancelled row still shows in the list, just greyed and not summed).
+    summary_where = [*where, FinancialEvent.transaction_status != "cancelled"]
     summary_row = (
         await db.execute(
             select(
@@ -496,7 +520,7 @@ async def list_transactions(
                     ),
                     0,
                 ),
-            ).where(*where)
+            ).where(*summary_where)
         )
     ).one()
     summary = {"out": Decimal(summary_row[0]), "inflow": Decimal(summary_row[1])}

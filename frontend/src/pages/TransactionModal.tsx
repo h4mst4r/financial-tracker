@@ -57,6 +57,9 @@ const BORDER_FOR_TONE: Record<StatusTone, string> = {
   info: 'border-info',
 }
 
+type TransactionStatus = 'pending' | 'completed' | 'reconciled' | 'cancelled'
+const STATUS_VALUES = ['pending', 'completed', 'reconciled', 'cancelled'] as const
+
 interface FormState {
   name: string
   event_date: string
@@ -71,6 +74,9 @@ interface FormState {
   notes: string
   override_base: boolean
   amount_base: string
+  // Lifecycle status — settable in EDIT mode only (create defaults to completed). `reconciled` is
+  // offered only on foreign-currency rows (SCP 2026-07-02).
+  transaction_status: TransactionStatus
 }
 
 const emptyForm = (currency: string, payee: string): FormState => ({
@@ -87,6 +93,7 @@ const emptyForm = (currency: string, payee: string): FormState => ({
   notes: '',
   override_base: false,
   amount_base: '',
+  transaction_status: 'completed',
 })
 
 // Seed the form from an existing row (edit mode / duplicate). `override_base` reflects the DERIVED
@@ -106,6 +113,9 @@ const formFromTransaction = (t: Transaction): FormState => ({
   notes: t.notes ?? '',
   override_base: t.amount_base_source === 'manual',
   amount_base: t.amount_base,
+  transaction_status: STATUS_VALUES.includes(t.transaction_status as TransactionStatus)
+    ? (t.transaction_status as TransactionStatus)
+    : 'completed',
 })
 
 const TYPE_OPTIONS = [
@@ -113,11 +123,28 @@ const TYPE_OPTIONS = [
   { value: 'inflow', label: 'Inflow' },
 ]
 
+// The settable lifecycle statuses (SCP 2026-07-02). `reconciled` is offered only on foreign rows —
+// `statusOptions()` drops it for base currency. A `Dropdown` (SegmentedControl is mode/tab only).
+const STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'reconciled', label: 'Reconciled' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
+const statusOptions = (isForeign: boolean) =>
+  isForeign ? STATUS_OPTIONS : STATUS_OPTIONS.filter((o) => o.value !== 'reconciled')
+
+// The Save payload: the create fields plus the edit-only status axis, which the page forwards to the
+// PATCH. In create mode it is omitted (the server defaults to completed).
+export type TransactionSubmit = TransactionCreate & {
+  transaction_status?: TransactionStatus
+}
+
 interface TransactionModalProps {
   open: boolean
   onClose: () => void
   /** Builds + sends the create/update request (the page branches create-vs-PATCH + toast + close). */
-  onSubmit: (payload: TransactionCreate) => Promise<void>
+  onSubmit: (payload: TransactionSubmit) => Promise<void>
   /** Present → edit mode: the form seeds from this row and Save PATCHes (Story 5.3). */
   transaction?: Transaction | null
 }
@@ -197,7 +224,7 @@ export function TransactionModal({ open, onClose, onSubmit, transaction }: Trans
   })
 
   const handleSave = async () => {
-    const payload: TransactionCreate = {
+    const payload: TransactionSubmit = {
       name: form.name.trim(),
       event_date: form.event_date,
       transaction_type: form.transaction_type,
@@ -215,6 +242,8 @@ export function TransactionModal({ open, onClose, onSubmit, transaction }: Trans
       // Only send the override when the user opted to enter an exact base figure on a foreign row.
       amount_base:
         isForeign && form.override_base ? cleanAmount(form.amount_base.trim()) : undefined,
+      // Status is editable only when editing an existing row; on create the server defaults it.
+      ...(transaction ? { transaction_status: form.transaction_status } : {}),
     }
     setSaving(true)
     try {
@@ -425,6 +454,20 @@ export function TransactionModal({ open, onClose, onSubmit, transaction }: Trans
             label="GST-claimable"
             checked={form.is_gst_claimable}
             onChange={(v) => set('is_gst_claimable', v)}
+          />
+        </div>
+      )}
+
+      {/* Status (SCP 2026-07-02) — edit mode only; `reconciled` is offered only on foreign rows. On
+          create the server defaults to completed. */}
+      {transaction && (
+        <div className="flex flex-col gap-xs md:col-span-2">
+          <Label htmlFor="txn-status">Status</Label>
+          <Dropdown
+            id="txn-status"
+            value={form.transaction_status}
+            options={statusOptions(isForeign)}
+            onChange={(v) => set('transaction_status', v as TransactionStatus)}
           />
         </div>
       )}

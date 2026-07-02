@@ -1104,7 +1104,7 @@ link back to the originating account, so FR-A-017 creates a recurring-payment ev
 `transaction|recurring_payment|transfer`).
 
 *Base event columns:* `name, event_date(INDEX), event_type,
-transaction_status(pending|completed|cancelled|reconciled, def completed),
+transaction_status(pending|completed|cancelled|reconciled, def completed; `reconciled` is foreign-currency-only — reconciliation is a status, there is no separate `reconciled`/`reconciled_at` column),
 payee_person_id(FK persons), payment_method, category_id(FK categories), transaction_type
 (inflow|outflow|transfer), is_shared_expense(bool), notes, is_gst_claimable(bool),
 source_account_id(FK accounts, null)` *(the single account link — **no separate
@@ -1127,7 +1127,7 @@ source_account_id(FK accounts, null)` *(the single account link — **no separat
 > know `source_account_id`). Account ledger/history queries (FR-A-007) filter on `source_account_id`
 > (plus `destination_account_id` for incoming transfer legs).
 
-*Transaction columns:* `reconciled(bool), reconciled_at, duplicate_of(FK self)`.
+*Transaction columns:* `duplicate_of(FK self)`. (Reconciliation is the `reconciled` `transaction_status` value — no separate flag/timestamp column, SCP 2026-07-02.)
 
 *RecurringPayment columns:* `frequency_text, frequency_rule(JSON text), next_occurrence,
 recurrence_start_date, recurrence_end_date, source_entity_type
@@ -1818,6 +1818,20 @@ rather than hard-delete when they have a subtree.
 never auto-resolved — it feeds a post-MVP AI-assisted merge. **Duplicate** as an *operation*
 (⋮ menu) clones the row with a new id and cleared date, monetary fields zeroed (§3.5 account
 rules), no confirmation.
+
+**Duplicate-detection endpoint** — `GET /api/events/duplicate-check` (FR-E-008; any member, read-only,
+household-scoped via `get_household_id`). **Declared before `GET /api/events/{event_id}`** so the
+static segment is not captured as an id. Query params carry the *unsaved* candidate: `amount` (Decimal)
+· `event_date` (date) · `category_id?` · `type?` (the `transaction_type` wire name, mirrors the list
+route) · `payee_person_id?` · `exclude_id?` (the row being edited, so an edit never flags itself —
+`id != self`). Returns a slim `{ "items": [...TransactionResponse], "total": N }` (`TransactionMatchesOut`
+— no pagination/summary, unlike the ledger list) of the **non-archived** matching transactions, ordered
+`event_date desc, id`. `category_id`/`payee_person_id` match NULL-to-NULL. The client runs this **before**
+each create/edit persist (modal Save · inline commit · quick-add) and, on a hit, presents the
+resolver; the actual save carries `duplicate_of` only when the user chose **Link**. `duplicate_of` is a
+plain optional field on the transaction **create + PATCH** body (household-scope-validated as a
+transaction id; a self-reference is a 400) and is exposed on `TransactionResponse` — **no migration**
+(the self-FK column is already in `0001`).
 
 ### 4.11 Global search endpoint — `GET /api/search` (FR-SYS-010)
 

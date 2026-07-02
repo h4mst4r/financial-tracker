@@ -52,15 +52,19 @@ class TransactionCreate(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
-    """Partial edit of a transaction (Story 5.3). Every field optional → `model_dump(exclude_unset=
-    True)` carries only what the client sent, so an inline commit sends one field and the modal
-    sends its changed set (ARCH §4.10 — one PATCH for both). Money edits re-resolve FX server-side;
-    a supplied `amount_base` is the manual override. **Excludes** `transaction_status`/`reconciled`
-    (Story 5.4), `tag_ids` (5.10), `duplicate_of` (5.6) — those are not editable here."""
+    """Partial edit of a transaction (Stories 5.3/5.4). Every field optional → `model_dump(
+    exclude_unset=True)` carries only what the client sent, so an inline commit sends one field and
+    the modal sends its changed set (ARCH §4.10 — one PATCH for both). Money edits re-resolve FX
+    server-side; a supplied `amount_base` is the manual override. `transaction_status` is the full
+    lifecycle enum incl. `reconciled` (foreign-only — the server coerces it to `completed` on a
+    base-currency row; SCP 2026-07-02). **Excludes** `tag_ids` (5.10), `duplicate_of` (5.6)."""
 
     name: Str200 | None = None
     event_date: date | None = None
     transaction_type: Literal["inflow", "outflow"] | None = None
+    # `reconciled` is a status value, offered only for foreign-currency rows (the server coerces it
+    # back to `completed` on a base-currency row — SCP 2026-07-02). There is no reconciled bool.
+    transaction_status: Literal["pending", "completed", "cancelled", "reconciled"] | None = None
     category_id: str | None = None
     payee_person_id: str | None = None
     payment_method: Str100 | None = None

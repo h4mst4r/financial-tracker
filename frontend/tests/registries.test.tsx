@@ -32,7 +32,10 @@ describe('status registry (§4)', () => {
     expect(statusTone('fxProvider', 'unknown')).toBe('neutral')
     expect(statusTone('backup', 'inProgress')).toBe('warning')
     expect(statusTone('recurringOccurrence', 'missed')).toBe('critical')
+    expect(statusTone('transaction', 'completed')).toBe('positive')
     expect(statusTone('transaction', 'pending')).toBe('warning')
+    // `reconciled` is a foreign-only status, success-green like completed (SCP 2026-07-02).
+    expect(statusTone('transaction', 'reconciled')).toBe('positive')
     expect(statusTone('transaction', 'cancelled')).toBe('neutral')
     // FX base-source indicator (Story 5.1): formula→info · spot→neutral · manual→warning (§4 line 146).
     expect(statusTone('fxBaseSource', 'formula')).toBe('info')
@@ -41,10 +44,12 @@ describe('status registry (§4)', () => {
   })
 
   it('statusToneForStatus is string-tolerant: known → tone, unknown → neutral', () => {
+    // The wire vocab is `completed` (Story 5.4) — the ledger dot/badge resolves it to positive.
+    expect(statusToneForStatus('transaction', 'completed')).toBe('positive')
     expect(statusToneForStatus('transaction', 'pending')).toBe('warning')
     expect(statusToneForStatus('transaction', 'cancelled')).toBe('neutral')
-    // `completed`/`reconciled` are not §4 transaction keys yet (that vocab is Story 5.4) → neutral.
-    expect(statusToneForStatus('transaction', 'completed')).toBe('neutral')
+    // An unknown/not-yet-modelled status still degrades to neutral, never throwing.
+    expect(statusToneForStatus('transaction', 'bogus')).toBe('neutral')
   })
 
   it('uses only the five §4 tones — no domain invents a sixth', () => {

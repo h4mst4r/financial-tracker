@@ -22,7 +22,7 @@ import { MonetaryValue } from '../components/primitives/MonetaryValue'
 import { DateValue } from '../components/primitives/DateValue'
 import { EmptyState } from '../components/primitives/EmptyState'
 import { EMPTY_STATE } from '../config/emptyStateRegistry'
-import { statusToneForStatus } from '../config/statusRegistry'
+import { badgeVariantForStatus, statusToneForStatus } from '../config/statusRegistry'
 import { ACTION_ICON } from '../config/iconRegistry'
 import { useAlertStore } from '../stores/alertStore'
 import { useAuthStore } from '../stores/authStore'
@@ -47,7 +47,8 @@ import type {
   TransactionListPage,
   TransactionUpdate,
 } from '../types/event'
-import { TransactionModal } from './TransactionModal'
+import { TransactionModal, type TransactionSubmit } from './TransactionModal'
+import { TransactionFlags } from './TransactionFlags'
 
 // The Transactions ledger page (UX §12). AppShell (global) hosts the toolbar (name · server summary ·
 // +New), the record-list FilterBar, and the RecordLedger `Table` with server-side sort + keyset
@@ -65,6 +66,14 @@ const SORT_OPTIONS = [
   { value: 'amount_base:desc', label: 'Base (high → low)' },
   { value: 'amount_base:asc', label: 'Base (low → high)' },
 ]
+
+// Display labels for the three settable transaction statuses (§4 registry keys on the wire values).
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  completed: 'Completed',
+  reconciled: 'Reconciled',
+  cancelled: 'Cancelled',
+}
 
 // Shared amount/base inline editor — the unsigned magnitude (mono, right-aligned). Amount + Base both
 // reuse it; on commit the value maps to `amount` / `amount_base` (the latter = the FX manual override).
@@ -283,7 +292,12 @@ export function Transactions() {
         const sub = [method, t.notes].filter(Boolean).join(' · ')
         return (
           <div className="flex flex-col">
-            <span className="truncate">{t.name ?? '—'}</span>
+            {/* Name + the behavioural-flag icon cluster (Story 5.5, §751): personal (non-shared
+                outflow) + GST-claimable render as muted aria-labelled glyphs trailing the name. */}
+            <span className="inline-flex min-w-0 items-center gap-2xs">
+              <span className="truncate">{t.name ?? '—'}</span>
+              <TransactionFlags transaction={t} />
+            </span>
             {(sub || payer) && (
               <span className="truncate text-2xs text-text-muted">
                 {payer && <span className="lg:hidden">{payer}{sub ? ' · ' : ''}</span>}
@@ -382,15 +396,14 @@ export function Transactions() {
       key: 'status',
       header: 'Status',
       align: 'left',
-      width: '7rem',
+      width: '9rem',
       sortable: false,
-      // Status is a colour Dot (§12.1 "StatusBadge dot"), tone from the §4 registry — never a
-      // call-site colour. The status text stays available to assistive tech.
+      // Status is a §4 `Badge` (status variant + leading dot, UX §751) — tone from the registry,
+      // never a call-site colour. `reconciled` is a foreign-only status (success-green, SCP 2026-07-02).
       render: (t) => (
-        <span className="inline-flex items-center" title={t.transaction_status}>
-          <Dot tone={statusToneForStatus('transaction', t.transaction_status)} />
-          <span className="sr-only">{t.transaction_status}</span>
-        </span>
+        <Badge variant={badgeVariantForStatus('transaction', t.transaction_status)} dot>
+          {STATUS_LABEL[t.transaction_status] ?? t.transaction_status}
+        </Badge>
       ),
     },
     {
@@ -418,7 +431,11 @@ export function Transactions() {
     return (
       <div className="flex flex-col gap-2xs border-b border-border px-sm py-control">
         <div className="flex items-center justify-between gap-sm">
-          <span className="truncate font-medium text-text-strong">{t.name ?? '—'}</span>
+          {/* Name + flag icons (Story 5.5, §751) — same cluster as the desktop row, on the card. */}
+          <span className="inline-flex min-w-0 items-center gap-2xs">
+            <span className="truncate font-medium text-text-strong">{t.name ?? '—'}</span>
+            <TransactionFlags transaction={t} />
+          </span>
           <MonetaryValue
             amount={signed(t, t.amount)}
             currency={t.currency}
@@ -455,7 +472,7 @@ export function Transactions() {
       (await api.patch<Transaction>(`/api/events/${id}`, data)).data,
   })
 
-  const handleSubmit = async (payload: TransactionCreate) => {
+  const handleSubmit = async (payload: TransactionSubmit) => {
     try {
       if (editing) {
         await patchMutation.mutateAsync({ id: editing.id, data: payload })

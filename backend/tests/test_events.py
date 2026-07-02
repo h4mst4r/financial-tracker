@@ -174,7 +174,7 @@ async def _seed_category(factory, hh_id: str, person_id: str) -> str:
 
 async def _seed_txns(factory, hh_id: str, person_id: str, specs: list[dict]) -> None:
     """Bulk-insert transactions directly (fast — no HTTP) for the list/sort/pagination tests. Each
-    spec may set event_date/amount/amount_base/type/name/status/gst; the rest use sane defaults."""
+    spec may set event_date/amount/amount_base/type/name/status/gst/currency; the rest default."""
     async with factory() as db:
         for i, s in enumerate(specs):
             amt = Decimal(s.get("amount", "10"))
@@ -192,7 +192,7 @@ async def _seed_txns(factory, hh_id: str, person_id: str, specs: list[dict]) -> 
                     transaction_type=s.get("type", "outflow"),
                     category_id=s.get("category_id"),
                     payee_person_id=s.get("payee_person_id"),
-                    currency="SGD",
+                    currency=s.get("currency", "SGD"),
                     amount=amt,
                     fx_rate=Decimal("1"),
                     amount_base_calculated=base,
@@ -200,7 +200,6 @@ async def _seed_txns(factory, hh_id: str, person_id: str, specs: list[dict]) -> 
                     fx_delta=Decimal("0"),
                     is_shared_expense=False,
                     is_gst_claimable=s.get("gst", False),
-                    reconciled=s.get("reconciled"),
                 )
             )
         await db.commit()
@@ -526,7 +525,7 @@ async def test_list_filters(monkeypatch):
                     "name": "Dinner",
                     "event_date": "2026-07-01",
                     "type": "outflow",
-                    "reconciled": True,
+                    "status": "reconciled",
                 },
             ],
         )
@@ -549,18 +548,36 @@ async def test_list_filters(monkeypatch):
         await engine.dispose()
 
 
-async def test_reconciled_filter_includes_null_as_unreconciled(monkeypatch):
+async def test_reconciled_filter_is_foreign_worklist(monkeypatch):
+    # SCP 2026-07-02 R6: reconciled is a foreign-only status. `reconciled=true` = reconciled rows;
+    # `reconciled=false` = the FOREIGN worklist (not-reconciled, base-currency rows excluded).
     engine, factory = await _make_factory()
     try:
         person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
         await _seed_txns(
             factory,
             hh_id,
             person_id,
             [
-                {"name": "Recon", "event_date": "2026-06-01", "reconciled": True},
-                {"name": "Unrecon", "event_date": "2026-06-02", "reconciled": False},
-                {"name": "Never", "event_date": "2026-06-03"},  # reconciled = NULL (default)
+                {
+                    "name": "Recon",
+                    "event_date": "2026-06-01",
+                    "currency": "USD",
+                    "status": "reconciled",
+                },
+                {
+                    "name": "ForeignTodo",
+                    "event_date": "2026-06-02",
+                    "currency": "USD",
+                    "status": "completed",
+                },
+                {
+                    "name": "BaseRow",
+                    "event_date": "2026-06-03",
+                    "currency": "SGD",
+                    "status": "completed",
+                },
             ],
         )
         sid, csrf = await _seed_session(factory, person_id)
@@ -571,8 +588,8 @@ async def test_reconciled_filter_includes_null_as_unreconciled(monkeypatch):
             return {i["name"] for i in client.get(f"/api/events?{params}").json()["items"]}
 
         assert names("reconciled=true") == {"Recon"}
-        # "Unreconciled" must include the never-reconciled (NULL) row, not just explicit False.
-        assert names("reconciled=false") == {"Unrecon", "Never"}
+        # "Unreconciled" = foreign rows not yet reconciled; the base SGD row never appears.
+        assert names("reconciled=false") == {"ForeignTodo"}
     finally:
         await engine.dispose()
 
@@ -973,16 +990,23 @@ async def test_duplicate_clones_zeroed(monkeypatch):
         await engine.dispose()
 
 
-async def test_duplicate_resets_reconciled(monkeypatch):
+async def test_duplicate_resets_status(monkeypatch):
     engine, factory = await _make_factory()
     try:
         person_id, hh_id = await _seed_household(factory)
-        # A reconciled source (Story 5.4 seam) — the clone must NOT inherit reconciliation.
+        # A fresh template must not inherit the source's reconciled/void state (SCP 2026-07-02).
         await _seed_txns(
             factory,
             hh_id,
             person_id,
-            [{"name": "Recon", "event_date": "2026-01-01", "reconciled": True}],
+            [
+                {
+                    "name": "Recon",
+                    "event_date": "2026-01-01",
+                    "currency": "USD",
+                    "status": "reconciled",
+                }
+            ],
         )
         src_id = await _event_id(factory, "Recon")
         sid, csrf = await _seed_session(factory, person_id)
@@ -990,10 +1014,193 @@ async def test_duplicate_resets_reconciled(monkeypatch):
         _auth(client, sid, csrf)
 
         clone = client.post(f"/api/events/{src_id}/duplicate").json()
-        # `reconciled` isn't in the response schema → assert on the persisted clone row.
-        async with factory() as db:
-            row = await db.get(FinancialEvent, clone["id"])
-            assert row.reconciled is None
-            assert row.reconciled_at is None
+        assert clone["transaction_status"] == "completed"
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.4: status & reconciliation ──
+
+
+async def test_patch_status(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post("/api/events", json=_txn()).json()["id"]
+        assert client.get(f"/api/events/{eid}").json()["transaction_status"] == "completed"
+        assert (
+            client.patch(f"/api/events/{eid}", json={"transaction_status": "pending"}).json()[
+                "transaction_status"
+            ]
+            == "pending"
+        )
+        assert (
+            client.patch(f"/api/events/{eid}", json={"transaction_status": "cancelled"}).json()[
+                "transaction_status"
+            ]
+            == "cancelled"
+        )
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_invalid_status_422(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post("/api/events", json=_txn()).json()["id"]
+        # `reconciled` is now a valid status (foreign-only, tested separately); only an unknown
+        # is a clean 422 at the schema edge.
+        assert (
+            client.patch(f"/api/events/{eid}", json={"transaction_status": "bogus"}).status_code
+            == 422
+        )
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_status_reconciled_foreign_only(monkeypatch):
+    # SCP 2026-07-02 R1/R4: reconciled is a foreign-only status. A foreign row accepts it; a base-
+    # currency row is coerced back to `completed` (nothing FX to verify).
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        foreign = client.post("/api/events", json=_txn(currency="USD", amount="100.00")).json()[
+            "id"
+        ]
+        assert (
+            client.patch(
+                f"/api/events/{foreign}", json={"transaction_status": "reconciled"}
+            ).json()["transaction_status"]
+            == "reconciled"
+        )
+
+        base = client.post("/api/events", json=_txn()).json()["id"]  # SGD base row
+        assert (
+            client.patch(f"/api/events/{base}", json={"transaction_status": "reconciled"}).json()[
+                "transaction_status"
+            ]
+            == "completed"
+        )
+        # Editing a reconciled foreign row back to base currency auto-demotes it (R4).
+        assert (
+            client.patch(f"/api/events/{foreign}", json={"currency": "SGD"}).json()[
+                "transaction_status"
+            ]
+            == "completed"
+        )
+    finally:
+        await engine.dispose()
+
+
+async def test_summary_excludes_cancelled(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {
+                    "name": "Live",
+                    "event_date": "2026-06-01",
+                    "type": "outflow",
+                    "amount_base": "100",
+                },
+                {
+                    "name": "Void",
+                    "event_date": "2026-06-02",
+                    "type": "outflow",
+                    "amount_base": "50",
+                    "status": "cancelled",
+                },
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        body = client.get("/api/events").json()
+        # Cancelled is dropped from the summary aggregate but still listed + counted.
+        assert Decimal(str(body["summary"]["out"])) == Decimal("100")
+        assert body["total"] == 2
+        assert {i["name"] for i in body["items"]} == {"Live", "Void"}
+    finally:
+        await engine.dispose()
+
+
+async def test_status_filter(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [
+                {"name": "Done", "event_date": "2026-06-01", "status": "completed"},
+                {"name": "Void", "event_date": "2026-06-02", "status": "cancelled"},
+            ],
+        )
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # The router exposes `transaction_status` under the short wire name `status`.
+        body = client.get("/api/events?status=cancelled").json()
+        assert {i["name"] for i in body["items"]} == {"Void"}
+    finally:
+        await engine.dispose()
+
+
+async def test_status_reconcile_permission(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        admin_id, hh_id = await _seed_household(factory, role="admin")
+        member_id = await _seed_person(factory, hh_id, role="member")
+
+        asid, acsrf = await _seed_session(factory, admin_id)
+        admin = _client_with_db(factory, monkeypatch)
+        _auth(admin, asid, acsrf)
+        row_admin = admin.post("/api/events", json=_txn(name="AdminRow")).json()["id"]
+
+        msid, mcsrf = await _seed_session(factory, member_id)
+        member = _client_with_db(factory, monkeypatch)
+        _auth(member, msid, mcsrf)
+        row_member = member.post("/api/events", json=_txn(name="MemberRow")).json()["id"]
+
+        # A member may not set status on a row they didn't create → 403; own row → 200.
+        assert (
+            member.patch(
+                f"/api/events/{row_admin}", json={"transaction_status": "cancelled"}
+            ).status_code
+            == 403
+        )
+        assert (
+            member.patch(
+                f"/api/events/{row_admin}", json={"transaction_status": "pending"}
+            ).status_code
+            == 403
+        )
+        assert (
+            member.patch(
+                f"/api/events/{row_member}", json={"transaction_status": "pending"}
+            ).status_code
+            == 200
+        )
     finally:
         await engine.dispose()

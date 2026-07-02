@@ -6,6 +6,8 @@ import {
   // Control / furniture
   Menu, Calendar, SlidersHorizontal, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Minus,
   TrendingUp, TrendingDown,
+  // Transaction flags (typed behavioural flags, ARCH §3.7 — not tags)
+  UserRound, Receipt,
   // Semantic / status + error
   AlertTriangle, XCircle, Info, TriangleAlert,
   // Alert types
@@ -51,6 +53,13 @@ export const ACTION_ICON = {
   locked: Lock,
   roleUp: ArrowUp,
   roleDown: ArrowDown,
+} as const satisfies Record<string, LucideIcon>
+
+/** Transaction behavioural flags (UX §11/§751) — typed booleans that drive behaviour (debt / GST
+ *  reporting), rendered as muted ledger `Icon`s. **Not tags** (ARCH §3.7); tags are colour `Badge`s. */
+export const TRANSACTION_FLAG_ICON = {
+  personal: UserRound,
+  gst: Receipt,
 } as const satisfies Record<string, LucideIcon>
 
 /** Control / furniture — primitive UI affordances (chevrons, hamburger, calendar…), not domain choices. */

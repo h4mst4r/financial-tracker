@@ -64,14 +64,16 @@ export interface TransactionCreate {
   fee_amount?: string | null
 }
 
-// The PATCH /api/events/{id} body (Story 5.3). Partial — every field optional; the inline commit
-// sends one field, the modal sends its changed set (ARCH §4.10, one PATCH for both). Money edits
-// re-resolve FX server-side; `amount_base` is the manual override. Excludes status/reconciled (5.4),
-// tags (5.10), duplicate_of (5.6) — not editable here.
+// The PATCH /api/events/{id} body (Stories 5.3/5.4). Partial — every field optional; the inline
+// commit sends one field, the modal sends its changed set (ARCH §4.10, one PATCH for both). Money
+// edits re-resolve FX server-side; `amount_base` is the manual override. `transaction_status`
+// carries the full lifecycle incl. `reconciled` (foreign-only — the server coerces it to
+// `completed` on a base-currency row; SCP 2026-07-02). Excludes tags (5.10), duplicate_of (5.6).
 export interface TransactionUpdate {
   name?: string
   event_date?: string
   transaction_type?: 'inflow' | 'outflow'
+  transaction_status?: 'pending' | 'completed' | 'reconciled' | 'cancelled'
   category_id?: string | null
   payee_person_id?: string | null
   payment_method?: string | null

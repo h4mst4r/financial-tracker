@@ -32,7 +32,9 @@ export const STATUS_REGISTRY = defineStatusRegistry({
     missed: 'critical',
     failed: 'critical',
   },
-  transaction: { paid: 'positive', pending: 'warning', cancelled: 'neutral' },
+  // `reconciled` is a foreign-only status (SCP 2026-07-02) — success-green like `completed` (it *is*
+  // completed + FX-verified); the distinction is the label + the unreconciled-worklist filter.
+  transaction: { pending: 'warning', completed: 'positive', reconciled: 'positive', cancelled: 'neutral' },
   invitation: { accepted: 'positive', pending: 'warning', declined: 'neutral', expired: 'neutral', revoked: 'neutral' },
   // Member lifecycle + FX-provider config booleans (Settings → ManagementTab). These resolve here
   // instead of being authored as inline `cond ? 'success' : …` tone literals at the call site (§4 law:
@@ -82,7 +84,7 @@ export function badgeVariantForStatus(domain: StatusDomain, status: string): Bad
 /** String-tolerant §4 tone for a {domain, status} where `status` is a wire string — unknown → `neutral`.
  *  The `Dot`-facing sibling of `badgeVariantForStatus` (a `Dot` consumes a `StatusTone`, not a
  *  `BadgeVariant`). Lets a ledger status dot resolve from the raw `transaction_status` string
- *  (`completed`/`reconciled` are not §4 keys yet — that vocab is Story 5.4 — so they read `neutral`). */
+ *  (an unknown status — e.g. a not-yet-modelled value — reads `neutral`). */
 export function statusToneForStatus(domain: StatusDomain, status: string): StatusTone {
   return (STATUS_REGISTRY[domain] as Record<string, StatusTone | undefined>)[status] ?? 'neutral'
 }

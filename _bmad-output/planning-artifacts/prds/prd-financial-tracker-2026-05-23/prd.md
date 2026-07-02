@@ -458,10 +458,12 @@ indicator. `cancelled` transactions are excluded from all budget actuals and
 aggregations. `reconciled` transactions show a checkmark.
 
 **FR-E-006 — Reconciliation**
-User may mark a transaction as `reconciled` — confirming it matches their bank
-or card statement.
-*Acceptance:* `reconciled = true`, `reconciled_at` set. Reconciliation status
-visible in ledger view. Filter for unreconciled transactions available.
+User may mark a **foreign-currency** transaction as `reconciled` — confirming its
+FX-derived base amount matches their bank or card statement (a base-currency row
+has nothing to reconcile).
+*Acceptance:* `transaction_status = reconciled` (a status value — no separate flag/
+timestamp column). Status visible in the ledger. Filter for unreconciled foreign
+transactions available.
 
 **FR-E-007 — Shared Household Expense Flag**
 On any outflow transaction, user may set `is_shared_expense = true` to indicate

@@ -52,7 +52,7 @@ class FinancialEvent(BaseEntity, MonetaryValueMixin):
     is_shared_expense: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_gst_claimable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    is_gift: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # is_gift dropped (Story 5.5, migration 0003): now a tag, not a flag (ARCH 3.7).
     source_account_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("accounts.id"), nullable=True
     )
@@ -62,9 +62,8 @@ class FinancialEvent(BaseEntity, MonetaryValueMixin):
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
     external_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
-    # Transaction subtype columns
-    reconciled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Transaction subtype columns. Reconciliation is a `transaction_status` value (Story 5.4 /
+    # SCP 2026-07-02), not a separate flag — there is no `reconciled`/`reconciled_at` column.
     duplicate_of: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("financial_events.id"), nullable=True
     )

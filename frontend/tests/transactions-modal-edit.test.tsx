@@ -84,6 +84,42 @@ describe('TransactionModal — edit mode (AC2)', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
   })
 
+  // SCP 2026-07-02 — status is edit-mode only; `reconciled` is offered only on foreign rows.
+  test('edit mode (foreign): status dropdown offers Reconciled + submits the status', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderModal(onSubmit, { ...row, currency: 'USD', transaction_status: 'completed' })
+
+    expect(await screen.findByText('Edit transaction')).toBeInTheDocument()
+    fireEvent.click(document.querySelector('#txn-status') as HTMLElement)
+    expect(screen.getByText('Reconciled')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ transaction_status: 'completed' })
+  })
+
+  test('edit mode (base currency): Reconciled is not an offered status', async () => {
+    renderModal(vi.fn(), { ...row, transaction_status: 'pending' })
+    expect(await screen.findByText('Edit transaction')).toBeInTheDocument()
+    fireEvent.click(document.querySelector('#txn-status') as HTMLElement)
+    expect(screen.queryByText('Reconciled')).not.toBeInTheDocument()
+  })
+
+  test('create mode omits the status axis + renders no status control', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderModal(onSubmit, null)
+    fireEvent.change(await screen.findByPlaceholderText('e.g. Groceries'), {
+      target: { value: 'Coffee' },
+    })
+    fireEvent.change(document.querySelector('#txn-amount') as HTMLInputElement, {
+      target: { value: '5' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('transaction_status')
+    expect(document.querySelector('#txn-status')).toBeNull()
+  })
+
   test('amount of 0 blocks Save; a positive amount submits', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderModal(onSubmit, null)
