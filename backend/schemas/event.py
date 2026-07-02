@@ -51,6 +51,29 @@ class TransactionCreate(BaseModel):
     fee_amount: Money | None = None
 
 
+class TransactionUpdate(BaseModel):
+    """Partial edit of a transaction (Story 5.3). Every field optional → `model_dump(exclude_unset=
+    True)` carries only what the client sent, so an inline commit sends one field and the modal
+    sends its changed set (ARCH §4.10 — one PATCH for both). Money edits re-resolve FX server-side;
+    a supplied `amount_base` is the manual override. **Excludes** `transaction_status`/`reconciled`
+    (Story 5.4), `tag_ids` (5.10), `duplicate_of` (5.6) — those are not editable here."""
+
+    name: Str200 | None = None
+    event_date: date | None = None
+    transaction_type: Literal["inflow", "outflow"] | None = None
+    category_id: str | None = None
+    payee_person_id: str | None = None
+    payment_method: Str100 | None = None
+    source_account_id: str | None = None
+    notes: NoteText | None = None
+    is_shared_expense: bool | None = None
+    is_gst_claimable: bool | None = None
+    currency: Str3 | None = None
+    amount: Money | None = None
+    amount_base: Money | None = None
+    fee_amount: Money | None = None
+
+
 # ─── Response ───
 
 

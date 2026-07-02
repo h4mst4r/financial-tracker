@@ -23,6 +23,7 @@ from backend.schemas.event import (
     TransactionListOut,
     TransactionResponse,
     TransactionSummary,
+    TransactionUpdate,
     response_for,
 )
 from backend.services import event as event_service
@@ -105,4 +106,68 @@ async def get_event(
 ) -> TransactionResponse:
     """A single household-scoped transaction (any member). 404 incl. cross-household."""
     event = await event_service.get_transaction(db, household_id, event_id)
+    return _to_response(event)
+
+
+@router.patch("/events/{event_id}")
+async def update_event(
+    event_id: str,
+    data: TransactionUpdate,
+    person: Person = Depends(get_current_person),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> TransactionResponse:
+    """Edit a transaction (**any member**, FR-E-002; serves both inline single-field commits and the
+    modal's changed set). Per-row permission is enforced in the service (Member own-rows → 403
+    otherwise, Admin/Owner any) — NOT a router role gate. A money edit re-resolves FX; an
+    `amount_base` is the manual override. 404 cross-household."""
+    event = await event_service.update_transaction(
+        db, household_id, person.id, person.role, event_id, data
+    )
+    return _to_response(event)
+
+
+@router.post("/events/{event_id}/archive")
+async def archive_event(
+    event_id: str,
+    person: Person = Depends(get_current_person),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> TransactionResponse:
+    """Archive a transaction (**any member**, FR-E-004; per-row permission in the service). 200,
+    never 409; hidden from the default ledger + actuals, history kept. Idempotent. 404 cross-hh."""
+    event = await event_service.archive_transaction(
+        db, household_id, person.id, person.role, event_id
+    )
+    return _to_response(event)
+
+
+@router.post("/events/{event_id}/restore")
+async def restore_event(
+    event_id: str,
+    person: Person = Depends(get_current_person),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> TransactionResponse:
+    """Restore an archived transaction (**any member**, FR-E-004; per-row permission in the
+    service). Idempotent. 404 cross-household."""
+    event = await event_service.restore_transaction(
+        db, household_id, person.id, person.role, event_id
+    )
+    return _to_response(event)
+
+
+@router.post("/events/{event_id}/duplicate", status_code=201)
+async def duplicate_event(
+    event_id: str,
+    person: Person = Depends(get_current_person),
+    household_id: str = Depends(get_household_id),
+    db: AsyncSession = Depends(get_db),
+) -> TransactionResponse:
+    """Duplicate a transaction (**any member**, FR-E-003; per-row permission on the source). Clones
+    to a new-UUID row with the date cleared to today + monetary fields zeroed (ARCH §4.10), no
+    confirmation. 404 cross-household."""
+    event = await event_service.duplicate_transaction(
+        db, household_id, person.id, person.role, event_id
+    )
     return _to_response(event)

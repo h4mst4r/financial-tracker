@@ -28,7 +28,7 @@ import type { Account } from '../types/account'
 import type { Category } from '../types/category'
 import type { Currency } from '../types/currency'
 import type { ListResponse, Member } from '../types/household'
-import type { TransactionCreate } from '../types/event'
+import type { Transaction, TransactionCreate } from '../types/event'
 
 // The transaction create surface (UX Transactions §12, money block line 749). `EntityModal` + the FX
 // money block: entered amount/currency → spot base fill (`amount × rate_to_base`) with an optional
@@ -40,7 +40,10 @@ import type { TransactionCreate } from '../types/event'
 const TODAY_ISO = () => new Date().toISOString().slice(0, 10)
 const CASH = 'cash'
 const NONNEG_RE = /^\d+(\.\d+)?$/
-const amountOk = (s: string) => NONNEG_RE.test(s.trim())
+// Amount is required AND must be > 0 — a numeric zero (or blank) is not a valid transaction value
+// (the required asterisk must be truthful). The ⋮ Duplicate op still persists a $0 template row
+// server-side (ARCH §4.10); the modal simply requires > 0 before that row can be re-saved.
+const amountOk = (s: string) => NONNEG_RE.test(s.trim()) && Number(s.trim()) > 0
 
 // The tone → Base-input border utility (mirrors Badge's variant→class map; keyed by the RESOLVED
 // tone, so this is a render map, not a status→tone decision — the §4 registry owns that).
@@ -86,6 +89,25 @@ const emptyForm = (currency: string, payee: string): FormState => ({
   amount_base: '',
 })
 
+// Seed the form from an existing row (edit mode / duplicate). `override_base` reflects the DERIVED
+// FX source (`manual` == the base was overridden); a Cash row (no account leg) maps to the CASH
+// sentinel. Money fields are Decimal strings on the wire — passed through untouched.
+const formFromTransaction = (t: Transaction): FormState => ({
+  name: t.name ?? '',
+  event_date: t.event_date,
+  transaction_type: t.transaction_type === 'inflow' ? 'inflow' : 'outflow',
+  category_id: t.category_id ?? '',
+  payee_person_id: t.payee_person_id ?? '',
+  paid_with: t.source_account_id ?? CASH,
+  currency: t.currency,
+  amount: t.amount,
+  is_shared_expense: t.is_shared_expense,
+  is_gst_claimable: t.is_gst_claimable,
+  notes: t.notes ?? '',
+  override_base: t.amount_base_source === 'manual',
+  amount_base: t.amount_base,
+})
+
 const TYPE_OPTIONS = [
   { value: 'outflow', label: 'Outflow' },
   { value: 'inflow', label: 'Inflow' },
@@ -94,11 +116,13 @@ const TYPE_OPTIONS = [
 interface TransactionModalProps {
   open: boolean
   onClose: () => void
-  /** Builds + sends the create request (the page wires useEntityManager + toast + close). */
+  /** Builds + sends the create/update request (the page branches create-vs-PATCH + toast + close). */
   onSubmit: (payload: TransactionCreate) => Promise<void>
+  /** Present → edit mode: the form seeds from this row and Save PATCHes (Story 5.3). */
+  transaction?: Transaction | null
 }
 
-export function TransactionModal({ open, onClose, onSubmit }: TransactionModalProps) {
+export function TransactionModal({ open, onClose, onSubmit, transaction }: TransactionModalProps) {
   const currentPersonId = useAuthStore((s) => s.currentPerson?.personId)
   const [form, setForm] = useState<FormState>(() => emptyForm('', ''))
   const [saving, setSaving] = useState(false)
@@ -139,10 +163,12 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
     [accountsQuery.data],
   )
 
-  // Reset the form each open (default currency = base, payer = the current person).
+  // Seed the form each open: from the row in edit mode, else a fresh create form (default currency
+  // = base, payer = the current person).
   useEffect(() => {
-    if (open) setForm(emptyForm(baseCurrency, currentPersonId ?? ''))
-  }, [open, baseCurrency, currentPersonId])
+    if (!open) return
+    setForm(transaction ? formFromTransaction(transaction) : emptyForm(baseCurrency, currentPersonId ?? ''))
+  }, [open, transaction, baseCurrency, currentPersonId])
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -246,12 +272,12 @@ export function TransactionModal({ open, onClose, onSubmit }: TransactionModalPr
     <EntityModal
       open={open}
       onClose={onClose}
-      title="New transaction"
+      title={transaction ? 'Edit transaction' : 'New transaction'}
       onSave={() => validation.submit(handleSave)}
       saveDisabled={saving}
       errorSummary={validation.showSummary ? REQUIRED_FIELDS_NOTE : undefined}
       shakeSave={validation.shaking}
-      saveLabel="Add"
+      saveLabel={transaction ? 'Save' : 'Add'}
     >
       <div className="flex flex-col gap-xs">
         <Label htmlFor="txn-name" required>

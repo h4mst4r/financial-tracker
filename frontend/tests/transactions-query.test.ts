@@ -57,4 +57,10 @@ describe('buildEventQuery — FilterState → API params', () => {
     expect(p.sort).toBe('amount:desc')
     expect(p.cursor).toBe('CUR123')
   })
+
+  it('sets include_archived only when the Archived toggle is on', () => {
+    expect(parse(buildEventQuery({}, null, null)).include_archived).toBeUndefined()
+    expect(parse(buildEventQuery({}, null, null, false)).include_archived).toBeUndefined()
+    expect(parse(buildEventQuery({}, null, null, true)).include_archived).toBe('true')
+  })
 })

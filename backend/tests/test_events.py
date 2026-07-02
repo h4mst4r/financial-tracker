@@ -206,6 +206,32 @@ async def _seed_txns(factory, hh_id: str, person_id: str, specs: list[dict]) -> 
         await db.commit()
 
 
+async def _seed_person(factory, hh_id: str, *, role: str = "member") -> str:
+    """Add a second Person to an existing household (for the per-row permission tests)."""
+    pid = str(uuid4())
+    async with factory() as db:
+        db.add(
+            Person(
+                id=pid,
+                household_id=hh_id,
+                email=f"{uuid4()}@example.com",
+                display_name="Other Person",
+                role=role,
+                google_sub=f"sub-{uuid4()}",
+            )
+        )
+        await db.commit()
+    return pid
+
+
+async def _event_id(factory, name: str) -> str:
+    async with factory() as db:
+        row = (
+            await db.execute(select(FinancialEvent).where(FinancialEvent.name == name))
+        ).scalar_one()
+        return row.id
+
+
 async def _seed_session(factory, person_id: str) -> tuple[str, str]:
     async with factory() as db:
         session = await auth.create_session(
@@ -726,5 +752,248 @@ async def test_summary_zero_for_other_household(monkeypatch):
         assert body["total"] == 0
         assert Decimal(str(body["summary"]["out"])) == Decimal("0")
         assert Decimal(str(body["summary"]["inflow"])) == Decimal("0")
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.3: PATCH edit ──
+
+
+async def test_patch_updates_scalar(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post("/api/events", json=_txn(name="Lunch")).json()["id"]
+        resp = client.patch(f"/api/events/{eid}", json={"name": "Brunch", "notes": "with Sam"})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Brunch"
+        assert client.get(f"/api/events/{eid}").json()["notes"] == "with Sam"
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_amount_recomputes_base(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post(
+            "/api/events", json=_txn(currency="USD", amount="100.00", event_date="2026-06-12")
+        ).json()["id"]
+        # Editing the amount re-fills the spot base: 200 × 1.35 = 270.
+        body = client.patch(f"/api/events/{eid}", json={"amount": "200.00"}).json()
+        assert Decimal(str(body["amount"])) == Decimal("200.0000")
+        assert Decimal(str(body["amount_base"])) == Decimal("270.0000")
+        assert body["amount_base_source"] == "spot"
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_base_override_sets_manual(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post("/api/events", json=_txn(currency="USD", amount="100.00")).json()["id"]
+        # Inline Base edit = the manual FX override → indicator flips to `manual`.
+        body = client.patch(f"/api/events/{eid}", json={"amount_base": "140.00"}).json()
+        assert Decimal(str(body["amount_base"])) == Decimal("140.0000")
+        assert body["amount_base_source"] == "manual"
+        # A later amount-only edit (no amount_base) re-fills spot → back to `spot`.
+        body2 = client.patch(f"/api/events/{eid}", json={"amount": "100.00"}).json()
+        assert body2["amount_base_source"] == "spot"
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_unknown_currency_400(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post("/api/events", json=_txn()).json()["id"]
+        assert client.patch(f"/api/events/{eid}", json={"currency": "JPY"}).status_code == 400
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_type_inflow_forces_shared_false(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        # An outflow with shared-expense on, flipped to inflow, must coerce shared False (DB CHECK).
+        eid = client.post(
+            "/api/events", json=_txn(transaction_type="outflow", is_shared_expense=True)
+        ).json()["id"]
+        body = client.patch(f"/api/events/{eid}", json={"transaction_type": "inflow"}).json()
+        assert body["transaction_type"] == "inflow"
+        assert body["is_shared_expense"] is False
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_cash_nulls_source_account(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        account_id = await _seed_account(factory, hh_id, person_id)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        eid = client.post("/api/events", json=_txn(source_account_id=account_id)).json()["id"]
+        body = client.patch(f"/api/events/{eid}", json={"payment_method": "cash"}).json()
+        assert body["source_account_id"] is None
+    finally:
+        await engine.dispose()
+
+
+async def test_patch_cross_household_404(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        other_person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+        eid = client.post("/api/events", json=_txn()).json()["id"]
+
+        osid, ocsrf = await _seed_session(factory, other_person_id)
+        other = _client_with_db(factory, monkeypatch)
+        _auth(other, osid, ocsrf)
+        assert other.patch(f"/api/events/{eid}", json={"name": "hijack"}).status_code == 404
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.3: per-row permission (Member own-rows only; Admin/Owner any) ──
+
+
+async def test_per_row_permission(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        admin_id, hh_id = await _seed_household(factory, role="admin")
+        member_id = await _seed_person(factory, hh_id, role="member")
+
+        asid, acsrf = await _seed_session(factory, admin_id)
+        admin = _client_with_db(factory, monkeypatch)
+        _auth(admin, asid, acsrf)
+        row_admin = admin.post("/api/events", json=_txn(name="AdminRow")).json()["id"]
+
+        msid, mcsrf = await _seed_session(factory, member_id)
+        member = _client_with_db(factory, monkeypatch)
+        _auth(member, msid, mcsrf)
+        row_member = member.post("/api/events", json=_txn(name="MemberRow")).json()["id"]
+
+        # A member may NOT edit / archive / duplicate a row they didn't create → 403.
+        assert member.patch(f"/api/events/{row_admin}", json={"name": "x"}).status_code == 403
+        assert member.post(f"/api/events/{row_admin}/archive").status_code == 403
+        assert member.post(f"/api/events/{row_admin}/duplicate").status_code == 403
+        # …but may act on their OWN row.
+        assert member.patch(f"/api/events/{row_member}", json={"name": "ok"}).status_code == 200
+        # An admin may act on ANY row.
+        resp = admin.patch(f"/api/events/{row_member}", json={"name": "adminedit"})
+        assert resp.status_code == 200
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.3: archive / restore ──
+
+
+async def test_archive_hides_and_restore(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, _ = await _seed_household(factory)
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+        eid = client.post("/api/events", json=_txn()).json()["id"]
+
+        assert client.post(f"/api/events/{eid}/archive").status_code == 200
+        # Excluded from the default ledger; visible with include_archived.
+        assert client.get("/api/events").json()["total"] == 0
+        assert client.get("/api/events?include_archived=true").json()["total"] == 1
+        # Idempotent (second archive still 200).
+        assert client.post(f"/api/events/{eid}/archive").status_code == 200
+        # Restore brings it back.
+        assert client.post(f"/api/events/{eid}/restore").status_code == 200
+        assert client.get("/api/events").json()["total"] == 1
+    finally:
+        await engine.dispose()
+
+
+# ── Story 5.3: duplicate operation ──
+
+
+async def test_duplicate_clones_zeroed(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        await _seed_currency(factory, hh_id, "USD", rate="1.35")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        src = client.post(
+            "/api/events",
+            json=_txn(name="Coffee", currency="USD", amount="100.00", event_date="2026-01-01"),
+        ).json()
+        clone = client.post(f"/api/events/{src['id']}/duplicate").json()
+        assert clone["id"] != src["id"]
+        assert clone["name"] == "Coffee"  # business columns copied
+        assert clone["currency"] == "USD"
+        assert clone["event_date"] == date.today().isoformat()  # cleared to today
+        assert Decimal(str(clone["amount"])) == Decimal("0")  # monetary fields zeroed
+        assert Decimal(str(clone["amount_base"])) == Decimal("0")
+        assert clone["status"] == "active"
+        assert clone["created_by"] == person_id
+        # Both rows now list (clone is active, un-archived).
+        assert client.get("/api/events").json()["total"] == 2
+    finally:
+        await engine.dispose()
+
+
+async def test_duplicate_resets_reconciled(monkeypatch):
+    engine, factory = await _make_factory()
+    try:
+        person_id, hh_id = await _seed_household(factory)
+        # A reconciled source (Story 5.4 seam) — the clone must NOT inherit reconciliation.
+        await _seed_txns(
+            factory,
+            hh_id,
+            person_id,
+            [{"name": "Recon", "event_date": "2026-01-01", "reconciled": True}],
+        )
+        src_id = await _event_id(factory, "Recon")
+        sid, csrf = await _seed_session(factory, person_id)
+        client = _client_with_db(factory, monkeypatch)
+        _auth(client, sid, csrf)
+
+        clone = client.post(f"/api/events/{src_id}/duplicate").json()
+        # `reconciled` isn't in the response schema → assert on the persisted clone row.
+        async with factory() as db:
+            row = await db.get(FinancialEvent, clone["id"])
+            assert row.reconciled is None
+            assert row.reconciled_at is None
     finally:
         await engine.dispose()

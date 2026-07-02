@@ -11,7 +11,7 @@ Transactions are **any-member** writes (the router does not gate on role) — th
 import base64
 import json
 from collections.abc import Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import and_, asc, case, desc, func, or_, select
@@ -24,8 +24,9 @@ from backend.models.budget import Category
 from backend.models.currency import Currency
 from backend.models.event import FinancialEvent
 from backend.models.identity import Person
-from backend.schemas.event import TransactionCreate
+from backend.schemas.event import TransactionCreate, TransactionUpdate
 from backend.services.audit import _scalar_snapshot, audit
+from backend.services.base import assert_can_modify
 
 # Money quantization (ARCH §3.2) — Numeric(15,4), ROUND_HALF_UP (mirrors account.py / currency.py).
 _MONEY_QUANT = Decimal("0.0001")
@@ -46,6 +47,36 @@ async def _resolve_currency(db: AsyncSession, household_id: str, code: str) -> t
     return row[0], row[1]
 
 
+async def _resolve_fx(
+    db: AsyncSession,
+    household_id: str,
+    currency: str,
+    amount: Decimal,
+    amount_base_override: Decimal | None,
+    event_date: date,
+) -> tuple[Decimal, Decimal, Decimal, Decimal, date | None]:
+    """Resolve the FX block (ARCH §3.2), shared by create + update so the math never drifts.
+
+    `amount` is already quantized. Returns `(fx_rate, amount_base_calculated, amount_base, fx_delta,
+    fx_rate_date)`. A base-currency row collapses the block (rate 1, calc == amount, no delta/date).
+    On a foreign row the spot fill is `amount × rate_to_base`; a supplied `amount_base_override` is
+    the exact bank-statement figure (`amount_base_source` reads `manual`), else the fill wins.
+    """
+    rate_to_base, is_base = await _resolve_currency(db, household_id, currency)
+    if is_base:
+        return Decimal(1), amount, amount, Decimal(0), None
+    # Spot path (ARCH §3.2 priority 2). The account-FX-formula path (priority 1) is an Epic-7 seam
+    # (Story 7.5) — no account carries a usable `fx_formula_id` calc yet, so foreign rows use spot.
+    amount_base_calculated = (amount * rate_to_base).quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+    amount_base = (
+        amount_base_override.quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+        if amount_base_override is not None
+        else amount_base_calculated
+    )
+    fx_delta = amount_base_calculated - amount_base
+    return rate_to_base, amount_base_calculated, amount_base, fx_delta, event_date
+
+
 async def create_transaction(
     db: AsyncSession, household_id: str, actor_id: str, data: TransactionCreate
 ) -> FinancialEvent:
@@ -54,8 +85,6 @@ async def create_transaction(
     `amount_base` override → `fx_delta`. `currency == base` collapses the FX block (`fx_rate=1`,
     `fx_delta=0`, `fx_rate_date=None`). Cash (`payment_method='cash'`) nulls `source_account_id`.
     Any FK the client sends is validated household-scoped before insert."""
-    rate_to_base, is_base = await _resolve_currency(db, household_id, data.currency)
-
     # Household-scope every inbound FK so a cross-household id can't persist (404 if foreign).
     if data.category_id is not None:
         await get_or_404(db, Category, data.category_id, household_id=household_id)
@@ -65,30 +94,9 @@ async def create_transaction(
         await get_or_404(db, Account, data.source_account_id, household_id=household_id)
 
     amount = data.amount.quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
-
-    if is_base:
-        # No conversion for the base currency: rate 1, calc == amount, no date/delta/override.
-        fx_rate = Decimal(1)
-        amount_base_calculated = amount
-        amount_base = amount
-        fx_delta = Decimal(0)
-        fx_rate_date = None
-    else:
-        # Spot path (ARCH §3.2 priority 2): amount_base_calculated = amount × rate_to_base.
-        # ponytail: the account-FX-formula path (priority 1) is an Epic-7 seam (Story 7.5) — no
-        # account carries a usable `fx_formula_id` calc yet, so every foreign row resolves via spot.
-        fx_rate = rate_to_base
-        amount_base_calculated = (amount * rate_to_base).quantize(
-            _MONEY_QUANT, rounding=ROUND_HALF_UP
-        )
-        # Override → the exact bank-statement figure (indicator flips to `manual`); else the fill.
-        amount_base = (
-            data.amount_base.quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
-            if data.amount_base is not None
-            else amount_base_calculated
-        )
-        fx_delta = amount_base_calculated - amount_base
-        fx_rate_date = data.event_date
+    fx_rate, amount_base_calculated, amount_base, fx_delta, fx_rate_date = await _resolve_fx(
+        db, household_id, data.currency, amount, data.amount_base, data.event_date
+    )
 
     # Shared expense is outflow-only (DB CHECK ck_shared_expense_outflow_only) — force False for
     # inflow so an inflow with the schema default (True) doesn't trip an IntegrityError.
@@ -154,6 +162,202 @@ async def get_transaction(db: AsyncSession, household_id: str, event_id: str) ->
     if event.event_type != "transaction":
         errors.not_found("transaction", event_id)
     return event
+
+
+# Money fields that force an FX recompute when any of them is edited (Story 5.3, §12.7).
+_MONEY_EDIT_KEYS = {"currency", "amount", "amount_base"}
+
+
+async def update_transaction(
+    db: AsyncSession,
+    household_id: str,
+    actor_id: str,
+    actor_role: str,
+    event_id: str,
+    data: TransactionUpdate,
+) -> FinancialEvent:
+    """Apply a partial update to a transaction (AC1/AC2). Serves BOTH the inline single-field commit
+    and the modal's changed-set (ARCH §4.10 — one PATCH, presentation-only split). Per-row
+    permission (Member own-rows, Admin/Owner any) via the shared `assert_can_modify` (AC3).
+
+    Editing any money field (`amount`/`currency`/`amount_base`) re-resolves the FX block through the
+    shared `_resolve_fx`; a supplied `amount_base` is the inline Base-{base} **manual override**
+    (`amount_base_source → manual`), while a money edit that omits it re-fills from spot. `status`/
+    `reconciled`/`tags`/`duplicate_of` are NOT editable here (Stories 5.4/5.10/5.6 — absent from the
+    schema)."""
+    event = await get_transaction(db, household_id, event_id)
+    assert_can_modify(event, actor_id, actor_role)
+
+    fields = data.model_dump(exclude_unset=True)
+    # Household-scope any FK being set (skip explicit-null clears — those are valid).
+    if fields.get("category_id") is not None and "category_id" in fields:
+        await get_or_404(db, Category, fields["category_id"], household_id=household_id)
+    if fields.get("payee_person_id") is not None and "payee_person_id" in fields:
+        await get_or_404(db, Person, fields["payee_person_id"], household_id=household_id)
+    if fields.get("source_account_id") is not None and "source_account_id" in fields:
+        await get_or_404(db, Account, fields["source_account_id"], household_id=household_id)
+
+    before = _scalar_snapshot(event)
+
+    # Apply the non-money scalar fields verbatim; the money block needs quantize + FX recompute.
+    for key, value in fields.items():
+        if key not in _MONEY_EDIT_KEYS:
+            setattr(event, key, value)
+    if "amount" in fields:
+        event.amount = fields["amount"].quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+    if "currency" in fields:
+        event.currency = fields["currency"]
+    if _MONEY_EDIT_KEYS & fields.keys():
+        # A supplied `amount_base` is the manual override; a money edit without it re-fills from
+        # spot (an inline amount/currency change drops any prior override back to computed base).
+        override = fields.get("amount_base")
+        fx_rate, abc, amount_base, fx_delta, fx_rate_date = await _resolve_fx(
+            db, household_id, event.currency, event.amount, override, event.event_date
+        )
+        event.fx_rate = fx_rate
+        event.amount_base_calculated = abc
+        event.amount_base = amount_base
+        event.fx_delta = fx_delta
+        event.fx_rate_date = fx_rate_date
+
+    # Cash carries no account leg (ARCH §3.6); shared-expense is outflow-only (DB CHECK) — mirror
+    # the create-path coercions so a type/method edit can't trip an IntegrityError.
+    if event.payment_method == "cash":
+        event.source_account_id = None
+    if event.transaction_type == "inflow":
+        event.is_shared_expense = False
+
+    event.updated_by = actor_id
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="update",
+        entity_type="transaction",
+        entity_id=str(event.id),
+        before=before,
+        after=_scalar_snapshot(event),
+    )
+    return event
+
+
+async def archive_transaction(
+    db: AsyncSession, household_id: str, actor_id: str, actor_role: str, event_id: str
+) -> FinancialEvent:
+    """Archive a transaction (AC5, FR-E-004) — a flat single-row flip (a transaction has no child
+    tree). Returns **200, never 409**; idempotent (an already-archived row is a no-op). Excluded
+    from the default ledger + actuals (`list_transactions` hides archived rows); history untouched.
+    Per-row permission via `assert_can_modify` (AC3)."""
+    event = await get_transaction(db, household_id, event_id)
+    assert_can_modify(event, actor_id, actor_role)
+    if event.archived:
+        return event  # idempotent no-op
+    before = _scalar_snapshot(event)
+    event.status = "archived"
+    event.archived = True
+    event.archived_at = datetime.now(UTC)
+    event.archived_by = actor_id
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="archive",
+        entity_type="transaction",
+        entity_id=str(event.id),
+        before=before,
+        after=_scalar_snapshot(event),
+    )
+    return event
+
+
+async def restore_transaction(
+    db: AsyncSession, household_id: str, actor_id: str, actor_role: str, event_id: str
+) -> FinancialEvent:
+    """Restore an archived transaction (AC5) — the inverse of `archive_transaction`. Idempotent."""
+    event = await get_transaction(db, household_id, event_id)
+    assert_can_modify(event, actor_id, actor_role)
+    if not event.archived:
+        return event  # idempotent no-op
+    before = _scalar_snapshot(event)
+    event.status = "active"
+    event.archived = False
+    event.archived_at = None
+    event.archived_by = None
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="restore",
+        entity_type="transaction",
+        entity_id=str(event.id),
+        before=before,
+        after=_scalar_snapshot(event),
+    )
+    return event
+
+
+# Identity/audit/lifecycle columns NOT copied when cloning (mirrors account._SNAPSHOT_SKIP).
+_DUPLICATE_SKIP = frozenset(
+    {
+        "id",
+        "household_id",
+        "created_at",
+        "created_by",
+        "updated_at",
+        "updated_by",
+        "archived",
+        "archived_at",
+        "archived_by",
+        "status",
+    }
+)
+
+
+async def duplicate_transaction(
+    db: AsyncSession, household_id: str, actor_id: str, actor_role: str, event_id: str
+) -> FinancialEvent:
+    """Duplicate a transaction as an *operation* (⋮ menu, AC4; ARCH §4.10 lines 1818-1820).
+
+    Clones the business columns into a new-UUID row, then **clears the date to today and zeroes the
+    monetary fields** (`amount`/`amount_base`/`amount_base_calculated`/`fx_delta` → 0, and
+    `duplicate_of` → null) — a "start a new transaction like this one" template completed later. No
+    confirmation. `status='active'`, `created_by` = the duplicator; writes a `create` audit row (it
+    is a new entity). Per-row permission is checked on the **source** (only clone a row you can
+    edit)."""
+    src = await get_transaction(db, household_id, event_id)
+    assert_can_modify(src, actor_id, actor_role)
+    cols = {
+        col.key: getattr(src, col.key)
+        for col in src.__table__.columns
+        if col.key not in _DUPLICATE_SKIP
+    }
+    clone = FinancialEvent(household_id=household_id, created_by=actor_id, status="active", **cols)
+    clone.event_date = date.today()
+    clone.amount = Decimal(0)
+    clone.amount_base = Decimal(0)
+    clone.amount_base_calculated = Decimal(0)
+    clone.fx_delta = Decimal(0)
+    clone.duplicate_of = None
+    clone.archived = False
+    # A fresh template is unreconciled — never inherit the source's reconciliation (Story 5.4 seam).
+    clone.reconciled = None
+    clone.reconciled_at = None
+    db.add(clone)
+    await db.flush()
+    await audit.log(
+        db,
+        household_id=household_id,
+        actor_id=actor_id,
+        action="create",
+        entity_type="transaction",
+        entity_id=str(clone.id),
+        before=None,
+        after=_scalar_snapshot(clone),
+    )
+    return clone
 
 
 # Keyset-sortable columns (ARCH §4.10 `sort=<col[:dir]>`). Only these three are exposed to the

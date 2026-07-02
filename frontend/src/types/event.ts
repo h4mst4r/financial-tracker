@@ -63,3 +63,24 @@ export interface TransactionCreate {
   amount_base?: string | null
   fee_amount?: string | null
 }
+
+// The PATCH /api/events/{id} body (Story 5.3). Partial — every field optional; the inline commit
+// sends one field, the modal sends its changed set (ARCH §4.10, one PATCH for both). Money edits
+// re-resolve FX server-side; `amount_base` is the manual override. Excludes status/reconciled (5.4),
+// tags (5.10), duplicate_of (5.6) — not editable here.
+export interface TransactionUpdate {
+  name?: string
+  event_date?: string
+  transaction_type?: 'inflow' | 'outflow'
+  category_id?: string | null
+  payee_person_id?: string | null
+  payment_method?: string | null
+  source_account_id?: string | null
+  notes?: string | null
+  is_shared_expense?: boolean
+  is_gst_claimable?: boolean
+  currency?: string
+  amount?: string
+  amount_base?: string | null
+  fee_amount?: string | null
+}

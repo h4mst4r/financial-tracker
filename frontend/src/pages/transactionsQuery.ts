@@ -1,5 +1,6 @@
 import type { DateRangeValue, FilterState } from '../components/primitives/filterBarLogic'
 import type { SortState } from '../components/primitives/Table'
+import type { Transaction, TransactionUpdate } from '../types/event'
 
 // Pure FilterState + SortState + cursor → the `GET /api/events` query string (ARCH §4.10). Kept
 // pure (no React/DOM) so the ledger↔API param mapping is unit-tested in isolation (Story 5.2 Task 11).
@@ -15,8 +16,13 @@ export function buildEventQuery(
   state: FilterState,
   sort: SortState | null,
   cursor: string | null,
+  includeArchived = false,
 ): string {
   const p = new URLSearchParams()
+
+  // The toolbar Archived toggle (not a FilterBar descriptor) — the backend hides archived rows by
+  // default; `include_archived=true` surfaces them (so a row can be reached for ⋮ Restore).
+  if (includeArchived) p.set('include_archived', 'true')
 
   const search = state.search
   if (typeof search === 'string' && search.trim()) p.set('search', search.trim())
@@ -53,4 +59,44 @@ export function buildEventQuery(
   if (cursor) p.set('cursor', cursor)
 
   return p.toString()
+}
+
+// ─── Inline-edit cell → PATCH mapping (Story 5.3) ───
+
+// The editable ledger column keys → their `TransactionUpdate` field + the `Transaction` field to
+// patch optimistically in the cache. Column keys mirror the ColumnDef `key`s in Transactions.tsx.
+// The Base column (`amount_base`) is the FX manual override; a bare amount edit re-fills spot.
+const CELL_FIELD = {
+  event_date: 'event_date',
+  name: 'name',
+  payee: 'payee_person_id',
+  category: 'category_id',
+  currency: 'currency',
+  amount: 'amount',
+  amount_base: 'amount_base',
+} as const
+
+export type CellField = keyof typeof CELL_FIELD
+
+export function isCellField(key: string): key is CellField {
+  return key in CELL_FIELD
+}
+
+/** The single-field PATCH body for an inline cell commit (Story 5.3, AC1). */
+export function cellCommitPayload(key: CellField, value: string): TransactionUpdate {
+  return { [CELL_FIELD[key]]: value } as TransactionUpdate
+}
+
+/** Apply an inline commit to a cached row (optimistic) — sets the mapped `Transaction` field. */
+export function applyCellEdit(row: Transaction, key: CellField, value: string): Transaction {
+  return { ...row, [CELL_FIELD[key]]: value } as Transaction
+}
+
+/** Per-row mutation permission (AC3, ARCH §1795-1800): a Member acts only on rows they created;
+ *  Admin/Owner on any. Pure so both the inline-edit gate and the ⋮ menu share one rule. */
+export function canMutateRow(
+  person: { role: string; personId: string } | null | undefined,
+  row: { created_by: string },
+): boolean {
+  return !!person && (person.role !== 'member' || row.created_by === person.personId)
 }
